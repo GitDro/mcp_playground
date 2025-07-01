@@ -336,7 +336,7 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
                         formatted_results += "*Introduction:*\n"
                         for point in paper_content.introduction.bullet_points:
                             clean_point = _clean_markdown_text(point)
-                            formatted_results += f"• {clean_point}\n"
+                            formatted_results += f"• {clean_point}\n\n"
                         formatted_results += "\n"
                     
                     # Methods/Approach
@@ -344,7 +344,7 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
                         formatted_results += "*Methods:*\n"
                         for point in paper_content.methods.bullet_points:
                             clean_point = _clean_markdown_text(point)
-                            formatted_results += f"• {clean_point}\n"
+                            formatted_results += f"• {clean_point}\n\n"
                         formatted_results += "\n"
                     
                     # Results
@@ -352,7 +352,7 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
                         formatted_results += "*Results:*\n"
                         for point in paper_content.results.bullet_points:
                             clean_point = _clean_markdown_text(point)
-                            formatted_results += f"• {clean_point}\n"
+                            formatted_results += f"• {clean_point}\n\n"
                         formatted_results += "\n"
                     
                     # Discussion/Limitations
@@ -360,7 +360,7 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
                         formatted_results += "*Discussion:*\n"
                         for point in paper_content.discussion.bullet_points:
                             clean_point = _clean_markdown_text(point)
-                            formatted_results += f"• {clean_point}\n"
+                            formatted_results += f"• {clean_point}\n\n"
                         formatted_results += "\n"
                 else:
                     formatted_results += "*PDF analysis unavailable - using abstract only.*\n\n"
