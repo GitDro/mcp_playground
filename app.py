@@ -233,7 +233,7 @@ with col2:
         tool_count = len(get_function_schema()) if st.session_state.get('use_functions', True) else 0
         
         # Create expandable status hierarchy
-        with st.expander(f"├── {len(models)} models available\n└── {tool_count} tools available", expanded=False):
+        with st.expander(f"{len(models)} models available, {tool_count} tools available", expanded=False):
             # Models section
             st.markdown("**Models:**")
             for i, model in enumerate(models):
@@ -257,31 +257,29 @@ with col2:
                 for i, func in enumerate(function_schemas):
                     func_name = func['function']['name']
                     
-                    # Extract key purpose from description
+                    # Extract concise inline descriptions
                     if 'web_search' in func_name:
-                        purpose = "Search the web for current information"
+                        purpose = "web search"
                     elif 'analyze_url' in func_name:
-                        purpose = "Analyze content from URLs"
+                        purpose = "URL analysis"
                     elif 'arxiv_search' in func_name:
-                        purpose = "Find academic papers and research"
+                        purpose = "academic papers"
                     elif 'stock_price' in func_name:
-                        purpose = "Get current stock prices"
+                        purpose = "stock prices"
                     elif 'stock_history' in func_name:
-                        purpose = "Get historical stock data"
+                        purpose = "stock history"
                     elif 'crypto_price' in func_name:
-                        purpose = "Get cryptocurrency prices"
+                        purpose = "crypto prices"
                     elif 'market_summary' in func_name:
-                        purpose = "Get market overview"
+                        purpose = "market overview"
                     else:
-                        purpose = func['function']['description'].split('.')[0]  # First sentence
+                        purpose = "tool"
                     
-                    # Add tree-like formatting
+                    # Add tree-like formatting with inline descriptions
                     if i == len(function_schemas) - 1:
-                        st.markdown(f"<div style='font-family: monospace; font-size: 12px; color: #666;'>└── {func_name}</div>", unsafe_allow_html=True)
-                        st.markdown(f"<div style='font-family: monospace; font-size: 11px; color: #888; margin-left: 20px;'>{purpose}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='font-family: monospace; font-size: 12px; color: #666;'>└── {func_name} <span style='color: #888;'>({purpose})</span></div>", unsafe_allow_html=True)
                     else:
-                        st.markdown(f"<div style='font-family: monospace; font-size: 12px; color: #666;'>├── {func_name}</div>", unsafe_allow_html=True)
-                        st.markdown(f"<div style='font-family: monospace; font-size: 11px; color: #888; margin-left: 20px;'>{purpose}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='font-family: monospace; font-size: 12px; color: #666;'>├── {func_name} <span style='color: #888;'>({purpose})</span></div>", unsafe_allow_html=True)
             else:
                 st.markdown("**Tools:** *Disabled*")
     else:
