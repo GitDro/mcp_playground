@@ -147,12 +147,9 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
                 function_name = function_info.get("name", "")
                 arguments = function_info.get("arguments", {})
                 
-                # Debug: Show function call info
-                debug_info = f"**{function_name}** `{arguments.get('query', arguments.get('url', ''))}`\n\n"
-                
                 # Execute the function
                 result = execute_function(function_name, arguments)
-                function_results.append(debug_info + result)
+                function_results.append(result)
                 
                 # Add tool call and result to conversation
                 messages.append({
@@ -181,24 +178,15 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
                     final_data = final_response.json()
                     final_content = final_data.get("message", {}).get("content", "")
                     
-                    # Format response with sources
+                    # Format response with function results
                     if final_content.strip():
-                        combined_response = final_content + "\n\n---\n\n**Sources:**\n"
+                        combined_response = final_content + "\n\n---\n\n"
                     else:
-                        combined_response = "**Sources:**\n"
+                        combined_response = ""
                     
-                    # Add compact function results  
+                    # Add function results directly
                     for result in function_results:
-                        # Split result into header and content
-                        lines = result.split('\n', 2)
-                        if len(lines) >= 1:
-                            header = lines[0]  # Function name and query
-                            combined_response += f"- {header}\n"
-                            
-                            # Add full content if available
-                            if len(lines) > 2:
-                                full_content = '\n'.join(lines[2:])
-                                combined_response += f"\n{full_content}\n"
+                        combined_response += f"{result}\n\n"
                     
                     return combined_response
                 else:
@@ -319,19 +307,19 @@ with col2:
                 content = message["content"]
                 
                 # Check if this is a response with function call results
-                if "---\n\n**Sources:**" in content:
-                    # Split the content into main response and sources
-                    parts = content.split("---\n\n**Sources:**")
+                if "---\n\n" in content:
+                    # Split the content into main response and function results
+                    parts = content.split("---\n\n")
                     main_content = parts[0].strip()
-                    sources_content = parts[1].strip() if len(parts) > 1 else ""
+                    function_results = parts[1].strip() if len(parts) > 1 else ""
                     
                     # Display main content prominently
-                    st.markdown(main_content)
+                    if main_content:
+                        st.markdown(main_content)
                     
-                    # Display sources in smaller, collapsible section
-                    if sources_content:
-                        with st.expander("View Sources", expanded=False):
-                            st.markdown(f"<small>{sources_content}</small>", unsafe_allow_html=True)
+                    # Display function results directly
+                    if function_results:
+                        st.markdown(function_results)
                 else:
                     # Regular message display
                     st.markdown(content)

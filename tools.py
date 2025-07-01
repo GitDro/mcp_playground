@@ -11,7 +11,14 @@ import httpx
 import re
 import tempfile
 import os
+import json
+import requests
 from pydantic import BaseModel, Field
+from datetime import datetime, timedelta
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 
 # ============================================================================
@@ -338,7 +345,7 @@ def arxiv_search(query: str, max_results: int = 3) -> str:
                         formatted_results += "\n**Introduction:**\n\n"
                         for point in paper_content.introduction.bullet_points:
                             clean_point = _clean_markdown_text(point)
-                            formatted_results += f"• {clean_point}\n\n"
+                            formatted_results += f"- {clean_point}\n\n"
                         formatted_results += "\n"
                     
                     # Methods/Approach
@@ -346,7 +353,7 @@ def arxiv_search(query: str, max_results: int = 3) -> str:
                         formatted_results += "\n**Methods:**\n\n"
                         for point in paper_content.methods.bullet_points:
                             clean_point = _clean_markdown_text(point)
-                            formatted_results += f"• {clean_point}\n\n"
+                            formatted_results += f"- {clean_point}\n\n"
                         formatted_results += "\n"
                     
                     # Results
@@ -354,7 +361,7 @@ def arxiv_search(query: str, max_results: int = 3) -> str:
                         formatted_results += "\n**Results:**\n\n"
                         for point in paper_content.results.bullet_points:
                             clean_point = _clean_markdown_text(point)
-                            formatted_results += f"• {clean_point}\n\n"
+                            formatted_results += f"- {clean_point}\n\n"
                         formatted_results += "\n"
                     
                     # Discussion/Limitations
@@ -362,7 +369,7 @@ def arxiv_search(query: str, max_results: int = 3) -> str:
                         formatted_results += "\n**Discussion:**\n\n"
                         for point in paper_content.discussion.bullet_points:
                             clean_point = _clean_markdown_text(point)
-                            formatted_results += f"• {clean_point}\n\n"
+                            formatted_results += f"- {clean_point}\n\n"
                         formatted_results += "\n"
                 else:
                     formatted_results += "*PDF analysis unavailable - using abstract only.*\n\n"
@@ -374,6 +381,356 @@ def arxiv_search(query: str, max_results: int = 3) -> str:
         
     except Exception as e:
         return f"Error searching arXiv: {str(e)}"
+
+
+# ============================================================================
+# FINANCIAL DATA FUNCTIONS - ALPHA VANTAGE WITH CACHING
+# ============================================================================
+
+# Alpha Vantage configuration
+ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY')
+CACHE_DIR = os.getenv('CACHE_DIRECTORY', 'cache')
+MAX_CACHE_DAYS = int(os.getenv('MAX_CACHE_DAYS', '7'))
+
+def _get_cache_file_path(ticker: str, date_str: str = None) -> str:
+    """Get the cache file path for a ticker on a specific date"""
+    if date_str is None:
+        date_str = datetime.now().strftime('%Y-%m-%d')
+    
+    cache_date_dir = os.path.join(CACHE_DIR, date_str)
+    os.makedirs(cache_date_dir, exist_ok=True)
+    return os.path.join(cache_date_dir, f"{ticker.upper()}.json")
+
+def _load_cached_data(ticker: str) -> Optional[Dict]:
+    """Load cached stock data for today if it exists"""
+    try:
+        cache_file = _get_cache_file_path(ticker)
+        if os.path.exists(cache_file):
+            with open(cache_file, 'r') as f:
+                data = json.load(f)
+                # Check if data is from today
+                if data.get('date') == datetime.now().strftime('%Y-%m-%d'):
+                    return data
+        return None
+    except Exception:
+        return None
+
+def _save_cached_data(ticker: str, data: Dict) -> None:
+    """Save stock data to cache"""
+    try:
+        data['date'] = datetime.now().strftime('%Y-%m-%d')
+        data['cached_at'] = datetime.now().isoformat()
+        
+        cache_file = _get_cache_file_path(ticker)
+        with open(cache_file, 'w') as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        print(f"Warning: Failed to cache data for {ticker}: {e}")
+
+def _cleanup_old_cache() -> None:
+    """Remove cache directories older than MAX_CACHE_DAYS"""
+    try:
+        if not os.path.exists(CACHE_DIR):
+            return
+            
+        cutoff_date = datetime.now() - timedelta(days=MAX_CACHE_DAYS)
+        
+        for item in os.listdir(CACHE_DIR):
+            item_path = os.path.join(CACHE_DIR, item)
+            if os.path.isdir(item_path):
+                try:
+                    # Check if directory name is a date
+                    dir_date = datetime.strptime(item, '%Y-%m-%d')
+                    if dir_date < cutoff_date:
+                        import shutil
+                        shutil.rmtree(item_path)
+                        print(f"Cleaned up old cache directory: {item}")
+                except ValueError:
+                    # Not a date directory, skip
+                    continue
+    except Exception as e:
+        print(f"Warning: Cache cleanup failed: {e}")
+
+def _make_alpha_vantage_request(function: str, symbol: str, **kwargs) -> Optional[Dict]:
+    """Make a request to Alpha Vantage API"""
+    if not ALPHA_VANTAGE_API_KEY:
+        raise ValueError("Alpha Vantage API key not found. Please set ALPHA_VANTAGE_API_KEY in .env file.")
+    
+    try:
+        params = {
+            'function': function,
+            'symbol': symbol,
+            'apikey': ALPHA_VANTAGE_API_KEY,
+            **kwargs
+        }
+        
+        response = requests.get(
+            'https://www.alphavantage.co/query',
+            params=params,
+            timeout=10
+        )
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        # Check for API errors
+        if 'Error Message' in data:
+            raise ValueError(f"Alpha Vantage API Error: {data['Error Message']}")
+        if 'Note' in data:
+            raise ValueError(f"Alpha Vantage API Note: {data['Note']}")
+            
+        return data
+        
+    except requests.exceptions.RequestException as e:
+        raise ValueError(f"Network error: {str(e)}")
+
+def get_stock_price(ticker: str) -> str:
+    """Get current stock price and basic information using Alpha Vantage"""
+    try:
+        # Clean up old cache periodically
+        _cleanup_old_cache()
+        
+        # Check cache first
+        cached_data = _load_cached_data(ticker)
+        if cached_data and 'quote' in cached_data:
+            quote_data = cached_data['quote']
+        else:
+            # Make API request
+            data = _make_alpha_vantage_request('GLOBAL_QUOTE', ticker)
+            quote_data = data.get('Global Quote', {})
+            
+            # Cache the result
+            _save_cached_data(ticker, {'quote': quote_data})
+        
+        if not quote_data:
+            return f"Could not find data for ticker: {ticker}"
+        
+        # Parse Alpha Vantage response
+        symbol = quote_data.get('01. symbol', ticker.upper())
+        current_price = float(quote_data.get('05. price', 0))
+        prev_close = float(quote_data.get('08. previous close', 0))
+        change = float(quote_data.get('09. change', 0))
+        change_pct = float(quote_data.get('10. change percent', '0%').replace('%', ''))
+        
+        # Plain text only - no markdown at all
+        trend_symbol = "📈" if change >= 0 else "📉"
+        formatted_result = f"{symbol} {trend_symbol}\n\n"
+        
+        # Price with simple +/- - NO MARKDOWN
+        if change >= 0:
+            formatted_result += f"- {current_price:.2f} USD +{change:.2f} (+{change_pct:.2f}%)\n\n"
+        else:
+            formatted_result += f"- {current_price:.2f} USD {change:.2f} ({change_pct:.2f}%)\n\n"
+        
+        # Add key metrics as simple bullet points - NO DOLLAR SIGNS
+        if quote_data.get('03. high'):
+            high = float(quote_data.get('03. high', 0))
+            low = float(quote_data.get('04. low', 0))
+            formatted_result += f"- Range: {low:.2f} to {high:.2f}\n\n"
+        
+        if quote_data.get('06. volume'):
+            volume = int(quote_data.get('06. volume', 0))
+            if volume > 1e9:
+                formatted_result += f"- Volume: {volume/1e9:.1f}B shares\n"
+            elif volume > 1e6:
+                formatted_result += f"- Volume: {volume/1e6:.1f}M shares\n"
+            else:
+                formatted_result += f"- Volume: {volume:,} shares\n"
+        
+        return formatted_result
+        
+    except Exception as e:
+        if "API" in str(e) or "rate limit" in str(e).lower():
+            return f"Unable to fetch stock data for {ticker}: {str(e)}"
+        return f"Error fetching stock data for {ticker}: {str(e)}"
+
+def get_stock_history(ticker: str, period: str = "1mo") -> str:
+    """Get historical stock price data using Alpha Vantage"""
+    try:
+        # For historical data, we'll use TIME_SERIES_DAILY
+        # Note: Alpha Vantage free tier gives last 100 data points for daily
+        
+        cache_key = f"{ticker}_history"
+        cached_data = _load_cached_data(cache_key)
+        
+        if cached_data and 'history' in cached_data:
+            time_series = cached_data['history']
+        else:
+            # Make API request for daily data
+            data = _make_alpha_vantage_request('TIME_SERIES_DAILY', ticker, outputsize='compact')
+            time_series = data.get('Time Series (Daily)', {})
+            
+            # Cache the result
+            _save_cached_data(cache_key, {'history': time_series})
+        
+        if not time_series:
+            return f"Could not find historical data for ticker: {ticker}"
+        
+        # Convert to list of dates and sort
+        dates = sorted(time_series.keys(), reverse=True)
+        
+        # Calculate period-specific data
+        period_days = {
+            '1d': 1, '5d': 5, '1mo': 22, '3mo': 66, 
+            '6mo': 132, '1y': 252, 'ytd': None
+        }
+        
+        days = period_days.get(period, 22)  # Default to 1 month
+        if days:
+            recent_dates = dates[:days]
+        else:
+            # YTD calculation
+            current_year = datetime.now().year
+            recent_dates = [d for d in dates if d.startswith(str(current_year))]
+        
+        if not recent_dates:
+            return f"Insufficient historical data for {ticker}"
+        
+        # Get current and start prices
+        current_data = time_series[recent_dates[0]]
+        start_data = time_series[recent_dates[-1]]
+        
+        current_price = float(current_data['4. close'])
+        start_price = float(start_data['4. close'])
+        
+        # Calculate statistics
+        high_price = max(float(time_series[d]['2. high']) for d in recent_dates)
+        low_price = min(float(time_series[d]['3. low']) for d in recent_dates)
+        total_return = ((current_price - start_price) / start_price) * 100
+        
+        # Plain text historical data formatting
+        trend_symbol = "📈" if total_return >= 0 else "📉"
+        formatted_result = f"{ticker.upper()} {period.upper()} {trend_symbol}\n\n"
+        
+        # Period return with simple +/-
+        if total_return >= 0:
+            formatted_result += f"- Period return: +{total_return:.2f}%\n\n"
+        else:
+            formatted_result += f"- Period return: {total_return:.2f}%\n\n"
+            
+        formatted_result += f"- Current price: {current_price:.2f} USD\n\n"
+        formatted_result += f"- Period high: {high_price:.2f} USD\n\n"
+        formatted_result += f"- Period low: {low_price:.2f} USD\n\n"
+        
+        # Recent trend with bullet points
+        formatted_result += f"Recent trading days:\n\n"
+        for date in recent_dates[:3]:
+            day_data = time_series[date]
+            close_price = float(day_data['4. close'])
+            open_price = float(day_data['1. open'])
+            daily_change = close_price - open_price
+            trend = "📈" if daily_change >= 0 else "📉"
+            formatted_result += f"- {date}: {close_price:.2f} USD {trend}\n\n"
+        
+        return formatted_result
+        
+    except Exception as e:
+        if "API" in str(e) or "rate limit" in str(e).lower():
+            return f"Unable to fetch historical data for {ticker}: {str(e)}"
+        return f"Error fetching historical data for {ticker}: {str(e)}"
+
+def get_crypto_price(symbol: str) -> str:
+    """Get current cryptocurrency price using Alpha Vantage"""
+    try:
+        # Alpha Vantage uses different function for crypto
+        cache_key = f"{symbol}_crypto"
+        cached_data = _load_cached_data(cache_key)
+        
+        if cached_data and 'crypto' in cached_data:
+            # Use cached data
+            data = cached_data['crypto']
+            current_price = data['price']
+            change_pct = data.get('change_pct', 0)
+        else:
+            # Make API request for crypto
+            data = _make_alpha_vantage_request('DIGITAL_CURRENCY_DAILY', symbol, market='USD')
+            time_series = data.get('Time Series (Digital Currency Daily)', {})
+            
+            if not time_series:
+                return f"Could not find data for cryptocurrency: {symbol}"
+            
+            # Get most recent date
+            recent_date = max(time_series.keys())
+            recent_data = time_series[recent_date]
+            
+            current_price = float(recent_data['4. close'])
+            
+            # Try to calculate change (if we have previous day)
+            dates = sorted(time_series.keys(), reverse=True)
+            if len(dates) > 1:
+                prev_data = time_series[dates[1]]
+                prev_price = float(prev_data['4. close'])
+                change_pct = ((current_price - prev_price) / prev_price) * 100
+            else:
+                change_pct = 0
+            
+            # Cache the result
+            crypto_data = {'price': current_price, 'change_pct': change_pct}
+            _save_cached_data(cache_key, {'crypto': crypto_data})
+        
+        symbol_icon = "🟢" if change_pct >= 0 else "🔴"
+        formatted_result = f"{symbol.upper()} {symbol_icon}\n\n"
+        
+        # Simple price with +/- handling - NO MARKDOWN
+        if change_pct >= 0:
+            formatted_result += f"- {current_price:,.2f} USD +{change_pct:.2f}%\n"
+        else:
+            formatted_result += f"- {current_price:,.2f} USD {change_pct:.2f}%\n"
+        
+        return formatted_result
+        
+    except Exception as e:
+        if "API" in str(e) or "rate limit" in str(e).lower():
+            return f"Unable to fetch crypto data for {symbol}: {str(e)}"
+        return f"Error fetching crypto data for {symbol}: {str(e)}"
+
+def get_market_summary() -> str:
+    """Get summary of major market indices using Alpha Vantage"""
+    try:
+        indices = {
+            "S&P 500": "SPY",  # Using ETF tickers for better Alpha Vantage support
+            "NASDAQ": "QQQ",
+            "Dow Jones": "DIA",
+            "Russell 2000": "IWM"
+        }
+        
+        formatted_result = "Markets\n\n"
+        
+        for name, symbol in indices.items():
+            try:
+                # Check cache first
+                cached_data = _load_cached_data(f"{symbol}_market")
+                if cached_data and 'quote' in cached_data:
+                    quote_data = cached_data['quote']
+                else:
+                    # Make API request
+                    data = _make_alpha_vantage_request('GLOBAL_QUOTE', symbol)
+                    quote_data = data.get('Global Quote', {})
+                    
+                    # Cache the result
+                    _save_cached_data(f"{symbol}_market", {'quote': quote_data})
+                
+                if quote_data:
+                    current_price = float(quote_data.get('05. price', 0))
+                    change_pct = float(quote_data.get('10. change percent', '0%').replace('%', ''))
+                    
+                    trend = "📈" if change_pct >= 0 else "📉"
+                    if change_pct >= 0:
+                        formatted_result += f"- {name}: {current_price:.2f} USD +{change_pct:.2f}% {trend}\n\n"
+                    else:
+                        formatted_result += f"- {name}: {current_price:.2f} USD {change_pct:.2f}% {trend}\n\n"
+                else:
+                    formatted_result += f"- {name}: unavailable\n\n"
+                    
+            except Exception as e:
+                formatted_result += f"- {name}: error\n\n"
+        
+        return formatted_result
+        
+    except Exception as e:
+        if "API" in str(e) or "rate limit" in str(e).lower():
+            return f"Unable to fetch market data: {str(e)}"
+        return f"Error fetching market summary: {str(e)}"
 
 
 def get_function_schema() -> List[Dict]:
@@ -442,6 +799,73 @@ def get_function_schema() -> List[Dict]:
                     "required": ["query"]
                 }
             }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_stock_price",
+                "description": "RESTRICTED: Only use when user explicitly asks for stock prices, stock information, or financial data for specific companies with keywords like 'stock price', 'share price', 'ticker', company names, or stock symbols.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "ticker": {
+                            "type": "string",
+                            "description": "Stock ticker symbol (e.g., AAPL, MSFT, TSLA)"
+                        }
+                    },
+                    "required": ["ticker"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_stock_history",
+                "description": "RESTRICTED: Only use when user explicitly asks for historical stock data, price trends, or performance over time with keywords like 'historical', 'trend', 'performance', 'chart'.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "ticker": {
+                            "type": "string",
+                            "description": "Stock ticker symbol (e.g., AAPL, MSFT, TSLA)"
+                        },
+                        "period": {
+                            "type": "string",
+                            "description": "Time period for historical data (1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max)"
+                        }
+                    },
+                    "required": ["ticker"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_crypto_price",
+                "description": "RESTRICTED: Only use when user explicitly asks for cryptocurrency prices or crypto information with keywords like 'crypto', 'bitcoin', 'ethereum', 'cryptocurrency'.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "symbol": {
+                            "type": "string",
+                            "description": "Cryptocurrency symbol (e.g., BTC, ETH, ADA, DOGE)"
+                        }
+                    },
+                    "required": ["symbol"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_market_summary",
+                "description": "RESTRICTED: Only use when user explicitly asks for market overview, market summary, or general market performance with keywords like 'market', 'indices', 'dow', 'nasdaq', 's&p'.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            }
         }
     ]
 
@@ -466,6 +890,18 @@ def execute_function(function_name: str, arguments: dict) -> str:
             if isinstance(max_results, str):
                 max_results = int(max_results)
             return arxiv_search(query, max_results)
+        elif function_name == "get_stock_price":
+            ticker = str(arguments.get("ticker", ""))
+            return get_stock_price(ticker)
+        elif function_name == "get_stock_history":
+            ticker = str(arguments.get("ticker", ""))
+            period = str(arguments.get("period", "1mo"))
+            return get_stock_history(ticker, period)
+        elif function_name == "get_crypto_price":
+            symbol = str(arguments.get("symbol", ""))
+            return get_crypto_price(symbol)
+        elif function_name == "get_market_summary":
+            return get_market_summary()
         else:
             return f"Unknown function: {function_name}"
     except Exception as e:
