@@ -1,79 +1,169 @@
 # MCP Arena
 
-An elegant, minimalist chat application that combines Model Context Protocol (MCP) with Ollama for powerful local AI interactions.
+A simple, working Streamlit chat application with Ollama integration and function calling capabilities.
 
 ## Features
 
-- 🤖 **Local AI Models**: Integration with Ollama for privacy-focused AI conversations
-- 🔍 **Web Search**: DuckDuckGo integration for real-time information retrieval
-- 📄 **Paper Analysis**: Academic paper summarization and analysis
-- 💬 **Elegant Chat Interface**: Clean, typography-focused design
-- 🔧 **MCP Integration**: Built with FastMCP for extensible tool orchestration
-- 📚 **Conversation Management**: Save, load, and organize your conversations
-- ⚡ **Real-time Communication**: WebSocket-based for instant responses
+- 🤖 **Local AI Chat**: Direct integration with Ollama models
+- 🔍 **Web Search**: Built-in DuckDuckGo search functionality  
+- 📄 **URL Analysis**: Analyze and summarize content from any URL
+- ⚙️ **Function Toggle**: Enable/disable AI tool usage
+- 🧹 **Clean Interface**: Simple Streamlit UI that just works
 
 ## Quick Start
 
-1. **Install Dependencies**:
+### Prerequisites
+
+1. **Install Ollama** and have it running:
+   ```bash
+   # Install Ollama (visit https://ollama.ai for installation)
+   ollama serve
+   
+   # Pull a model (required)
+   ollama pull llama3.1:latest
+   # or
+   ollama pull llama3.2:latest
+   ```
+
+2. **Verify Ollama is working**:
+   ```bash
+   curl http://localhost:11434/api/tags
+   ```
+
+### Installation & Running
+
+1. **Clone and setup**:
+   ```bash
+   git clone <your-repo>
+   cd mcp_arena
+   ```
+
+2. **Install dependencies**:
    ```bash
    uv sync
    ```
 
-2. **Ensure Ollama is Running**:
-   Make sure you have Ollama installed and running with at least one model:
+3. **Run the app**:
    ```bash
-   ollama serve
-   ollama pull llama3.1  # or any other model
+   uv run streamlit run app.py
    ```
 
-3. **Run the Application**:
-   ```bash
-   uv run main.py
-   ```
-
-4. **Open Your Browser**:
-   Navigate to `http://localhost:8000`
+4. **Open in browser**: http://localhost:8501
 
 ## Usage
 
-### Chat Commands
+### Basic Chat
+1. Select an Ollama model from the sidebar
+2. Type your message and press Enter
+3. The AI will respond using the selected model
 
-- **Regular Chat**: Just type your message and press Enter
-- **@ Commands**: Access resources
-  - `@conversations` - List saved conversations
-  - `@search-history` - View recent searches
-- **/ Commands**: Use prompt templates
-  - `/prompts` - Show available prompts
-  - `/prompt research_prompt topic=AI num_papers=5` - Research a topic
+### Function Calling Examples
 
-### Features
+With function calling enabled (default), try these prompts:
 
-- **Model Switching**: Use the dropdown in the header to switch between available Ollama models
-- **Tool Integration**: The AI can automatically search the web and summarize papers when needed
-- **Conversation Persistence**: Your conversations are saved automatically
-- **Responsive Design**: Works beautifully on desktop and mobile
+**Web Search:**
+- "Search for the latest news about artificial intelligence"
+- "What's new with Python 3.13?"
+- "Find recent research on quantum computing"
+
+**URL Analysis:**
+- "Analyze the content of https://www.anthropic.com"
+- "What's on the OpenAI blog homepage?"
+- "Summarize https://arxiv.org/abs/2301.00001"
+
+**Mixed Queries:**
+- "Search for recent ChatGPT updates and summarize the top result"
+- "Find and analyze the latest Python release notes"
+
+### Settings
+
+- **Model Selection**: Choose from available Ollama models
+- **Function Calling**: Toggle AI's ability to use web search and URL analysis
+- **Clear Chat**: Reset the conversation
 
 ## Architecture
 
-- **Backend**: FastAPI with WebSocket support
-- **MCP Server**: FastMCP-based tool orchestration
-- **AI Integration**: Ollama client with function calling
-- **Frontend**: Vanilla JavaScript with elegant CSS
-- **Database**: SQLite for conversation storage
+```
+app.py                  # Main Streamlit application
+├── get_ollama_models() # Fetch available models
+├── web_search()        # DuckDuckGo search integration  
+├── analyze_url()       # URL content analysis
+└── chat_with_ollama()  # Chat with function calling
+```
+
+### Function Calling Flow
+
+1. User sends message to AI
+2. AI determines if tools are needed
+3. If needed, AI calls `web_search()` or `analyze_url()`
+4. Tool results are sent back to AI
+5. AI responds with final answer incorporating tool results
+
+## Dependencies
+
+- **streamlit**: Web interface
+- **requests**: HTTP client for Ollama API
+- **duckduckgo-search**: Web search functionality
+- **httpx**: Async HTTP client for URL analysis
+
+## Configuration
+
+The app automatically detects:
+- Available Ollama models on localhost:11434
+- Network connectivity for web search
+- URL accessibility for analysis
+
+No configuration files needed!
+
+## Troubleshooting
+
+### "No Ollama models found"
+```bash
+# Check if Ollama is running
+curl http://localhost:11434/api/tags
+
+# Start Ollama if not running
+ollama serve
+
+# Pull a model if none exist  
+ollama pull llama3.1:latest
+```
+
+### "Function calling not working"
+- Ensure you're using a model that supports function calling (llama3.1, llama3.2, etc.)
+- Check that "Enable function calling" is checked in the sidebar
+- Verify internet connectivity for web search
+
+### "App won't start"
+```bash
+# Reinstall dependencies
+uv sync
+
+# Check Python version
+python --version  # Should be 3.12+
+
+# Run with verbose output
+uv run streamlit run app.py --logger.level=debug
+```
 
 ## Development
 
-The application is structured as follows:
+The codebase is intentionally minimal and easy to modify:
 
-- `main.py` - FastAPI backend and WebSocket handler
-- `mcp_server.py` - MCP server with tools, resources, and prompts
-- `ollama_client.py` - Ollama integration with function calling
-- `static/` - Frontend assets (HTML, CSS, JavaScript)
+- **Add new functions**: Define in `app.py` and add to `get_function_schema()`
+- **Modify UI**: Update Streamlit components in the main section
+- **Change models**: Update Ollama model detection logic
 
-## Requirements
+## Legacy Files
 
-- Python 3.12+
-- Ollama with at least one model installed
-- Modern web browser
+The following files are kept for reference but not used:
+- `*.legacy` - Previous FastAPI/JavaScript implementation
+- `data/` - Database files from previous version
 
-Enjoy your intelligent conversations with MCP Arena! 🚀
+## License
+
+MIT License - See LICENSE file for details.
+
+---
+
+**Simple. Fast. Actually works.** 🚀

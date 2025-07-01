@@ -1,3 +1,13 @@
+"""
+MCP Arena - Simple Streamlit Chat App with Function Calling
+
+A minimal, working chat application that integrates with Ollama for local AI
+and includes web search and URL analysis capabilities.
+
+Author: MCP Arena Team
+Version: 1.0.0
+"""
+
 import streamlit as st
 import requests
 import json
@@ -12,8 +22,17 @@ st.set_page_config(
     layout="wide"
 )
 
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
+
 def get_ollama_models() -> List[str]:
-    """Get available Ollama models"""
+    """
+    Fetch available Ollama models from the local Ollama instance.
+    
+    Returns:
+        List of model names, empty list if Ollama is not accessible
+    """
     try:
         response = requests.get("http://localhost:11434/api/tags", timeout=5)
         if response.status_code == 200:
@@ -23,6 +42,10 @@ def get_ollama_models() -> List[str]:
             return []
     except:
         return []
+
+# ============================================================================
+# FUNCTION CALLING TOOLS
+# ============================================================================
 
 def web_search(query: str, max_results: int = 5) -> str:
     """Search the web using DuckDuckGo"""
@@ -77,8 +100,17 @@ def analyze_url(url: str) -> str:
     except Exception as e:
         return f"Error analyzing URL: {str(e)}"
 
+# ============================================================================
+# FUNCTION CALLING CONFIGURATION
+# ============================================================================
+
 def get_function_schema():
-    """Define available functions for Ollama"""
+    """
+    Define available functions for Ollama function calling.
+    
+    Returns:
+        List of function schemas in OpenAI format
+    """
     return [
         {
             "type": "function",
@@ -132,8 +164,23 @@ def execute_function(function_name: str, arguments: dict) -> str:
     else:
         return f"Unknown function: {function_name}"
 
+# ============================================================================
+# MAIN CHAT FUNCTION
+# ============================================================================
+
 def chat_with_ollama(model: str, message: str, conversation_history: List[Dict], use_functions: bool = True) -> str:
-    """Send chat message to Ollama with function calling support"""
+    """
+    Send chat message to Ollama with optional function calling support.
+    
+    Args:
+        model: Ollama model name to use
+        message: User's message
+        conversation_history: Previous messages in the conversation
+        use_functions: Whether to enable function calling
+        
+    Returns:
+        AI response string, potentially including function call results
+    """
     try:
         # Format conversation for Ollama
         messages = []
@@ -222,6 +269,10 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
             
     except Exception as e:
         return f"Error connecting to Ollama: {str(e)}"
+
+# ============================================================================
+# STREAMLIT APP
+# ============================================================================
 
 # Initialize session state
 if "messages" not in st.session_state:
