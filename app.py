@@ -128,13 +128,13 @@ def get_function_schema():
             "type": "function",
             "function": {
                 "name": "web_search",
-                "description": "Search the web using DuckDuckGo for current information",
+                "description": "RESTRICTED: Only use when user EXPLICITLY asks for current/recent/latest information with keywords like 'search', 'find', 'latest', 'current', 'recent', 'today', 'now'. Never use for general questions or explanations.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "query": {
                             "type": "string",
-                            "description": "The search query"
+                            "description": "Search query for time-sensitive information explicitly requested by user"
                         },
                         "max_results": {
                             "type": "integer",
@@ -149,13 +149,13 @@ def get_function_schema():
             "type": "function",
             "function": {
                 "name": "analyze_url",
-                "description": "Analyze and summarize content from a URL",
+                "description": "RESTRICTED: Only use when user explicitly provides a URL/link and asks to analyze it. Never use unless user specifically mentions a URL to analyze.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "url": {
                             "type": "string",
-                            "description": "The URL to analyze"
+                            "description": "The specific URL provided by user to analyze"
                         }
                     },
                     "required": ["url"]
@@ -200,8 +200,47 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
         AI response string, potentially including function call results
     """
     try:
-        # Format conversation for Ollama
+        # Format conversation for Ollama with system guidance
         messages = []
+        
+        # Add system message for function calling guidance
+        if use_functions:
+            from datetime import datetime
+            current_date = datetime.now().strftime("%Y-%m-%d")
+            
+            system_message = {
+                "role": "system",
+                "content": f"""You are a helpful AI assistant. Today's date is {current_date}. You have access to tools but should use them ONLY when absolutely necessary.
+
+STRICT RULES FOR TOOL USAGE:
+1. NEVER use tools for:
+   - Greetings, casual conversation, or small talk
+   - General knowledge questions you can answer from training
+   - Explaining concepts, definitions, or how-to questions
+   - Math, coding problems, or theoretical discussions
+
+2. ONLY use web_search when user EXPLICITLY requests:
+   - Current/recent/latest news or events
+   - Real-time information with keywords like "today", "now", "current"
+   - Specific searches with phrases like "search for", "find", "look up"
+
+3. ONLY use analyze_url when user provides a specific URL/link
+
+ALWAYS try to answer from your knowledge first. Only use tools as a last resort when current information is specifically requested.
+
+Examples - DO NOT use tools:
+- "Hello" → Just greet back
+- "What is Python?" → Explain from knowledge  
+- "How do I use Git?" → Provide instructions from training
+- "Explain AI" → Use your knowledge
+
+Examples - USE tools:
+- "Search for Python 3.13 news" → Use web_search
+- "What's the latest on OpenAI?" → Use web_search  
+- "Analyze https://example.com" → Use analyze_url"""
+            }
+            messages.append(system_message)
+        
         for msg in conversation_history:
             messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": message})
@@ -232,6 +271,13 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
         
         # Check if there are tool calls (only if functions are enabled)
         tool_calls = assistant_message.get("tool_calls", [])
+        
+        # Debug: Log when functions are called vs not called
+        if use_functions:
+            if tool_calls:
+                print(f"DEBUG: AI chose to use {len(tool_calls)} function(s)")
+            else:
+                print("DEBUG: AI chose NOT to use any functions")
         
         if tool_calls and use_functions:
             # Execute function calls
