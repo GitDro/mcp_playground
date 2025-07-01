@@ -253,17 +253,9 @@ Paper text:
 
 
 def _clean_markdown_text(text: str) -> str:
-    """Clean text to prevent markdown formatting issues"""
+    """Clean text to prevent overly long sections while preserving formatting"""
     if not text:
         return text
-    
-    # Escape markdown characters that could cause formatting issues
-    text = text.replace('#', '\\#')  # Escape headers
-    text = text.replace('*', '\\*')  # Escape emphasis (except our own)
-    text = text.replace('_', '\\_')  # Escape emphasis
-    text = text.replace('`', '\\`')  # Escape code
-    text = text.replace('[', '\\[')  # Escape links
-    text = text.replace(']', '\\]')  # Escape links
     
     # Remove extra whitespace and normalize
     text = ' '.join(text.split())
