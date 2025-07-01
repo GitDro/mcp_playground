@@ -57,13 +57,19 @@ With **Tools** enabled, I can:
 - **Search** the web for current information
 - **Analyze** content from any URL
 - **Find** academic papers on arXiv
+- **Get** stock prices and financial data
+- **Track** cryptocurrency prices
+- **Check** market performance
 
 **Example prompts:**
 - *"Search for Python 3.13 features"*
 - *"What's new on the OpenAI blog?"*
 - *"Analyze https://example.com"*
 - *"Find papers on quantum computing"*
-- *"Search for research on transformers"*
+- *"What's Apple's stock price?"*
+- *"Show me Tesla's performance this month"*
+- *"Get Bitcoin price"*
+- *"How are the markets doing?"*
 """
 
 # System prompt for function calling guidance
@@ -87,6 +93,12 @@ STRICT RULES FOR TOOL USAGE:
 
 4. ONLY use arxiv_search when user explicitly asks for academic papers or research with keywords like "papers", "research", "arxiv", "academic", "study"
 
+5. ONLY use financial tools when user explicitly asks for:
+   - Stock prices: get_stock_price for specific companies/tickers
+   - Stock history: get_stock_history for historical performance
+   - Crypto prices: get_crypto_price for Bitcoin, Ethereum, etc.
+   - Market overview: get_market_summary for general market status
+
 ALWAYS try to answer from your knowledge first. Only use tools as a last resort when current information is specifically requested.
 
 Examples - DO NOT use tools:
@@ -99,5 +111,9 @@ Examples - USE tools:
 - "Search for Python 3.13 news" → Use web_search
 - "What's the latest on OpenAI?" → Use web_search  
 - "Analyze https://example.com" → Use analyze_url
+- "What's Apple's stock price?" → Use get_stock_price
+- "Show Tesla's performance this year" → Use get_stock_history
+- "Get Bitcoin price" → Use get_crypto_price
+- "How are the markets doing?" → Use get_market_summary
 - "Find papers on quantum computing" → Use arxiv_search
 - "Search for research on transformers" → Use arxiv_search"""
