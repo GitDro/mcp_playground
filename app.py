@@ -1,8 +1,8 @@
 """
-MCP Arena - Simple Streamlit Chat App with Function Calling
+MCP Playground - Simple Streamlit Chat App with Function Calling
 
 A minimal, working chat application that integrates with Ollama for local AI
-and includes web search and URL analysis capabilities.
+and includes web search, URL analysis, and arXiv paper search capabilities.
 
 Author: MCP Arena Team
 Version: 1.0.0
@@ -10,10 +10,12 @@ Version: 1.0.0
 
 import streamlit as st
 import requests
-import json
 from typing import List, Dict
-from duckduckgo_search import DDGS
-import httpx
+from datetime import datetime
+
+# Import our modules
+from tools import get_function_schema, execute_function
+from ui_config import STREAMLIT_STYLE, TOOLS_HELP_TEXT, get_system_prompt
 
 # Page config - Minimalist setup
 st.set_page_config(
@@ -23,9 +25,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ============================================================================
-# UTILITY FUNCTIONS
-# ============================================================================
 
 def get_ollama_models() -> List[str]:
     """
@@ -44,147 +43,6 @@ def get_ollama_models() -> List[str]:
     except:
         return []
 
-# ============================================================================
-# FUNCTION CALLING TOOLS
-# ============================================================================
-
-def web_search(query: str, max_results: int = 5) -> str:
-    """Search the web using DuckDuckGo"""
-    try:
-        # Ensure max_results is an integer (in case it comes as string from JSON)
-        if isinstance(max_results, str):
-            max_results = int(max_results)
-        max_results = max(1, min(max_results or 5, 10))  # Clamp between 1 and 10
-        
-        # Validate query
-        if not query or not query.strip():
-            return "Error: Search query cannot be empty"
-        
-        query = query.strip()
-        
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=max_results))
-        
-        if not results:
-            return f"No search results found for: {query}"
-        
-        # Format results as markdown
-        formatted_results = f"#### Search Results for: {query}\n\n"
-        for i, result in enumerate(results, 1):
-            formatted_results += f"**{i}. {result.get('title', 'No Title')}**\n"
-            formatted_results += f"**URL**: {result.get('href', 'No URL')}\n"
-            formatted_results += f"**Summary**: {result.get('body', 'No description available')}\n\n"
-            formatted_results += "---\n\n"
-        
-        return formatted_results
-        
-    except Exception as e:
-        return f"Error performing search: {str(e)}"
-
-def analyze_url(url: str) -> str:
-    """Analyze a URL and return basic info"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        
-        with httpx.Client() as client:
-            response = client.get(url, headers=headers, timeout=30)
-            response.raise_for_status()
-            
-            content_type = response.headers.get('content-type', '')
-            content_length = len(response.content)
-            
-            summary = f"# URL Analysis\n\n"
-            summary += f"**URL**: {url}\n"
-            summary += f"**Content Type**: {content_type}\n"
-            summary += f"**Content Length**: {content_length:,} bytes\n\n"
-            
-            if 'text/html' in content_type:
-                # Basic text extraction for web pages
-                text_content = response.text[:1000]  # First 1000 chars
-                summary += f"**Preview**: {text_content}...\n"
-            else:
-                summary += f"**Note**: Non-HTML content detected.\n"
-            
-            return summary
-            
-    except Exception as e:
-        return f"Error analyzing URL: {str(e)}"
-
-# ============================================================================
-# FUNCTION CALLING CONFIGURATION
-# ============================================================================
-
-def get_function_schema():
-    """
-    Define available functions for Ollama function calling.
-    
-    Returns:
-        List of function schemas in OpenAI format
-    """
-    return [
-        {
-            "type": "function",
-            "function": {
-                "name": "web_search",
-                "description": "RESTRICTED: Only use when user EXPLICITLY asks for current/recent/latest information with keywords like 'search', 'find', 'latest', 'current', 'recent', 'today', 'now'. Never use for general questions or explanations.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "Search query for time-sensitive information explicitly requested by user"
-                        },
-                        "max_results": {
-                            "type": "integer",
-                            "description": "Maximum number of results (default: 5)"
-                        }
-                    },
-                    "required": ["query"]
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "analyze_url",
-                "description": "RESTRICTED: Only use when user explicitly provides a URL/link and asks to analyze it. Never use unless user specifically mentions a URL to analyze.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "url": {
-                            "type": "string",
-                            "description": "The specific URL provided by user to analyze"
-                        }
-                    },
-                    "required": ["url"]
-                }
-            }
-        }
-    ]
-
-def execute_function(function_name: str, arguments: dict) -> str:
-    """Execute a function call with proper type conversion"""
-    try:
-        if function_name == "web_search":
-            query = str(arguments.get("query", ""))
-            max_results = arguments.get("max_results", 5)
-            # Convert max_results to int if it's a string
-            if isinstance(max_results, str):
-                max_results = int(max_results)
-            return web_search(query, max_results)
-        elif function_name == "analyze_url":
-            url = str(arguments.get("url", ""))
-            return analyze_url(url)
-        else:
-            return f"Unknown function: {function_name}"
-    except Exception as e:
-        return f"Error executing {function_name}: {str(e)}"
-
-# ============================================================================
-# MAIN CHAT FUNCTION
-# ============================================================================
 
 def chat_with_ollama(model: str, message: str, conversation_history: List[Dict], use_functions: bool = True) -> str:
     """
@@ -205,39 +63,10 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
         
         # Add system message for function calling guidance
         if use_functions:
-            from datetime import datetime
             current_date = datetime.now().strftime("%Y-%m-%d")
-            
             system_message = {
                 "role": "system",
-                "content": f"""You are a helpful AI assistant. Today's date is {current_date}. You have access to tools but should use them ONLY when absolutely necessary.
-
-STRICT RULES FOR TOOL USAGE:
-1. NEVER use tools for:
-   - Greetings, casual conversation, or small talk
-   - General knowledge questions you can answer from training
-   - Explaining concepts, definitions, or how-to questions
-   - Math, coding problems, or theoretical discussions
-
-2. ONLY use web_search when user EXPLICITLY requests:
-   - Current/recent/latest news or events
-   - Real-time information with keywords like "today", "now", "current"
-   - Specific searches with phrases like "search for", "find", "look up"
-
-3. ONLY use analyze_url when user provides a specific URL/link
-
-ALWAYS try to answer from your knowledge first. Only use tools as a last resort when current information is specifically requested.
-
-Examples - DO NOT use tools:
-- "Hello" → Just greet back
-- "What is Python?" → Explain from knowledge  
-- "How do I use Git?" → Provide instructions from training
-- "Explain AI" → Use your knowledge
-
-Examples - USE tools:
-- "Search for Python 3.13 news" → Use web_search
-- "What's the latest on OpenAI?" → Use web_search  
-- "Analyze https://example.com" → Use analyze_url"""
+                "content": get_system_prompt(current_date)
             }
             messages.append(system_message)
         
@@ -388,57 +217,9 @@ Examples - USE tools:
     except Exception as e:
         return f"Error connecting to Ollama: {str(e)}"
 
-# ============================================================================
-# STREAMLIT APP - MINIMALIST UI
-# ============================================================================
 
-# Hide Streamlit default elements for cleaner look
-hide_streamlit_style = """
-    <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    .stDeployButton {display:none;}
-    header {visibility: hidden;}
-    
-    /* Style the chat input - centered and prominent */
-    .stChatInput > div {
-        position: fixed;
-        bottom: 0;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 60%;
-        max-width: 800px;
-        background: white;
-        z-index: 999;
-        padding: 1.5rem;
-        border: 2px solid #4F8A8B;
-        border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        margin-bottom: 1rem;
-        display: flex;
-        align-items: center;
-    }
-    
-    /* Style the input field itself */
-    .stChatInput input {
-        border: none !important;
-        font-size: 16px !important;
-        padding: 12px 16px !important;
-    }
-    
-    /* Fix send button alignment */
-    .stChatInput button {
-        margin-left: 8px !important;
-        align-self: center !important;
-    }
-    
-    /* Add padding to content to account for fixed input */
-    .main .block-container {
-        padding-bottom: 140px;
-    }
-    </style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+# Apply CSS styles
+st.markdown(STREAMLIT_STYLE, unsafe_allow_html=True)
 
 # Initialize session state
 if "messages" not in st.session_state:
@@ -513,7 +294,7 @@ with col2:
             st.session_state.use_functions = st.checkbox(
                 "Tools", 
                 value=st.session_state.use_functions,
-                help="Enable web search and URL analysis"
+                help="Enable web search, URL analysis, and arXiv paper search"
             )
         
     else:
@@ -583,16 +364,7 @@ with col2:
         
         # Subtle help section
         with st.expander("What can I do?"):
-            st.markdown("""
-            With **Tools** enabled, I can:
-            - **Search** the web for current information
-            - **Analyze** content from any URL
-            
-            **Example prompts:**
-            - *"Search for Python 3.13 features"*
-            - *"What's new on the OpenAI blog?"*
-            - *"Analyze https://example.com"*
-            """)
+            st.markdown(TOOLS_HELP_TEXT)
     
     # Add some spacing at bottom
     st.empty()
