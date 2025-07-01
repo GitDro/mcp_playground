@@ -400,21 +400,41 @@ hide_streamlit_style = """
     .stDeployButton {display:none;}
     header {visibility: hidden;}
     
-    /* Ensure chat input stays at bottom */
+    /* Style the chat input - centered and prominent */
     .stChatInput > div {
         position: fixed;
         bottom: 0;
-        left: 0;
-        right: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 60%;
+        max-width: 800px;
         background: white;
         z-index: 999;
-        padding: 1rem;
-        border-top: 1px solid #e0e0e0;
+        padding: 1.5rem;
+        border: 2px solid #4F8A8B;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+    }
+    
+    /* Style the input field itself */
+    .stChatInput input {
+        border: none !important;
+        font-size: 16px !important;
+        padding: 12px 16px !important;
+    }
+    
+    /* Fix send button alignment */
+    .stChatInput button {
+        margin-left: 8px !important;
+        align-self: center !important;
     }
     
     /* Add padding to content to account for fixed input */
     .main .block-container {
-        padding-bottom: 120px;
+        padding-bottom: 140px;
     }
     </style>
 """
@@ -434,12 +454,25 @@ if "use_functions" not in st.session_state:
 col1, col2, col3 = st.columns([1, 3, 1])
 
 with col2:
-    # Minimal header
+    # Clean header
     st.markdown("# **MCP Playground**")
     
-    # Model selection - inline and minimal
+    # Status section with hierarchy
     models = get_ollama_models()
+    if models:
+        # Create status tree
+        tool_count = len(get_function_schema()) if st.session_state.get('use_functions', True) else 0
+        status_text = f"""
+        <div style='color: #666; font-size: 14px; margin-bottom: 1rem; font-family: monospace;'>
+        ├── {len(models)} models available<br>
+        └── {tool_count} tools available
+        </div>
+        """
+        st.markdown(status_text, unsafe_allow_html=True)
+    else:
+        st.markdown("<div style='color: #ff6b6b; font-size: 14px; margin-bottom: 1rem;'>⭕ Ollama disconnected</div>", unsafe_allow_html=True)
     
+    # Model selection - inline and minimal
     if models:
         # Simple inline controls
         col_model, col_func = st.columns([3, 1])
@@ -458,13 +491,23 @@ with col2:
                 if st.session_state.selected_model in models:
                     default_index = models.index(st.session_state.selected_model)
             
-            selected_model = st.selectbox(
+            # Create shorter display names for models
+            model_display = []
+            for model in models:
+                # Truncate long model names for display
+                display_name = model
+                if len(model) > 25:
+                    display_name = model[:22] + "..."
+                model_display.append(display_name)
+            
+            selected_index = st.selectbox(
                 "Model:",
-                models,
+                range(len(models)),
+                format_func=lambda x: model_display[x],
                 index=default_index,
                 label_visibility="collapsed"
             )
-            st.session_state.selected_model = selected_model
+            st.session_state.selected_model = models[selected_index]
         
         with col_func:
             st.session_state.use_functions = st.checkbox(
@@ -551,10 +594,6 @@ with col2:
             - *"Analyze https://example.com"*
             """)
     
-    # Subtle footer with spacing
+    # Add some spacing at bottom
     st.empty()
     st.empty()
-    if models:
-        st.caption(f"🟢 Connected • {len(models)} models available")
-    else:
-        st.caption("Ollama disconnected")
