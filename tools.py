@@ -166,38 +166,36 @@ def extract_paper_content(pdf_url: str) -> Optional[Dict[str, str]]:
         return None
 
 
-def _parse_paper_sections(text: str) -> Dict[str, str]:
-    """Parse academic paper text into structured sections"""
+def _parse_paper_sections(text: str) -> Dict[str, List[str]]:
+    """Parse academic paper text into structured bullet points"""
     # Clean and normalize text
     text = re.sub(r'\s+', ' ', text.strip())
     text_lower = text.lower()
     
     sections = {
-        'introduction': '',
-        'methodology': '',
-        'results': '',
-        'conclusion': '',
-        'key_contributions': ''
+        'introduction': [],
+        'methods': [],
+        'results': [],
+        'discussion': []
     }
     
-    # Define section patterns (case insensitive)
+    # Enhanced section patterns with more variations
     section_patterns = {
         'introduction': [
-            r'\b(?:1\.?\s*)?introduction\b',
-            r'\bintroduction\b',
-            r'\b1\.\s*background\b'
+            r'\b(?:\d+\.?\s*)?(?:introduction|background|motivation)\b',
+            r'\babstract\b'
         ],
-        'methodology': [
-            r'\b(?:\d+\.?\s*)?(?:methodology|methods|approach|model|algorithm)\b',
-            r'\b(?:\d+\.?\s*)?(?:experimental setup|implementation)\b'
+        'methods': [
+            r'\b(?:\d+\.?\s*)?(?:methodology|methods|approach|model|algorithm|architecture)\b',
+            r'\b(?:\d+\.?\s*)?(?:experimental setup|implementation|design)\b'
         ],
         'results': [
-            r'\b(?:\d+\.?\s*)?(?:results|experiments|evaluation|performance)\b',
-            r'\b(?:\d+\.?\s*)?(?:experimental results|findings)\b'
+            r'\b(?:\d+\.?\s*)?(?:results|experiments|evaluation|performance|findings)\b',
+            r'\b(?:\d+\.?\s*)?(?:experimental results|empirical)\b'
         ],
-        'conclusion': [
-            r'\b(?:\d+\.?\s*)?(?:conclusion|conclusions|discussion)\b',
-            r'\b(?:\d+\.?\s*)?(?:summary|future work)\b'
+        'discussion': [
+            r'\b(?:\d+\.?\s*)?(?:discussion|conclusion|conclusions|limitations)\b',
+            r'\b(?:\d+\.?\s*)?(?:future work|analysis|related work)\b'
         ]
     }
     
@@ -207,7 +205,6 @@ def _parse_paper_sections(text: str) -> Dict[str, str]:
         for pattern in patterns:
             matches = list(re.finditer(pattern, text_lower))
             if matches:
-                # Take the first match
                 section_positions[section_name] = matches[0].start()
                 break
     
@@ -215,70 +212,103 @@ def _parse_paper_sections(text: str) -> Dict[str, str]:
     sorted_sections = sorted(section_positions.items(), key=lambda x: x[1])
     
     for i, (section_name, start_pos) in enumerate(sorted_sections):
-        # Find end position (start of next section or end of text)
+        # Find end position
         if i + 1 < len(sorted_sections):
             end_pos = sorted_sections[i + 1][1]
         else:
-            end_pos = len(text)
+            end_pos = min(start_pos + 3000, len(text))  # Limit section length
         
-        # Extract section content
-        content = text[start_pos:end_pos].strip()
-        
-        # Clean section header and take first few sentences
-        lines = content.split('\n')
-        clean_lines = []
-        for line in lines[1:]:  # Skip header line
-            if line.strip() and not re.match(r'^\d+\.?\s*[A-Z]', line.strip()):
-                clean_lines.append(line.strip())
-        
-        # Take first 3-4 sentences
-        section_text = ' '.join(clean_lines)
-        sentences = re.split(r'[.!?]+', section_text)
-        key_sentences = [s.strip() for s in sentences[:4] if s.strip()]
-        
-        sections[section_name] = '. '.join(key_sentences)
-        if sections[section_name]:
-            sections[section_name] += '.'
-    
-    # Extract key contributions from abstract/introduction
-    _extract_key_contributions(text, sections)
+        content = text[start_pos:end_pos]
+        bullet_points = _extract_key_points_with_llm(content, section_name)
+        sections[section_name] = bullet_points[:3]  # Max 3 points per section
     
     return sections
 
 
-def _extract_key_contributions(text: str, sections: Dict[str, str]):
-    """Extract key contributions and findings"""
-    # Look for contribution indicators
-    contribution_patterns = [
-        r'we propose',
-        r'we present',
-        r'we introduce',
-        r'our contribution',
-        r'our main contribution',
-        r'we show that',
-        r'we demonstrate'
-    ]
+def _extract_key_points_with_llm(content: str, section_type: str) -> List[str]:
+    """Use LLM to extract key bullet points from a section"""
+    import requests
     
-    text_lower = text.lower()
-    contributions = []
+    # Limit content length to avoid overwhelming the LLM
+    if len(content) > 2000:
+        content = content[:2000] + "..."
     
-    for pattern in contribution_patterns:
-        matches = re.finditer(pattern, text_lower)
-        for match in matches:
-            # Extract sentence containing the contribution
-            start = match.start()
-            # Find sentence boundaries
-            sentence_start = text.rfind('.', 0, start) + 1
-            sentence_end = text.find('.', start + len(pattern))
-            if sentence_end == -1:
-                sentence_end = len(text)
+    # Create section-specific prompts
+    prompts = {
+        'introduction': "Extract the key points from this research paper introduction. Output exactly 2-3 bullet points (one per line, starting with •) covering: main problem, key contribution, and novelty. Be concise and specific:\n\n",
+        'methods': "Extract the key points from this methods section. Output exactly 2-3 bullet points (one per line, starting with •) covering: novel techniques, key innovations, and unique aspects. Be concise and specific:\n\n",
+        'results': "Extract the key points from this results section. Output exactly 2-3 bullet points (one per line, starting with •) covering: performance improvements, comparisons, and significant findings. Include metrics when available:\n\n",
+        'discussion': "Extract the key points from this discussion/conclusion. Output exactly 2-3 bullet points (one per line, starting with •) covering: main conclusions, limitations, and future work. Be concise and specific:\n\n"
+    }
+    
+    prompt = prompts.get(section_type, "Summarize the key points from this text in 2-3 bullet points:\n\n")
+    full_prompt = prompt + content
+    
+    try:
+        # Call Ollama API for analysis
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": "llama3.2",  # Use a fast model for analysis
+                "prompt": full_prompt,
+                "stream": False,
+                "options": {
+                    "temperature": 0.3,  # Lower temperature for focused analysis
+                    "num_predict": 300   # Limit response length
+                }
+            },
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json().get('response', '')
+            # Parse bullet points from LLM response
+            bullet_points = _parse_llm_bullet_points(result)
+            return bullet_points[:3]  # Max 3 points
+        else:
+            print(f"LLM analysis failed with status {response.status_code}")
+            return []
             
-            sentence = text[sentence_start:sentence_end + 1].strip()
-            if len(sentence) > 20 and len(sentence) < 300:
-                contributions.append(sentence)
+    except Exception as e:
+        print(f"Error in LLM analysis: {e}")
+        return []
+
+
+def _parse_llm_bullet_points(response: str) -> List[str]:
+    """Parse bullet points from LLM response"""
+    points = []
     
-    # Take top 2-3 contributions
-    sections['key_contributions'] = ' '.join(contributions[:3])
+    # Split by common bullet point markers
+    lines = response.split('\n')
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Remove common bullet markers
+        if line.startswith(('•', '*', '-', '1.', '2.', '3.')):
+            # Remove the marker and clean up
+            clean_line = re.sub(r'^[•*\-\d\.]\s*', '', line).strip()
+            if len(clean_line) > 20 and len(clean_line) < 300:
+                points.append(clean_line)
+        elif len(line) > 30 and len(line) < 300 and len(points) < 3:
+            # If it's a substantial line without explicit bullets
+            points.append(line)
+    
+    # If no bullet points found, try to split by sentences
+    if not points:
+        sentences = re.split(r'[.!?]+', response)
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if len(sentence) > 30 and len(sentence) < 300:
+                points.append(sentence + '.')
+                if len(points) >= 3:
+                    break
+    
+    return points
+
+
 
 
 def _clean_markdown_text(text: str) -> str:
@@ -364,21 +394,41 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
                 paper_content = extract_paper_content(result.pdf_url)
                 
                 if paper_content:
-                    if paper_content['key_contributions']:
-                        clean_contrib = _clean_markdown_text(paper_content['key_contributions'])
-                        formatted_results += f"*Key Contributions:* {clean_contrib}\n\n"
+                    # Introduction/Background
+                    if paper_content['introduction'] and any(paper_content['introduction']):
+                        formatted_results += "*Introduction:*\n"
+                        for point in paper_content['introduction']:
+                            if point and len(point.strip()) > 20:
+                                clean_point = _clean_markdown_text(point)
+                                formatted_results += f"• {clean_point}\n"
+                        formatted_results += "\n"
                     
-                    if paper_content['methodology']:
-                        clean_method = _clean_markdown_text(paper_content['methodology'])
-                        formatted_results += f"*Approach:* {clean_method}\n\n"
+                    # Methods/Approach
+                    if paper_content['methods'] and any(paper_content['methods']):
+                        formatted_results += "*Methods:*\n"
+                        for point in paper_content['methods']:
+                            if point and len(point.strip()) > 20:
+                                clean_point = _clean_markdown_text(point)
+                                formatted_results += f"• {clean_point}\n"
+                        formatted_results += "\n"
                     
-                    if paper_content['results']:
-                        clean_results = _clean_markdown_text(paper_content['results'])
-                        formatted_results += f"*Results:* {clean_results}\n\n"
+                    # Results
+                    if paper_content['results'] and any(paper_content['results']):
+                        formatted_results += "*Results:*\n"
+                        for point in paper_content['results']:
+                            if point and len(point.strip()) > 20:
+                                clean_point = _clean_markdown_text(point)
+                                formatted_results += f"• {clean_point}\n"
+                        formatted_results += "\n"
                     
-                    if paper_content['conclusion']:
-                        clean_conclusion = _clean_markdown_text(paper_content['conclusion'])
-                        formatted_results += f"*Conclusion:* {clean_conclusion}\n\n"
+                    # Discussion/Limitations
+                    if paper_content['discussion'] and any(paper_content['discussion']):
+                        formatted_results += "*Discussion:*\n"
+                        for point in paper_content['discussion']:
+                            if point and len(point.strip()) > 20:
+                                clean_point = _clean_markdown_text(point)
+                                formatted_results += f"• {clean_point}\n"
+                        formatted_results += "\n"
                 else:
                     formatted_results += "*PDF analysis unavailable - using abstract only.*\n\n"
             
