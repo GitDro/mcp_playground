@@ -11,7 +11,44 @@ import httpx
 import re
 import tempfile
 import os
+from pydantic import BaseModel, Field
 
+
+# ============================================================================
+# PYDANTIC MODELS FOR STRUCTURED OUTPUTS
+# ============================================================================
+
+class SectionAnalysis(BaseModel):
+    """Analysis of a single paper section"""
+    bullet_points: List[str] = Field(
+        description="2-3 concise bullet points with key insights",
+        min_length=1,
+        max_length=3
+    )
+
+class PaperAnalysis(BaseModel):
+    """Complete structured analysis of a research paper"""
+    introduction: Optional[SectionAnalysis] = Field(
+        default=None,
+        description="Main problem, key contribution, and novelty"
+    )
+    methods: Optional[SectionAnalysis] = Field(
+        default=None,
+        description="Novel techniques, innovations, and unique aspects"
+    )
+    results: Optional[SectionAnalysis] = Field(
+        default=None,
+        description="Performance improvements, comparisons, and metrics"
+    )
+    discussion: Optional[SectionAnalysis] = Field(
+        default=None,
+        description="Conclusions, limitations, and future work"
+    )
+
+
+# ============================================================================
+# TOOL FUNCTIONS
+# ============================================================================
 
 def web_search(query: str, max_results: int = 5) -> str:
     """Search the web using DuckDuckGo"""
@@ -132,8 +169,8 @@ def _filter_relevant_papers(results, original_query: str, max_results: int):
     return [paper for score, paper in scored_results[:max_results] if score > 0]
 
 
-def extract_paper_content(pdf_url: str) -> Optional[Dict[str, str]]:
-    """Extract structured content from arXiv PDF"""
+def extract_paper_content(pdf_url: str) -> Optional[PaperAnalysis]:
+    """Extract structured content from arXiv PDF using LLM analysis"""
     try:
         import fitz  # PyMuPDF
         
@@ -152,9 +189,9 @@ def extract_paper_content(pdf_url: str) -> Optional[Dict[str, str]]:
                 full_text += page.get_text()
             doc.close()
             
-            # Parse sections
-            sections = _parse_paper_sections(full_text)
-            return sections
+            # Analyze with structured LLM output
+            analysis = _analyze_paper_with_structured_output(full_text)
+            return analysis
             
         finally:
             # Clean up temp file
@@ -166,147 +203,51 @@ def extract_paper_content(pdf_url: str) -> Optional[Dict[str, str]]:
         return None
 
 
-def _parse_paper_sections(text: str) -> Dict[str, List[str]]:
-    """Parse academic paper text into structured bullet points"""
-    # Clean and normalize text
-    text = re.sub(r'\s+', ' ', text.strip())
-    text_lower = text.lower()
-    
-    sections = {
-        'introduction': [],
-        'methods': [],
-        'results': [],
-        'discussion': []
-    }
-    
-    # Enhanced section patterns with more variations
-    section_patterns = {
-        'introduction': [
-            r'\b(?:\d+\.?\s*)?(?:introduction|background|motivation)\b',
-            r'\babstract\b'
-        ],
-        'methods': [
-            r'\b(?:\d+\.?\s*)?(?:methodology|methods|approach|model|algorithm|architecture)\b',
-            r'\b(?:\d+\.?\s*)?(?:experimental setup|implementation|design)\b'
-        ],
-        'results': [
-            r'\b(?:\d+\.?\s*)?(?:results|experiments|evaluation|performance|findings)\b',
-            r'\b(?:\d+\.?\s*)?(?:experimental results|empirical)\b'
-        ],
-        'discussion': [
-            r'\b(?:\d+\.?\s*)?(?:discussion|conclusion|conclusions|limitations)\b',
-            r'\b(?:\d+\.?\s*)?(?:future work|analysis|related work)\b'
-        ]
-    }
-    
-    # Find section boundaries
-    section_positions = {}
-    for section_name, patterns in section_patterns.items():
-        for pattern in patterns:
-            matches = list(re.finditer(pattern, text_lower))
-            if matches:
-                section_positions[section_name] = matches[0].start()
-                break
-    
-    # Extract content between sections
-    sorted_sections = sorted(section_positions.items(), key=lambda x: x[1])
-    
-    for i, (section_name, start_pos) in enumerate(sorted_sections):
-        # Find end position
-        if i + 1 < len(sorted_sections):
-            end_pos = sorted_sections[i + 1][1]
-        else:
-            end_pos = min(start_pos + 3000, len(text))  # Limit section length
-        
-        content = text[start_pos:end_pos]
-        bullet_points = _extract_key_points_with_llm(content, section_name)
-        sections[section_name] = bullet_points[:3]  # Max 3 points per section
-    
-    return sections
-
-
-def _extract_key_points_with_llm(content: str, section_type: str) -> List[str]:
-    """Use LLM to extract key bullet points from a section"""
-    import requests
-    
-    # Limit content length to avoid overwhelming the LLM
-    if len(content) > 2000:
-        content = content[:2000] + "..."
-    
-    # Create section-specific prompts
-    prompts = {
-        'introduction': "Extract the key points from this research paper introduction. Output exactly 2-3 bullet points (one per line, starting with •) covering: main problem, key contribution, and novelty. Be concise and specific:\n\n",
-        'methods': "Extract the key points from this methods section. Output exactly 2-3 bullet points (one per line, starting with •) covering: novel techniques, key innovations, and unique aspects. Be concise and specific:\n\n",
-        'results': "Extract the key points from this results section. Output exactly 2-3 bullet points (one per line, starting with •) covering: performance improvements, comparisons, and significant findings. Include metrics when available:\n\n",
-        'discussion': "Extract the key points from this discussion/conclusion. Output exactly 2-3 bullet points (one per line, starting with •) covering: main conclusions, limitations, and future work. Be concise and specific:\n\n"
-    }
-    
-    prompt = prompts.get(section_type, "Summarize the key points from this text in 2-3 bullet points:\n\n")
-    full_prompt = prompt + content
-    
+def _analyze_paper_with_structured_output(full_text: str) -> Optional[PaperAnalysis]:
+    """Use Ollama structured output to analyze a research paper"""
     try:
-        # Call Ollama API for analysis
-        response = requests.post(
-            "http://localhost:11434/api/generate",
-            json={
-                "model": "llama3.2",  # Use a fast model for analysis
-                "prompt": full_prompt,
-                "stream": False,
-                "options": {
-                    "temperature": 0.3,  # Lower temperature for focused analysis
-                    "num_predict": 300   # Limit response length
-                }
-            },
-            timeout=30
+        from ollama import chat
+        
+        # Limit text length to avoid overwhelming the LLM
+        if len(full_text) > 8000:
+            full_text = full_text[:8000] + "..."
+        
+        # Create comprehensive prompt for paper analysis
+        prompt = f"""Analyze this research paper and extract key insights for each section.
+
+For each section that exists in the paper, provide 2-3 concise bullet points:
+
+Introduction: Focus on the main problem/gap, key contribution, and novelty
+Methods: Focus on novel techniques, key innovations, and unique aspects  
+Results: Focus on performance improvements, comparisons, and significant findings
+Discussion: Focus on conclusions, limitations, and future work (be sure to include limitations)
+
+Paper text:
+{full_text}"""
+
+        # Use structured output with Pydantic schema
+        response = chat(
+            messages=[{
+                'role': 'user',
+                'content': prompt,
+            }],
+            model='llama3.2',  # Use available model
+            format=PaperAnalysis.model_json_schema(),
+            options={
+                'temperature': 0.2,  # Lower temperature for consistency
+                'num_predict': 800   # Enough tokens for structured response
+            }
         )
         
-        if response.status_code == 200:
-            result = response.json().get('response', '')
-            # Parse bullet points from LLM response
-            bullet_points = _parse_llm_bullet_points(result)
-            return bullet_points[:3]  # Max 3 points
-        else:
-            print(f"LLM analysis failed with status {response.status_code}")
-            return []
-            
+        # Parse and validate the structured response
+        analysis = PaperAnalysis.model_validate_json(response.message.content)
+        return analysis
+        
     except Exception as e:
-        print(f"Error in LLM analysis: {e}")
-        return []
+        print(f"Error in structured LLM analysis: {e}")
+        return None
 
 
-def _parse_llm_bullet_points(response: str) -> List[str]:
-    """Parse bullet points from LLM response"""
-    points = []
-    
-    # Split by common bullet point markers
-    lines = response.split('\n')
-    
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-            
-        # Remove common bullet markers
-        if line.startswith(('•', '*', '-', '1.', '2.', '3.')):
-            # Remove the marker and clean up
-            clean_line = re.sub(r'^[•*\-\d\.]\s*', '', line).strip()
-            if len(clean_line) > 20 and len(clean_line) < 300:
-                points.append(clean_line)
-        elif len(line) > 30 and len(line) < 300 and len(points) < 3:
-            # If it's a substantial line without explicit bullets
-            points.append(line)
-    
-    # If no bullet points found, try to split by sentences
-    if not points:
-        sentences = re.split(r'[.!?]+', response)
-        for sentence in sentences:
-            sentence = sentence.strip()
-            if len(sentence) > 30 and len(sentence) < 300:
-                points.append(sentence + '.')
-                if len(points) >= 3:
-                    break
-    
-    return points
 
 
 
@@ -395,39 +336,35 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
                 
                 if paper_content:
                     # Introduction/Background
-                    if paper_content['introduction'] and any(paper_content['introduction']):
+                    if paper_content.introduction and paper_content.introduction.bullet_points:
                         formatted_results += "*Introduction:*\n"
-                        for point in paper_content['introduction']:
-                            if point and len(point.strip()) > 20:
-                                clean_point = _clean_markdown_text(point)
-                                formatted_results += f"• {clean_point}\n"
+                        for point in paper_content.introduction.bullet_points:
+                            clean_point = _clean_markdown_text(point)
+                            formatted_results += f"• {clean_point}\n"
                         formatted_results += "\n"
                     
                     # Methods/Approach
-                    if paper_content['methods'] and any(paper_content['methods']):
+                    if paper_content.methods and paper_content.methods.bullet_points:
                         formatted_results += "*Methods:*\n"
-                        for point in paper_content['methods']:
-                            if point and len(point.strip()) > 20:
-                                clean_point = _clean_markdown_text(point)
-                                formatted_results += f"• {clean_point}\n"
+                        for point in paper_content.methods.bullet_points:
+                            clean_point = _clean_markdown_text(point)
+                            formatted_results += f"• {clean_point}\n"
                         formatted_results += "\n"
                     
                     # Results
-                    if paper_content['results'] and any(paper_content['results']):
+                    if paper_content.results and paper_content.results.bullet_points:
                         formatted_results += "*Results:*\n"
-                        for point in paper_content['results']:
-                            if point and len(point.strip()) > 20:
-                                clean_point = _clean_markdown_text(point)
-                                formatted_results += f"• {clean_point}\n"
+                        for point in paper_content.results.bullet_points:
+                            clean_point = _clean_markdown_text(point)
+                            formatted_results += f"• {clean_point}\n"
                         formatted_results += "\n"
                     
                     # Discussion/Limitations
-                    if paper_content['discussion'] and any(paper_content['discussion']):
+                    if paper_content.discussion and paper_content.discussion.bullet_points:
                         formatted_results += "*Discussion:*\n"
-                        for point in paper_content['discussion']:
-                            if point and len(point.strip()) > 20:
-                                clean_point = _clean_markdown_text(point)
-                                formatted_results += f"• {clean_point}\n"
+                        for point in paper_content.discussion.bullet_points:
+                            clean_point = _clean_markdown_text(point)
+                            formatted_results += f"• {clean_point}\n"
                         formatted_results += "\n"
                 else:
                     formatted_results += "*PDF analysis unavailable - using abstract only.*\n\n"
