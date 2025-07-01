@@ -281,6 +281,29 @@ def _extract_key_contributions(text: str, sections: Dict[str, str]):
     sections['key_contributions'] = ' '.join(contributions[:3])
 
 
+def _clean_markdown_text(text: str) -> str:
+    """Clean text to prevent markdown formatting issues"""
+    if not text:
+        return text
+    
+    # Escape markdown characters that could cause formatting issues
+    text = text.replace('#', '\\#')  # Escape headers
+    text = text.replace('*', '\\*')  # Escape emphasis (except our own)
+    text = text.replace('_', '\\_')  # Escape emphasis
+    text = text.replace('`', '\\`')  # Escape code
+    text = text.replace('[', '\\[')  # Escape links
+    text = text.replace(']', '\\]')  # Escape links
+    
+    # Remove extra whitespace and normalize
+    text = ' '.join(text.split())
+    
+    # Limit length to prevent overly long sections
+    if len(text) > 500:
+        text = text[:497] + "..."
+    
+    return text
+
+
 def arxiv_search(query: str, max_results: int = 5) -> str:
     """Search arXiv for academic papers"""
     try:
@@ -342,16 +365,20 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
                 
                 if paper_content:
                     if paper_content['key_contributions']:
-                        formatted_results += f"*Key Contributions:* {paper_content['key_contributions']}\n\n"
+                        clean_contrib = _clean_markdown_text(paper_content['key_contributions'])
+                        formatted_results += f"*Key Contributions:* {clean_contrib}\n\n"
                     
                     if paper_content['methodology']:
-                        formatted_results += f"*Approach:* {paper_content['methodology']}\n\n"
+                        clean_method = _clean_markdown_text(paper_content['methodology'])
+                        formatted_results += f"*Approach:* {clean_method}\n\n"
                     
                     if paper_content['results']:
-                        formatted_results += f"*Results:* {paper_content['results']}\n\n"
+                        clean_results = _clean_markdown_text(paper_content['results'])
+                        formatted_results += f"*Results:* {clean_results}\n\n"
                     
                     if paper_content['conclusion']:
-                        formatted_results += f"*Conclusion:* {paper_content['conclusion']}\n\n"
+                        clean_conclusion = _clean_markdown_text(paper_content['conclusion'])
+                        formatted_results += f"*Conclusion:* {clean_conclusion}\n\n"
                 else:
                     formatted_results += "*PDF analysis unavailable - using abstract only.*\n\n"
             
