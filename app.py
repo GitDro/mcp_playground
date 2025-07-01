@@ -17,6 +17,7 @@ from datetime import datetime
 from tools import get_function_schema, execute_function
 from ui_config import STREAMLIT_STYLE, TOOLS_HELP_TEXT, get_system_prompt
 
+
 # Page config - Minimalist setup
 st.set_page_config(
     page_title="MCP Playground",
