@@ -35,50 +35,38 @@ class OllamaClient:
     async def initialize(self):
         """Initialize the client and fetch available models"""
         try:
-            models_response = self.client.list()
-            # Handle the new Ollama client response format
-            if hasattr(models_response, 'models'):
-                self.available_models = [model.model for model in models_response.models]
-            elif isinstance(models_response, dict) and 'models' in models_response:
-                self.available_models = [model['name'] for model in models_response['models']]
-            else:
-                # Handle case where response format is different
-                self.available_models = [model['name'] for model in models_response] if isinstance(models_response, list) else []
-            
-            # Set default model if available
-            if self.available_models:
-                if 'llama3.1:latest' in self.available_models:
-                    self.current_model = 'llama3.1:latest'
-                elif 'llama3.1' in self.available_models:
-                    self.current_model = 'llama3.1'
-                elif 'llama3.2:latest' in self.available_models:
-                    self.current_model = 'llama3.2:latest'
-                elif any('llama3' in model for model in self.available_models):
-                    self.current_model = next(model for model in self.available_models if 'llama3' in model)
-                else:
-                    self.current_model = self.available_models[0]
+            # Use HTTP client directly for better async support
+            import httpx
+            async with httpx.AsyncClient() as http_client:
+                response = await http_client.get("http://localhost:11434/api/tags")
+                if response.status_code == 200:
+                    data = response.json()
+                    self.available_models = [model['name'] for model in data.get('models', [])]
                     
-            print(f"Initialized Ollama client with models: {self.available_models}")
-            print(f"Default model: {self.current_model}")
+                    # Set default model if available
+                    if self.available_models:
+                        if 'llama3.1:latest' in self.available_models:
+                            self.current_model = 'llama3.1:latest'
+                        elif 'llama3.1' in self.available_models:
+                            self.current_model = 'llama3.1'
+                        elif 'llama3.2:latest' in self.available_models:
+                            self.current_model = 'llama3.2:latest'
+                        elif any('llama3' in model for model in self.available_models):
+                            self.current_model = next(model for model in self.available_models if 'llama3' in model)
+                        else:
+                            self.current_model = self.available_models[0]
+                    
+                    print(f"Initialized Ollama client with models: {self.available_models}")
+                    print(f"Default model: {self.current_model}")
+                else:
+                    raise Exception(f"HTTP {response.status_code}: {response.text}")
                     
         except Exception as e:
-            print(f"Warning: Could not fetch models from Ollama: {e}")
-            # Try to get models directly via HTTP as fallback
-            try:
-                import httpx
-                async with httpx.AsyncClient() as client:
-                    response = await client.get("http://localhost:11434/api/tags")
-                    if response.status_code == 200:
-                        data = response.json()
-                        self.available_models = [model['name'] for model in data.get('models', [])]
-                        if self.available_models:
-                            self.current_model = self.available_models[0]
-                        print(f"Fallback: Got models via HTTP: {self.available_models}")
-            except Exception as e2:
-                print(f"Fallback also failed: {e2}")
-                # Last resort fallback
-                self.available_models = ['llama3.1:latest', 'llama3.2:latest', 'qwen3:4b']
-                self.current_model = 'llama3.1:latest'
+            print(f"Error: Could not fetch models from Ollama: {e}")
+            # Last resort fallback
+            self.available_models = ['llama3.1:latest', 'llama3.2:latest', 'qwen3:4b']
+            self.current_model = 'llama3.1:latest'
+            print(f"Using fallback models: {self.available_models}")
     
     def get_available_models(self) -> List[str]:
         """Get list of available models"""

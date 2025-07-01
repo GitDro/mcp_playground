@@ -7,12 +7,12 @@ class MCPArena {
         this.isConnected = false;
         this.currentModel = null;
         this.isTyping = false;
+        this.modelsLoaded = false;
         
         this.initializeElements();
         this.setupEventListeners();
         this.connect();
         this.loadModels();
-        this.loadConversations();
     }
     
     generateSessionId() {
@@ -24,7 +24,6 @@ class MCPArena {
         this.messageInput = document.getElementById('message-input');
         this.sendButton = document.getElementById('send-button');
         this.modelSelect = document.getElementById('model-select');
-        this.conversationsList = document.getElementById('conversations-list');
     }
     
     setupEventListeners() {
@@ -103,14 +102,24 @@ class MCPArena {
     async loadModels() {
         try {
             console.log('Loading models...');
-            const response = await fetch('/api/models');
-            const data = await response.json();
+            this.modelSelect.innerHTML = '<option value="">Loading models...</option>';
             
+            const response = await fetch('/api/models');
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
             console.log('Models API response:', data);
             
             this.modelSelect.innerHTML = '';
             
-            if (data.models && Array.isArray(data.models)) {
+            if (data.status === 'error') {
+                throw new Error(data.error || 'Failed to load models');
+            }
+            
+            if (data.models && Array.isArray(data.models) && data.models.length > 0) {
                 data.models.forEach(model => {
                     const option = document.createElement('option');
                     option.value = model;
@@ -123,41 +132,38 @@ class MCPArena {
                 });
                 
                 console.log(`Loaded ${data.models.length} models, current: ${data.current}`);
+                
+                // Re-enable send button
+                this.sendButton.disabled = false;
+                this.sendButton.textContent = 'Send';
+                
+                // Only show success message if we haven't shown it before
+                if (!this.modelsLoaded) {
+                    this.addSystemMessage(`Models loaded successfully (${data.models.length} available)`, 'success');
+                    this.modelsLoaded = true;
+                }
             } else {
-                throw new Error('Invalid models data received');
+                throw new Error('No models available from Ollama');
             }
             
         } catch (error) {
             console.error('Failed to load models:', error);
-            this.modelSelect.innerHTML = '<option value="">Failed to load models - Check console</option>';
             
-            // Add fallback models if API fails
-            const fallbackModels = ['llama3.1:latest', 'llama3.2:latest', 'qwen3:4b'];
-            fallbackModels.forEach(model => {
-                const option = document.createElement('option');
-                option.value = model;
-                option.textContent = model + ' (fallback)';
-                this.modelSelect.appendChild(option);
-            });
+            this.modelSelect.innerHTML = '<option value="">⚠️ No models available</option>';
+            
+            // Show specific error message
+            const errorMsg = error.message.includes('Ollama') 
+                ? error.message 
+                : 'Unable to connect to Ollama. Please ensure Ollama is running on localhost:11434 with models installed.';
+            
+            this.addSystemMessage(errorMsg, 'error');
+            
+            // Disable send button when no models
+            this.sendButton.disabled = true;
+            this.sendButton.textContent = 'No Models';
         }
     }
     
-    async loadConversations() {
-        try {
-            console.log('Loading conversations...');
-            const response = await fetch('/api/conversations');
-            const data = await response.json();
-            
-            console.log('Conversations API response:', data);
-            
-            // For now, just show that conversations are loaded
-            this.conversationsList.innerHTML = '<div class="conversations-summary">Conversations loaded</div>';
-            
-        } catch (error) {
-            console.error('Failed to load conversations:', error);
-            this.conversationsList.innerHTML = '<div class="error">Failed to load conversations</div>';
-        }
-    }
     
     async switchModel(modelName) {
         if (!modelName || modelName === this.currentModel) return;
@@ -190,6 +196,12 @@ class MCPArena {
     sendMessage() {
         const message = this.messageInput.value.trim();
         if (!message || !this.isConnected) return;
+        
+        // Check if we have a valid model selected
+        if (!this.currentModel || this.sendButton.disabled) {
+            this.addSystemMessage('Please wait for models to load or check that Ollama is running.', 'warning');
+            return;
+        }
         
         // Clear input
         this.messageInput.value = '';
@@ -397,8 +409,14 @@ Example: /prompt research_prompt topic="machine learning" num_papers=3`);
     
     addSystemMessage(content, type = 'info') {
         const messageDiv = document.createElement('div');
-        messageDiv.className = 'message system';
-        const icon = type === 'error' ? '❌' : 'ℹ️';
+        messageDiv.className = `message system ${type}`;
+        const icons = {
+            'error': '❌',
+            'success': '✅',
+            'info': 'ℹ️',
+            'warning': '⚠️'
+        };
+        const icon = icons[type] || icons['info'];
         messageDiv.innerHTML = `
             <div class="message-avatar">${icon}</div>
             <div class="message-content">${this.escapeHtml(content)}</div>
@@ -406,6 +424,15 @@ Example: /prompt research_prompt topic="machine learning" num_papers=3`);
         
         this.messagesContainer.appendChild(messageDiv);
         this.scrollToBottom();
+        
+        // Auto-remove success messages after 3 seconds
+        if (type === 'success') {
+            setTimeout(() => {
+                if (messageDiv.parentNode) {
+                    messageDiv.parentNode.removeChild(messageDiv);
+                }
+            }, 3000);
+        }
     }
     
     showTypingIndicator() {

@@ -96,47 +96,18 @@ async def get_index():
             </header>
             
             <div class="chat-container">
-                <div class="sidebar">
-                    <div class="sidebar-section">
-                        <h3>Conversations</h3>
-                        <div id="conversations-list">
-                            <div class="loading">Loading...</div>
-                        </div>
-                    </div>
-                    
-                    <div class="sidebar-section">
-                        <h3>Quick Actions</h3>
-                        <div class="quick-actions">
-                            <button onclick="sendCommand('@conversations')">@conversations</button>
-                            <button onclick="sendCommand('@search-history')">@search-history</button>
-                            <button onclick="sendCommand('/prompts')">Show prompts</button>
-                        </div>
-                    </div>
-                </div>
-                
                 <div class="chat-main">
                     <div class="messages-container" id="messages">
                         <div class="welcome-message">
                             <h2>Welcome to MCP Arena</h2>
                             <p>Your intelligent research assistant powered by MCP and Ollama.</p>
-                            <div class="features">
-                                <div class="feature">
-                                    <strong>🔍 Web Search</strong>
-                                    <p>Search the web with DuckDuckGo integration</p>
-                                </div>
-                                <div class="feature">
-                                    <strong>📄 Paper Analysis</strong>
-                                    <p>Summarize and analyze academic papers</p>
-                                </div>
-                                <div class="feature">
-                                    <strong>💬 Smart Chat</strong>
-                                    <p>Engage with local AI models via Ollama</p>
+                            <div class="quick-start">
+                                <p><strong>Quick commands:</strong></p>
+                                <div class="command-examples">
+                                    <span class="command" onclick="sendCommand('@conversations')">@conversations</span>
+                                    <span class="command" onclick="sendCommand('/prompts')">Show prompts</span>
                                 </div>
                             </div>
-                            <p class="help-text">
-                                Try asking me to search for something, or use commands like 
-                                <code>@conversations</code> or <code>/prompt research_prompt topic=AI</code>
-                            </p>
                         </div>
                     </div>
                     
@@ -150,9 +121,7 @@ async def get_index():
                             <button id="send-button">Send</button>
                         </div>
                         <div class="input-help">
-                            <span class="help-item">@ - Access resources</span>
-                            <span class="help-item">/ - Use prompts</span>
-                            <span class="help-item">Ctrl+Enter - Send message</span>
+                            <span class="help-item">Press Enter to send • Shift+Enter for new line</span>
                         </div>
                     </div>
                 </div>
@@ -169,40 +138,47 @@ async def get_index():
 async def get_models():
     """Get available Ollama models"""
     try:
-        client = await get_ollama_client()
-        models = client.get_available_models()
-        current_model = client.get_current_model()
-        
-        print(f"API: Returning models: {models}, current: {current_model}")
-        
-        return {
-            'models': models,
-            'current': current_model,
-            'status': 'success'
-        }
+        # Always try to get fresh model list from Ollama directly
+        import httpx
+        async with httpx.AsyncClient(timeout=5.0) as http_client:
+            response = await http_client.get("http://localhost:11434/api/tags")
+            if response.status_code == 200:
+                data = response.json()
+                models = [model['name'] for model in data.get('models', [])]
+                
+                if not models:
+                    raise Exception("No models found in Ollama")
+                
+                # Choose a good default model
+                current_model = 'llama3.1:latest'
+                if 'llama3.1:latest' in models:
+                    current_model = 'llama3.1:latest'
+                elif 'llama3.2:latest' in models:
+                    current_model = 'llama3.2:latest'
+                elif any('llama3' in model for model in models):
+                    current_model = next(model for model in models if 'llama3' in model)
+                else:
+                    current_model = models[0]
+                
+                print(f"API: Returning {len(models)} models, current: {current_model}")
+                
+                return {
+                    'models': models,
+                    'current': current_model,
+                    'status': 'success'
+                }
+            else:
+                raise Exception(f"Ollama API returned status {response.status_code}")
+                
     except Exception as e:
         print(f"API Error getting models: {e}")
-        # Return fallback response so frontend doesn't break
-        import httpx
-        try:
-            async with httpx.AsyncClient() as http_client:
-                response = await http_client.get("http://localhost:11434/api/tags")
-                if response.status_code == 200:
-                    data = response.json()
-                    models = [model['name'] for model in data.get('models', [])]
-                    return {
-                        'models': models,
-                        'current': models[0] if models else 'llama3.1:latest',
-                        'status': 'fallback'
-                    }
-        except:
-            pass
         
+        # Return error response with helpful message
         return {
-            'models': ['llama3.1:latest', 'llama3.2:latest', 'qwen3:4b'],
-            'current': 'llama3.1:latest',
+            'models': [],
+            'current': '',
             'status': 'error',
-            'error': str(e)
+            'error': f"Could not connect to Ollama: {str(e)}. Please ensure Ollama is running on localhost:11434"
         }
 
 @app.post("/api/model/switch")
