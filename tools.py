@@ -13,12 +13,17 @@ import tempfile
 import os
 import json
 import requests
+import logging
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -180,6 +185,7 @@ def extract_paper_content(pdf_url: str) -> Optional[PaperAnalysis]:
     """Extract structured content from arXiv PDF using LLM analysis"""
     try:
         import fitz  # PyMuPDF
+        logger.info(f"Starting PDF analysis for {pdf_url}")
         
         # Download PDF to temporary file
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
@@ -187,6 +193,7 @@ def extract_paper_content(pdf_url: str) -> Optional[PaperAnalysis]:
             response.raise_for_status()
             tmp_file.write(response.content)
             tmp_path = tmp_file.name
+            logger.info(f"PDF downloaded, size: {len(response.content)} bytes")
         
         try:
             # Extract text from PDF
@@ -195,9 +202,18 @@ def extract_paper_content(pdf_url: str) -> Optional[PaperAnalysis]:
             for page in doc:
                 full_text += page.get_text()
             doc.close()
+            logger.info(f"Extracted {len(full_text)} characters of text")
+            
+            if len(full_text.strip()) < 100:
+                logger.warning(f"Very little text extracted from PDF")
+                return None
             
             # Analyze with structured LLM output
             analysis = _analyze_paper_with_structured_output(full_text)
+            if analysis:
+                logger.info("LLM analysis completed successfully")
+            else:
+                logger.warning("LLM analysis returned None")
             return analysis
             
         finally:
@@ -206,7 +222,7 @@ def extract_paper_content(pdf_url: str) -> Optional[PaperAnalysis]:
                 os.unlink(tmp_path)
                 
     except Exception as e:
-        print(f"Error extracting paper content: {e}")
+        logger.error(f"Error extracting paper content: {e}")
         return None
 
 
@@ -216,8 +232,10 @@ def _analyze_paper_with_structured_output(full_text: str) -> Optional[PaperAnaly
         from ollama import chat
         
         # Limit text length to avoid overwhelming the LLM
+        original_length = len(full_text)
         if len(full_text) > 8000:
             full_text = full_text[:8000] + "..."
+            logger.info(f"Truncated text from {original_length} to {len(full_text)} chars")
         
         # Create comprehensive prompt for paper analysis
         prompt = f"""Analyze this research paper and extract key insights for each section.
@@ -232,6 +250,7 @@ Discussion: Focus on conclusions, limitations, and future work (be sure to inclu
 Paper text:
 {full_text}"""
 
+        logger.info("Calling Ollama for structured analysis")
         # Use structured output with Pydantic schema
         response = chat(
             messages=[{
@@ -246,12 +265,24 @@ Paper text:
             }
         )
         
+        logger.info(f"Got Ollama response, length: {len(response.message.content)}")
+        
         # Parse and validate the structured response
         analysis = PaperAnalysis.model_validate_json(response.message.content)
+        
+        # Check if analysis has content
+        sections_with_content = sum([
+            bool(analysis.introduction and analysis.introduction.bullet_points),
+            bool(analysis.methods and analysis.methods.bullet_points),
+            bool(analysis.results and analysis.results.bullet_points),
+            bool(analysis.discussion and analysis.discussion.bullet_points)
+        ])
+        
+        logger.info(f"Analysis parsed with {sections_with_content} sections containing content")
         return analysis
         
     except Exception as e:
-        print(f"Error in structured LLM analysis: {e}")
+        logger.error(f"Error in structured LLM analysis: {e}")
         return None
 
 
