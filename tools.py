@@ -512,12 +512,12 @@ def get_stock_price(ticker: str) -> str:
         change = float(quote_data.get('09. change', 0))
         change_pct = float(quote_data.get('10. change percent', '0%').replace('%', ''))
         
-        # Format the response with clean, elegant layout
+        # Simple, clean formatting
         trend_symbol = "📈" if change >= 0 else "📉"
-        formatted_result = f"## {symbol} {trend_symbol}\n\n"
-        formatted_result += f"**${current_price:.2f}** {change:+.2f} ({change_pct:+.2f}%)\n\n"
+        formatted_result = f"{symbol} {trend_symbol}\n\n"
+        formatted_result += f"${current_price:.2f} {change:+.2f} ({change_pct:+.2f}%)\n"
         
-        # Add key metrics in a clean layout
+        # Add key metrics on separate lines
         if quote_data.get('03. high'):
             high = float(quote_data.get('03. high', 0))
             low = float(quote_data.get('04. low', 0))
@@ -526,11 +526,11 @@ def get_stock_price(ticker: str) -> str:
         if quote_data.get('06. volume'):
             volume = int(quote_data.get('06. volume', 0))
             if volume > 1e9:
-                formatted_result += f"Volume: {volume/1e9:.1f}B"
+                formatted_result += f"Volume: {volume/1e9:.1f}B\n"
             elif volume > 1e6:
-                formatted_result += f"Volume: {volume/1e6:.1f}M"
+                formatted_result += f"Volume: {volume/1e6:.1f}M\n"
             else:
-                formatted_result += f"Volume: {volume:,}"
+                formatted_result += f"Volume: {volume:,}\n"
         
         return formatted_result
         
@@ -593,16 +593,16 @@ def get_stock_history(ticker: str, period: str = "1mo") -> str:
         low_price = min(float(time_series[d]['3. low']) for d in recent_dates)
         total_return = ((current_price - start_price) / start_price) * 100
         
-        # Clean, elegant historical data formatting
+        # Simple historical data formatting
         trend_symbol = "📈" if total_return >= 0 else "📉"
-        formatted_result = f"## {ticker.upper()} {period.upper()} {trend_symbol}\n\n"
-        formatted_result += f"**{total_return:+.2f}%** period return\n\n"
-        formatted_result += f"Current: **${current_price:.2f}**\n"
+        formatted_result = f"{ticker.upper()} {period.upper()} {trend_symbol}\n\n"
+        formatted_result += f"Period return: {total_return:+.2f}%\n"
+        formatted_result += f"Current: ${current_price:.2f}\n"
         formatted_result += f"High: ${high_price:.2f}\n"
         formatted_result += f"Low: ${low_price:.2f}\n\n"
         
-        # Recent trend in compact format
-        formatted_result += f"**Recent:**\n"
+        # Recent trend with simple formatting
+        formatted_result += f"Recent prices:\n"
         for date in recent_dates[:3]:
             day_data = time_series[date]
             close_price = float(day_data['4. close'])
@@ -658,8 +658,8 @@ def get_crypto_price(symbol: str) -> str:
             _save_cached_data(cache_key, {'crypto': crypto_data})
         
         symbol_icon = "🟢" if change_pct >= 0 else "🔴"
-        formatted_result = f"## {symbol.upper()} {symbol_icon}\n\n"
-        formatted_result += f"**${current_price:,.2f}** {change_pct:+.2f}%"
+        formatted_result = f"{symbol.upper()} {symbol_icon}\n\n"
+        formatted_result += f"${current_price:,.2f} {change_pct:+.2f}%\n"
         
         return formatted_result
         
@@ -678,7 +678,7 @@ def get_market_summary() -> str:
             "Russell 2000": "IWM"
         }
         
-        formatted_result = "## Markets\n\n"
+        formatted_result = "Markets\n\n"
         
         for name, symbol in indices.items():
             try:
@@ -699,12 +699,12 @@ def get_market_summary() -> str:
                     change_pct = float(quote_data.get('10. change percent', '0%').replace('%', ''))
                     
                     trend = "📈" if change_pct >= 0 else "📉"
-                    formatted_result += f"**{name}** ${current_price:.2f} {change_pct:+.2f}% {trend}\n"
+                    formatted_result += f"{name}: ${current_price:.2f} {change_pct:+.2f}% {trend}\n"
                 else:
-                    formatted_result += f"**{name}** unavailable\n"
+                    formatted_result += f"{name}: unavailable\n"
                     
             except Exception as e:
-                formatted_result += f"**{name}** error\n"
+                formatted_result += f"{name}: error\n"
         
         return formatted_result
         
