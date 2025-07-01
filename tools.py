@@ -270,7 +270,7 @@ def _clean_markdown_text(text: str) -> str:
     return text
 
 
-def arxiv_search(query: str, max_results: int = 5) -> str:
+def arxiv_search(query: str, max_results: int = 3) -> str:
     """Search arXiv for academic papers"""
     try:
         import arxiv
@@ -313,7 +313,9 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
             if len(abstract) > 250:
                 abstract = abstract[:247] + "..."
             
-            # Ensure each paper starts fresh with proper formatting
+            # Ensure each paper starts fresh with proper formatting and clean markdown reset
+            if i > 1:
+                formatted_results += "\n\n"  # Extra spacing between papers
             formatted_results += f"**{i}. {result.title}**\n"
             formatted_results += f"**Authors**: {', '.join([author.name for author in result.authors[:3]])}"
             if len(result.authors) > 3:
@@ -325,15 +327,15 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
             formatted_results += f"**Abstract**: {abstract}\n"
             formatted_results += f"**PDF**: {result.pdf_url}\n"
             
-            # Deep analysis for top 2 papers
-            if i <= 2:
-                formatted_results += "\n#### 📄 Deep Analysis:\n"
+            # Deep analysis for top 1 paper only
+            if i <= 1:
+                formatted_results += "\n**📄 Deep Analysis:**\n"
                 paper_content = extract_paper_content(result.pdf_url)
                 
                 if paper_content:
                     # Introduction/Background
                     if paper_content.introduction and paper_content.introduction.bullet_points:
-                        formatted_results += "*Introduction:*\n"
+                        formatted_results += "\n**Introduction:**\n\n"
                         for point in paper_content.introduction.bullet_points:
                             clean_point = _clean_markdown_text(point)
                             formatted_results += f"• {clean_point}\n\n"
@@ -341,7 +343,7 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
                     
                     # Methods/Approach
                     if paper_content.methods and paper_content.methods.bullet_points:
-                        formatted_results += "*Methods:*\n"
+                        formatted_results += "\n**Methods:**\n\n"
                         for point in paper_content.methods.bullet_points:
                             clean_point = _clean_markdown_text(point)
                             formatted_results += f"• {clean_point}\n\n"
@@ -349,7 +351,7 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
                     
                     # Results
                     if paper_content.results and paper_content.results.bullet_points:
-                        formatted_results += "*Results:*\n"
+                        formatted_results += "\n**Results:**\n\n"
                         for point in paper_content.results.bullet_points:
                             clean_point = _clean_markdown_text(point)
                             formatted_results += f"• {clean_point}\n\n"
@@ -357,7 +359,7 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
                     
                     # Discussion/Limitations
                     if paper_content.discussion and paper_content.discussion.bullet_points:
-                        formatted_results += "*Discussion:*\n"
+                        formatted_results += "\n**Discussion:**\n\n"
                         for point in paper_content.discussion.bullet_points:
                             clean_point = _clean_markdown_text(point)
                             formatted_results += f"• {clean_point}\n\n"
@@ -365,8 +367,8 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
                 else:
                     formatted_results += "*PDF analysis unavailable - using abstract only.*\n\n"
             
-            # Add separator with proper spacing
-            formatted_results += "---\n\n"
+            # Add separator with proper spacing to prevent markdown bleeding
+            formatted_results += "\n---\n\n"
         
         return formatted_results
         
@@ -434,7 +436,7 @@ def get_function_schema() -> List[Dict]:
                         },
                         "max_results": {
                             "type": "integer",
-                            "description": "Maximum number of papers to return (default: 5)"
+                            "description": "Maximum number of papers to return (default: 3)"
                         }
                     },
                     "required": ["query"]
@@ -459,7 +461,7 @@ def execute_function(function_name: str, arguments: dict) -> str:
             return analyze_url(url)
         elif function_name == "arxiv_search":
             query = str(arguments.get("query", ""))
-            max_results = arguments.get("max_results", 5)
+            max_results = arguments.get("max_results", 3)
             # Convert max_results to int if it's a string
             if isinstance(max_results, str):
                 max_results = int(max_results)
