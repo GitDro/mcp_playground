@@ -227,20 +227,65 @@ with col2:
     # Clean header
     st.markdown("# **MCP Playground**")
     
-    # Status section with hierarchy
+    # Status section with expandable hierarchy
     models = get_ollama_models()
     if models:
-        # Create status tree
         tool_count = len(get_function_schema()) if st.session_state.get('use_functions', True) else 0
-        status_text = f"""
-        <div style='color: #666; font-size: 14px; margin-bottom: 1rem; font-family: monospace;'>
-        ├── {len(models)} models available<br>
-        └── {tool_count} tools available
-        </div>
-        """
-        st.markdown(status_text, unsafe_allow_html=True)
+        
+        # Create expandable status hierarchy
+        with st.expander(f"├── {len(models)} models available\n└── {tool_count} tools available", expanded=False):
+            # Models section
+            st.markdown("**Models:**")
+            for i, model in enumerate(models):
+                # Clean up model names for display
+                display_name = model.replace(':latest', '').replace('_', ' ')
+                if len(display_name) > 40:
+                    display_name = display_name[:37] + "..."
+                
+                # Add tree-like formatting
+                if i == len(models) - 1:
+                    st.markdown(f"<div style='font-family: monospace; font-size: 12px; color: #666;'>└── {display_name}</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"<div style='font-family: monospace; font-size: 12px; color: #666;'>├── {display_name}</div>", unsafe_allow_html=True)
+            
+            st.markdown("")  # Add spacing
+            
+            # Tools section
+            if st.session_state.get('use_functions', True):
+                st.markdown("**Tools:**")
+                function_schemas = get_function_schema()
+                for i, func in enumerate(function_schemas):
+                    func_name = func['function']['name']
+                    
+                    # Extract key purpose from description
+                    if 'web_search' in func_name:
+                        purpose = "Search the web for current information"
+                    elif 'analyze_url' in func_name:
+                        purpose = "Analyze content from URLs"
+                    elif 'arxiv_search' in func_name:
+                        purpose = "Find academic papers and research"
+                    elif 'stock_price' in func_name:
+                        purpose = "Get current stock prices"
+                    elif 'stock_history' in func_name:
+                        purpose = "Get historical stock data"
+                    elif 'crypto_price' in func_name:
+                        purpose = "Get cryptocurrency prices"
+                    elif 'market_summary' in func_name:
+                        purpose = "Get market overview"
+                    else:
+                        purpose = func['function']['description'].split('.')[0]  # First sentence
+                    
+                    # Add tree-like formatting
+                    if i == len(function_schemas) - 1:
+                        st.markdown(f"<div style='font-family: monospace; font-size: 12px; color: #666;'>└── {func_name}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='font-family: monospace; font-size: 11px; color: #888; margin-left: 20px;'>{purpose}</div>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"<div style='font-family: monospace; font-size: 12px; color: #666;'>├── {func_name}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='font-family: monospace; font-size: 11px; color: #888; margin-left: 20px;'>{purpose}</div>", unsafe_allow_html=True)
+            else:
+                st.markdown("**Tools:** *Disabled*")
     else:
-        st.markdown("<div style='color: #ff6b6b; font-size: 14px; margin-bottom: 1rem;'>⭕ Ollama disconnected</div>", unsafe_allow_html=True)
+        st.markdown("<div style='color: #ff6b6b; font-size: 14px; margin-bottom: 1rem;'>Ollama disconnected</div>", unsafe_allow_html=True)
     
     # Model selection - inline and minimal
     if models:
