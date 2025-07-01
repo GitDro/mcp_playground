@@ -326,7 +326,7 @@ wheels = [
 ]
 
 [[package]]
-name = "mcp-arena"
+name = "mcp-playground"
 version = "1.0.0"
 source = { virtual = "." }
 dependencies = [

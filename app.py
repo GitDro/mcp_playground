@@ -15,11 +15,12 @@ from typing import List, Dict
 from duckduckgo_search import DDGS
 import httpx
 
-# Page config
+# Page config - Minimalist setup
 st.set_page_config(
-    page_title="MCP Arena",
-    page_icon="🤖",
-    layout="wide"
+    page_title="MCP Playground",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
 # ============================================================================
@@ -50,6 +51,17 @@ def get_ollama_models() -> List[str]:
 def web_search(query: str, max_results: int = 5) -> str:
     """Search the web using DuckDuckGo"""
     try:
+        # Ensure max_results is an integer (in case it comes as string from JSON)
+        if isinstance(max_results, str):
+            max_results = int(max_results)
+        max_results = max(1, min(max_results or 5, 10))  # Clamp between 1 and 10
+        
+        # Validate query
+        if not query or not query.strip():
+            return "Error: Search query cannot be empty"
+        
+        query = query.strip()
+        
         with DDGS() as ddgs:
             results = list(ddgs.text(query, max_results=max_results))
         
@@ -57,9 +69,9 @@ def web_search(query: str, max_results: int = 5) -> str:
             return f"No search results found for: {query}"
         
         # Format results as markdown
-        formatted_results = f"# 🔍 Search Results for: {query}\n\n"
+        formatted_results = f"#### Search Results for: {query}\n\n"
         for i, result in enumerate(results, 1):
-            formatted_results += f"## {i}. {result.get('title', 'No Title')}\n"
+            formatted_results += f"**{i}. {result.get('title', 'No Title')}**\n"
             formatted_results += f"**URL**: {result.get('href', 'No URL')}\n"
             formatted_results += f"**Summary**: {result.get('body', 'No description available')}\n\n"
             formatted_results += "---\n\n"
@@ -83,7 +95,7 @@ def analyze_url(url: str) -> str:
             content_type = response.headers.get('content-type', '')
             content_length = len(response.content)
             
-            summary = f"# 📄 URL Analysis\n\n"
+            summary = f"# URL Analysis\n\n"
             summary += f"**URL**: {url}\n"
             summary += f"**Content Type**: {content_type}\n"
             summary += f"**Content Length**: {content_length:,} bytes\n\n"
@@ -116,13 +128,13 @@ def get_function_schema():
             "type": "function",
             "function": {
                 "name": "web_search",
-                "description": "Search the web using DuckDuckGo for current information",
+                "description": "RESTRICTED: Only use when user EXPLICITLY asks for current/recent/latest information with keywords like 'search', 'find', 'latest', 'current', 'recent', 'today', 'now'. Never use for general questions or explanations.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "query": {
                             "type": "string",
-                            "description": "The search query"
+                            "description": "Search query for time-sensitive information explicitly requested by user"
                         },
                         "max_results": {
                             "type": "integer",
@@ -137,13 +149,13 @@ def get_function_schema():
             "type": "function",
             "function": {
                 "name": "analyze_url",
-                "description": "Analyze and summarize content from a URL",
+                "description": "RESTRICTED: Only use when user explicitly provides a URL/link and asks to analyze it. Never use unless user specifically mentions a URL to analyze.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "url": {
                             "type": "string",
-                            "description": "The URL to analyze"
+                            "description": "The specific URL provided by user to analyze"
                         }
                     },
                     "required": ["url"]
@@ -153,16 +165,22 @@ def get_function_schema():
     ]
 
 def execute_function(function_name: str, arguments: dict) -> str:
-    """Execute a function call"""
-    if function_name == "web_search":
-        query = arguments.get("query", "")
-        max_results = arguments.get("max_results", 5)
-        return web_search(query, max_results)
-    elif function_name == "analyze_url":
-        url = arguments.get("url", "")
-        return analyze_url(url)
-    else:
-        return f"Unknown function: {function_name}"
+    """Execute a function call with proper type conversion"""
+    try:
+        if function_name == "web_search":
+            query = str(arguments.get("query", ""))
+            max_results = arguments.get("max_results", 5)
+            # Convert max_results to int if it's a string
+            if isinstance(max_results, str):
+                max_results = int(max_results)
+            return web_search(query, max_results)
+        elif function_name == "analyze_url":
+            url = str(arguments.get("url", ""))
+            return analyze_url(url)
+        else:
+            return f"Unknown function: {function_name}"
+    except Exception as e:
+        return f"Error executing {function_name}: {str(e)}"
 
 # ============================================================================
 # MAIN CHAT FUNCTION
@@ -182,8 +200,47 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
         AI response string, potentially including function call results
     """
     try:
-        # Format conversation for Ollama
+        # Format conversation for Ollama with system guidance
         messages = []
+        
+        # Add system message for function calling guidance
+        if use_functions:
+            from datetime import datetime
+            current_date = datetime.now().strftime("%Y-%m-%d")
+            
+            system_message = {
+                "role": "system",
+                "content": f"""You are a helpful AI assistant. Today's date is {current_date}. You have access to tools but should use them ONLY when absolutely necessary.
+
+STRICT RULES FOR TOOL USAGE:
+1. NEVER use tools for:
+   - Greetings, casual conversation, or small talk
+   - General knowledge questions you can answer from training
+   - Explaining concepts, definitions, or how-to questions
+   - Math, coding problems, or theoretical discussions
+
+2. ONLY use web_search when user EXPLICITLY requests:
+   - Current/recent/latest news or events
+   - Real-time information with keywords like "today", "now", "current"
+   - Specific searches with phrases like "search for", "find", "look up"
+
+3. ONLY use analyze_url when user provides a specific URL/link
+
+ALWAYS try to answer from your knowledge first. Only use tools as a last resort when current information is specifically requested.
+
+Examples - DO NOT use tools:
+- "Hello" → Just greet back
+- "What is Python?" → Explain from knowledge  
+- "How do I use Git?" → Provide instructions from training
+- "Explain AI" → Use your knowledge
+
+Examples - USE tools:
+- "Search for Python 3.13 news" → Use web_search
+- "What's the latest on OpenAI?" → Use web_search  
+- "Analyze https://example.com" → Use analyze_url"""
+            }
+            messages.append(system_message)
+        
         for msg in conversation_history:
             messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": message})
@@ -200,20 +257,56 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
             request_data["tools"] = get_function_schema()
         
         # First request with or without tools
-        response = requests.post(
-            "http://localhost:11434/api/chat",
-            json=request_data,
-            timeout=60
-        )
-        
-        if response.status_code != 200:
-            return f"Error: {response.status_code}"
+        try:
+            response = requests.post(
+                "http://localhost:11434/api/chat",
+                json=request_data,
+                timeout=60
+            )
+            
+            if response.status_code != 200:
+                error_detail = ""
+                try:
+                    error_data = response.json()
+                    error_detail = error_data.get("error", "Unknown error")
+                except:
+                    error_detail = response.text or "No error details available"
+                
+                # If function calling fails, try without tools
+                if response.status_code == 400 and use_functions:
+                    print(f"DEBUG: Function calling failed for model {model}, retrying without tools")
+                    request_data_fallback = {
+                        "model": model,
+                        "messages": messages,
+                        "stream": False
+                    }
+                    fallback_response = requests.post(
+                        "http://localhost:11434/api/chat",
+                        json=request_data_fallback,
+                        timeout=60
+                    )
+                    if fallback_response.status_code == 200:
+                        data = fallback_response.json()
+                        return data.get("message", {}).get("content", "No response")
+                
+                return f"Error {response.status_code}: {error_detail}"
+        except requests.exceptions.Timeout:
+            return "Error: Request timed out. Ollama may be overloaded."
+        except requests.exceptions.ConnectionError:
+            return "Error: Could not connect to Ollama. Is it running on localhost:11434?"
         
         data = response.json()
         assistant_message = data.get("message", {})
         
         # Check if there are tool calls (only if functions are enabled)
         tool_calls = assistant_message.get("tool_calls", [])
+        
+        # Debug: Log when functions are called vs not called
+        if use_functions:
+            if tool_calls:
+                print(f"DEBUG: AI chose to use {len(tool_calls)} function(s)")
+            else:
+                print("DEBUG: AI chose NOT to use any functions")
         
         if tool_calls and use_functions:
             # Execute function calls
@@ -224,9 +317,12 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
                 function_name = function_info.get("name", "")
                 arguments = function_info.get("arguments", {})
                 
+                # Debug: Show function call info
+                debug_info = f"**{function_name}** `{arguments.get('query', arguments.get('url', ''))}`\n\n"
+                
                 # Execute the function
                 result = execute_function(function_name, arguments)
-                function_results.append(result)
+                function_results.append(debug_info + result)
                 
                 # Add tool call and result to conversation
                 messages.append({
@@ -240,29 +336,51 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
                 })
             
             # Get final response with tool results
-            final_response = requests.post(
-                "http://localhost:11434/api/chat",
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "stream": False
-                },
-                timeout=60
-            )
-            
-            if final_response.status_code == 200:
-                final_data = final_response.json()
-                final_content = final_data.get("message", {}).get("content", "")
+            try:
+                final_response = requests.post(
+                    "http://localhost:11434/api/chat",
+                    json={
+                        "model": model,
+                        "messages": messages,
+                        "stream": False
+                    },
+                    timeout=60
+                )
                 
-                # Combine function results with final response
-                combined_response = ""
-                for result in function_results:
-                    combined_response += result + "\n\n"
-                combined_response += final_content
-                
-                return combined_response
-            else:
-                return f"Error in final response: {final_response.status_code}"
+                if final_response.status_code == 200:
+                    final_data = final_response.json()
+                    final_content = final_data.get("message", {}).get("content", "")
+                    
+                    # Format response with sources
+                    if final_content.strip():
+                        combined_response = final_content + "\n\n---\n\n**Sources:**\n"
+                    else:
+                        combined_response = "**Sources:**\n"
+                    
+                    # Add compact function results  
+                    for result in function_results:
+                        # Split result into header and content
+                        lines = result.split('\n', 2)
+                        if len(lines) >= 1:
+                            header = lines[0]  # Function name and query
+                            combined_response += f"- {header}\n"
+                            
+                            # Add full content if available
+                            if len(lines) > 2:
+                                full_content = '\n'.join(lines[2:])
+                                combined_response += f"\n{full_content}\n"
+                    
+                    return combined_response
+                else:
+                    error_detail = ""
+                    try:
+                        error_data = final_response.json()
+                        error_detail = error_data.get("error", "Unknown error")
+                    except:
+                        error_detail = final_response.text or "No error details available"
+                    return f"Error in final response {final_response.status_code}: {error_detail}"
+            except requests.exceptions.RequestException as e:
+                return f"Error in final response: {str(e)}"
         else:
             # No tool calls, return regular response
             return assistant_message.get("content", "No response")
@@ -271,8 +389,56 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
         return f"Error connecting to Ollama: {str(e)}"
 
 # ============================================================================
-# STREAMLIT APP
+# STREAMLIT APP - MINIMALIST UI
 # ============================================================================
+
+# Hide Streamlit default elements for cleaner look
+hide_streamlit_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    .stDeployButton {display:none;}
+    header {visibility: hidden;}
+    
+    /* Style the chat input - centered and prominent */
+    .stChatInput > div {
+        position: fixed;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 60%;
+        max-width: 800px;
+        background: white;
+        z-index: 999;
+        padding: 1.5rem;
+        border: 2px solid #4F8A8B;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+    }
+    
+    /* Style the input field itself */
+    .stChatInput input {
+        border: none !important;
+        font-size: 16px !important;
+        padding: 12px 16px !important;
+    }
+    
+    /* Fix send button alignment */
+    .stChatInput button {
+        margin-left: 8px !important;
+        align-self: center !important;
+    }
+    
+    /* Add padding to content to account for fixed input */
+    .main .block-container {
+        padding-bottom: 140px;
+    }
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # Initialize session state
 if "messages" not in st.session_state:
@@ -284,91 +450,150 @@ if "selected_model" not in st.session_state:
 if "use_functions" not in st.session_state:
     st.session_state.use_functions = True
 
-# Header
-st.title("🤖 MCP Arena")
-st.markdown("**Chat with AI that can search the web and analyze URLs**")
+# Centered layout with breathing room
+col1, col2, col3 = st.columns([1, 3, 1])
 
-# Add function calling info
-with st.expander("🛠️ Available Functions"):
-    st.markdown("""
-    Your AI assistant can automatically use these tools when needed:
+with col2:
+    # Clean header
+    st.markdown("# **MCP Playground**")
     
-    - **🔍 Web Search**: Search the web using DuckDuckGo for current information
-    - **📄 URL Analysis**: Analyze and summarize content from any URL
-    
-    Just ask naturally! For example:
-    - "Search for the latest news about AI"
-    - "What's the content of https://example.com"
-    """)
-
-# Sidebar for model selection
-with st.sidebar:
-    st.header("Model Selection")
-    
+    # Status section with hierarchy
     models = get_ollama_models()
-    
     if models:
-        selected_model = st.selectbox(
-            "Choose a model:",
-            models,
-            index=0 if not st.session_state.selected_model else models.index(st.session_state.selected_model) if st.session_state.selected_model in models else 0
-        )
-        st.session_state.selected_model = selected_model
-        st.success(f"Using: {selected_model}")
+        # Create status tree
+        tool_count = len(get_function_schema()) if st.session_state.get('use_functions', True) else 0
+        status_text = f"""
+        <div style='color: #666; font-size: 14px; margin-bottom: 1rem; font-family: monospace;'>
+        ├── {len(models)} models available<br>
+        └── {tool_count} tools available
+        </div>
+        """
+        st.markdown(status_text, unsafe_allow_html=True)
     else:
-        st.error("⚠️ No Ollama models found!")
-        st.info("Make sure Ollama is running:\n```\nollama serve\nollama pull llama3.1\n```")
+        st.markdown("<div style='color: #ff6b6b; font-size: 14px; margin-bottom: 1rem;'>⭕ Ollama disconnected</div>", unsafe_allow_html=True)
+    
+    # Model selection - inline and minimal
+    if models:
+        # Simple inline controls
+        col_model, col_func = st.columns([3, 1])
+        
+        with col_model:
+            # Default to llama3.2 if available, otherwise first model
+            default_index = 0
+            if not st.session_state.selected_model:
+                # Look for llama3.2 variants
+                for i, model in enumerate(models):
+                    if 'llama3.2' in model.lower():
+                        default_index = i
+                        break
+            else:
+                # Use current selection if still available
+                if st.session_state.selected_model in models:
+                    default_index = models.index(st.session_state.selected_model)
+            
+            # Create shorter display names for models
+            model_display = []
+            for model in models:
+                # Truncate long model names for display
+                display_name = model
+                if len(model) > 25:
+                    display_name = model[:22] + "..."
+                model_display.append(display_name)
+            
+            selected_index = st.selectbox(
+                "Model:",
+                range(len(models)),
+                format_func=lambda x: model_display[x],
+                index=default_index,
+                label_visibility="collapsed"
+            )
+            st.session_state.selected_model = models[selected_index]
+        
+        with col_func:
+            st.session_state.use_functions = st.checkbox(
+                "Tools", 
+                value=st.session_state.use_functions,
+                help="Enable web search and URL analysis"
+            )
+        
+    else:
+        st.error("**⚠️ No Ollama models found**")
+        st.info("Start Ollama: `ollama serve` then `ollama pull llama3.1`")
         st.session_state.selected_model = None
     
-    if st.button("Clear Chat"):
-        st.session_state.messages = []
-        st.rerun()
+    st.divider()
     
-    st.markdown("---")
-    st.header("Function Calling")
-    st.session_state.use_functions = st.checkbox(
-        "Enable function calling", 
-        value=st.session_state.use_functions,
-        help="Allow AI to use web search and URL analysis tools"
-    )
-
-# Main chat area
-if st.session_state.selected_model:
-    # Display chat messages
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    # Main chat area - content first
+    if st.session_state.selected_model:
+        # Clear button - positioned above chat
+        if st.session_state.messages:
+            if st.button("Clear conversation", type="secondary", help="Clear all messages"):
+                st.session_state.messages = []
+                st.rerun()
+        
+        # Display chat messages
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                content = message["content"]
+                
+                # Check if this is a response with function call results
+                if "---\n\n**Sources:**" in content:
+                    # Split the content into main response and sources
+                    parts = content.split("---\n\n**Sources:**")
+                    main_content = parts[0].strip()
+                    sources_content = parts[1].strip() if len(parts) > 1 else ""
+                    
+                    # Display main content prominently
+                    st.markdown(main_content)
+                    
+                    # Display sources in smaller, collapsible section
+                    if sources_content:
+                        with st.expander("View Sources", expanded=False):
+                            st.markdown(f"<small>{sources_content}</small>", unsafe_allow_html=True)
+                else:
+                    # Regular message display
+                    st.markdown(content)
     
-    # Chat input
-    if prompt := st.chat_input("Ask me anything..."):
-        # Add user message to chat
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        
-        # Get AI response
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                response = chat_with_ollama(
-                    st.session_state.selected_model, 
-                    prompt, 
-                    st.session_state.messages[:-1],  # Exclude the just-added user message
-                    st.session_state.use_functions
-                )
-            st.markdown(response)
-        
-        # Add assistant response to chat
-        st.session_state.messages.append({"role": "assistant", "content": response})
-
-else:
-    st.info("👈 Please select a model from the sidebar to start chatting")
-
-# Footer
-with st.sidebar:
-    st.markdown("---")
-    st.markdown("**Status:**")
-    if models:
-        st.markdown("🟢 Ollama Connected")
-        st.markdown(f"📊 {len(models)} models available")
+    # Chat input - fixed at bottom for all states
+    if st.session_state.selected_model:
+        if prompt := st.chat_input("Ask me anything..."):
+            # Add user message to chat
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
+            
+            # Get AI response
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    response = chat_with_ollama(
+                        st.session_state.selected_model, 
+                        prompt, 
+                        st.session_state.messages[:-1],  # Exclude the just-added user message
+                        st.session_state.use_functions
+                    )
+                st.markdown(response)
+            
+            # Add assistant response to chat
+            st.session_state.messages.append({"role": "assistant", "content": response})
+    
     else:
-        st.markdown("🔴 Ollama Disconnected")
+        # Clean empty state
+        st.markdown("### Welcome")
+        st.markdown("Select a model above to start chatting")
+        
+        # Subtle help section
+        with st.expander("What can I do?"):
+            st.markdown("""
+            With **Tools** enabled, I can:
+            - **Search** the web for current information
+            - **Analyze** content from any URL
+            
+            **Example prompts:**
+            - *"Search for Python 3.13 features"*
+            - *"What's new on the OpenAI blog?"*
+            - *"Analyze https://example.com"*
+            """)
+    
+    # Add some spacing at bottom
+    st.empty()
+    st.empty()

@@ -48,8 +48,8 @@ venv.bak/
 ehthumbs.db
 Thumbs.db
 
-# Streamlit
-.streamlit/
+# Streamlit (keep config.toml but ignore secrets)
+.streamlit/secrets.toml
 
 # Data files (optional - comment out if you want to track data)
 data/conversations.db

@@ -1,7 +1,7 @@
 [project]
-name = "mcp-arena"
+name = "mcp-playground"
 version = "1.0.0"
-description = "Simple Streamlit chat app with Ollama and function calling"
+description = "Minimal Streamlit chat playground with Ollama and function calling"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
