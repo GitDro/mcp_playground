@@ -1,6 +1,6 @@
-# MCP Arena
+# MCP Playground
 
-A simple, working Streamlit chat application with Ollama integration and function calling capabilities.
+A **minimal, elegant** Streamlit chat playground with Ollama integration and function calling capabilities.
 
 ## Features
 
@@ -8,7 +8,7 @@ A simple, working Streamlit chat application with Ollama integration and functio
 - 🔍 **Web Search**: Built-in DuckDuckGo search functionality  
 - 📄 **URL Analysis**: Analyze and summarize content from any URL
 - ⚙️ **Function Toggle**: Enable/disable AI tool usage
-- 🧹 **Clean Interface**: Simple Streamlit UI that just works
+- ✨ **Minimalist UI**: Clean, centered design focused on content-first interaction
 
 ## Quick Start
 

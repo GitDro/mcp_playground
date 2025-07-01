@@ -15,11 +15,12 @@ from typing import List, Dict
 from duckduckgo_search import DDGS
 import httpx
 
-# Page config
+# Page config - Minimalist setup
 st.set_page_config(
-    page_title="MCP Arena",
-    page_icon="🤖",
-    layout="wide"
+    page_title="MCP Playground",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
 # ============================================================================
@@ -50,6 +51,17 @@ def get_ollama_models() -> List[str]:
 def web_search(query: str, max_results: int = 5) -> str:
     """Search the web using DuckDuckGo"""
     try:
+        # Ensure max_results is an integer (in case it comes as string from JSON)
+        if isinstance(max_results, str):
+            max_results = int(max_results)
+        max_results = max(1, min(max_results or 5, 10))  # Clamp between 1 and 10
+        
+        # Validate query
+        if not query or not query.strip():
+            return "Error: Search query cannot be empty"
+        
+        query = query.strip()
+        
         with DDGS() as ddgs:
             results = list(ddgs.text(query, max_results=max_results))
         
@@ -57,7 +69,7 @@ def web_search(query: str, max_results: int = 5) -> str:
             return f"No search results found for: {query}"
         
         # Format results as markdown
-        formatted_results = f"# 🔍 Search Results for: {query}\n\n"
+        formatted_results = f"# Search Results for: {query}\n\n"
         for i, result in enumerate(results, 1):
             formatted_results += f"## {i}. {result.get('title', 'No Title')}\n"
             formatted_results += f"**URL**: {result.get('href', 'No URL')}\n"
@@ -83,7 +95,7 @@ def analyze_url(url: str) -> str:
             content_type = response.headers.get('content-type', '')
             content_length = len(response.content)
             
-            summary = f"# 📄 URL Analysis\n\n"
+            summary = f"# URL Analysis\n\n"
             summary += f"**URL**: {url}\n"
             summary += f"**Content Type**: {content_type}\n"
             summary += f"**Content Length**: {content_length:,} bytes\n\n"
@@ -153,16 +165,22 @@ def get_function_schema():
     ]
 
 def execute_function(function_name: str, arguments: dict) -> str:
-    """Execute a function call"""
-    if function_name == "web_search":
-        query = arguments.get("query", "")
-        max_results = arguments.get("max_results", 5)
-        return web_search(query, max_results)
-    elif function_name == "analyze_url":
-        url = arguments.get("url", "")
-        return analyze_url(url)
-    else:
-        return f"Unknown function: {function_name}"
+    """Execute a function call with proper type conversion"""
+    try:
+        if function_name == "web_search":
+            query = str(arguments.get("query", ""))
+            max_results = arguments.get("max_results", 5)
+            # Convert max_results to int if it's a string
+            if isinstance(max_results, str):
+                max_results = int(max_results)
+            return web_search(query, max_results)
+        elif function_name == "analyze_url":
+            url = str(arguments.get("url", ""))
+            return analyze_url(url)
+        else:
+            return f"Unknown function: {function_name}"
+    except Exception as e:
+        return f"Error executing {function_name}: {str(e)}"
 
 # ============================================================================
 # MAIN CHAT FUNCTION
@@ -224,9 +242,12 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
                 function_name = function_info.get("name", "")
                 arguments = function_info.get("arguments", {})
                 
+                # Debug: Show function call info
+                debug_info = f"**{function_name}** `{arguments.get('query', arguments.get('url', ''))}`\n\n"
+                
                 # Execute the function
                 result = execute_function(function_name, arguments)
-                function_results.append(result)
+                function_results.append(debug_info + result)
                 
                 # Add tool call and result to conversation
                 messages.append({
@@ -254,11 +275,31 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
                 final_data = final_response.json()
                 final_content = final_data.get("message", {}).get("content", "")
                 
-                # Combine function results with final response
-                combined_response = ""
-                for result in function_results:
-                    combined_response += result + "\n\n"
-                combined_response += final_content
+                # Return structured response with metadata
+                response_data = {
+                    "content": final_content,
+                    "function_results": function_results,
+                    "has_functions": True
+                }
+                
+                # For now, return simple format - will enhance display later
+                if final_content.strip():
+                    combined_response = final_content + "\n\n---\n\n**Sources:**\n"
+                else:
+                    combined_response = "**Sources:**\n"
+                
+                # Add compact function results  
+                for i, result in enumerate(function_results):
+                    # Split result into header and content
+                    lines = result.split('\n', 2)
+                    if len(lines) >= 1:
+                        header = lines[0]  # Function name and query
+                        combined_response += f"- {header}\n"
+                        
+                        # Store full results for the expander (remove this line later if not needed)
+                        if len(lines) > 2:
+                            full_content = '\n'.join(lines[2:])
+                            combined_response += f"\n{full_content}\n"
                 
                 return combined_response
             else:
@@ -271,8 +312,36 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
         return f"Error connecting to Ollama: {str(e)}"
 
 # ============================================================================
-# STREAMLIT APP
+# STREAMLIT APP - MINIMALIST UI
 # ============================================================================
+
+# Hide Streamlit default elements for cleaner look
+hide_streamlit_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    .stDeployButton {display:none;}
+    header {visibility: hidden;}
+    
+    /* Ensure chat input stays at bottom */
+    .stChatInput > div {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        z-index: 999;
+        padding: 1rem;
+        border-top: 1px solid #e0e0e0;
+    }
+    
+    /* Add padding to content to account for fixed input */
+    .main .block-container {
+        padding-bottom: 120px;
+    }
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # Initialize session state
 if "messages" not in st.session_state:
@@ -284,91 +353,131 @@ if "selected_model" not in st.session_state:
 if "use_functions" not in st.session_state:
     st.session_state.use_functions = True
 
-# Header
-st.title("🤖 MCP Arena")
-st.markdown("**Chat with AI that can search the web and analyze URLs**")
+# Centered layout with breathing room
+col1, col2, col3 = st.columns([1, 3, 1])
 
-# Add function calling info
-with st.expander("🛠️ Available Functions"):
-    st.markdown("""
-    Your AI assistant can automatically use these tools when needed:
+with col2:
+    # Minimal header
+    st.markdown("# **MCP Playground**")
     
-    - **🔍 Web Search**: Search the web using DuckDuckGo for current information
-    - **📄 URL Analysis**: Analyze and summarize content from any URL
-    
-    Just ask naturally! For example:
-    - "Search for the latest news about AI"
-    - "What's the content of https://example.com"
-    """)
-
-# Sidebar for model selection
-with st.sidebar:
-    st.header("Model Selection")
-    
+    # Model selection - inline and minimal
     models = get_ollama_models()
     
     if models:
-        selected_model = st.selectbox(
-            "Choose a model:",
-            models,
-            index=0 if not st.session_state.selected_model else models.index(st.session_state.selected_model) if st.session_state.selected_model in models else 0
-        )
-        st.session_state.selected_model = selected_model
-        st.success(f"Using: {selected_model}")
+        # Simple inline controls
+        col_model, col_func = st.columns([3, 1])
+        
+        with col_model:
+            # Default to llama3.2 if available, otherwise first model
+            default_index = 0
+            if not st.session_state.selected_model:
+                # Look for llama3.2 variants
+                for i, model in enumerate(models):
+                    if 'llama3.2' in model.lower():
+                        default_index = i
+                        break
+            else:
+                # Use current selection if still available
+                if st.session_state.selected_model in models:
+                    default_index = models.index(st.session_state.selected_model)
+            
+            selected_model = st.selectbox(
+                "Model:",
+                models,
+                index=default_index,
+                label_visibility="collapsed"
+            )
+            st.session_state.selected_model = selected_model
+        
+        with col_func:
+            st.session_state.use_functions = st.checkbox(
+                "Tools", 
+                value=st.session_state.use_functions,
+                help="Enable web search and URL analysis"
+            )
+        
     else:
-        st.error("⚠️ No Ollama models found!")
-        st.info("Make sure Ollama is running:\n```\nollama serve\nollama pull llama3.1\n```")
+        st.error("**⚠️ No Ollama models found**")
+        st.info("Start Ollama: `ollama serve` then `ollama pull llama3.1`")
         st.session_state.selected_model = None
     
-    if st.button("Clear Chat"):
-        st.session_state.messages = []
-        st.rerun()
+    st.divider()
     
-    st.markdown("---")
-    st.header("Function Calling")
-    st.session_state.use_functions = st.checkbox(
-        "Enable function calling", 
-        value=st.session_state.use_functions,
-        help="Allow AI to use web search and URL analysis tools"
-    )
-
-# Main chat area
-if st.session_state.selected_model:
-    # Display chat messages
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    # Main chat area - content first
+    if st.session_state.selected_model:
+        # Clear button - positioned above chat
+        if st.session_state.messages:
+            if st.button("Clear conversation", type="secondary", help="Clear all messages"):
+                st.session_state.messages = []
+                st.rerun()
+        
+        # Display chat messages
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                content = message["content"]
+                
+                # Check if this is a response with function call results
+                if "---\n\n**Sources:**" in content:
+                    # Split the content into main response and sources
+                    parts = content.split("---\n\n**Sources:**")
+                    main_content = parts[0].strip()
+                    sources_content = parts[1].strip() if len(parts) > 1 else ""
+                    
+                    # Display main content prominently
+                    st.markdown(main_content)
+                    
+                    # Display sources in smaller, collapsible section
+                    if sources_content:
+                        with st.expander("View Sources", expanded=False):
+                            st.markdown(f"<small>{sources_content}</small>", unsafe_allow_html=True)
+                else:
+                    # Regular message display
+                    st.markdown(content)
     
-    # Chat input
-    if prompt := st.chat_input("Ask me anything..."):
-        # Add user message to chat
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        
-        # Get AI response
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                response = chat_with_ollama(
-                    st.session_state.selected_model, 
-                    prompt, 
-                    st.session_state.messages[:-1],  # Exclude the just-added user message
-                    st.session_state.use_functions
-                )
-            st.markdown(response)
-        
-        # Add assistant response to chat
-        st.session_state.messages.append({"role": "assistant", "content": response})
-
-else:
-    st.info("👈 Please select a model from the sidebar to start chatting")
-
-# Footer
-with st.sidebar:
-    st.markdown("---")
-    st.markdown("**Status:**")
-    if models:
-        st.markdown("🟢 Ollama Connected")
-        st.markdown(f"📊 {len(models)} models available")
+    # Chat input - fixed at bottom for all states
+    if st.session_state.selected_model:
+        if prompt := st.chat_input("Ask me anything..."):
+            # Add user message to chat
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
+            
+            # Get AI response
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    response = chat_with_ollama(
+                        st.session_state.selected_model, 
+                        prompt, 
+                        st.session_state.messages[:-1],  # Exclude the just-added user message
+                        st.session_state.use_functions
+                    )
+                st.markdown(response)
+            
+            # Add assistant response to chat
+            st.session_state.messages.append({"role": "assistant", "content": response})
+    
     else:
-        st.markdown("🔴 Ollama Disconnected")
+        # Clean empty state
+        st.markdown("### Welcome")
+        st.markdown("Select a model above to start chatting")
+        
+        # Subtle help section
+        with st.expander("What can I do?"):
+            st.markdown("""
+            With **Tools** enabled, I can:
+            - **Search** the web for current information
+            - **Analyze** content from any URL
+            
+            **Example prompts:**
+            - *"Search for Python 3.13 features"*
+            - *"What's new on the OpenAI blog?"*
+            - *"Analyze https://example.com"*
+            """)
+    
+    # Subtle footer with spacing
+    st.empty()
+    st.empty()
+    if models:
+        st.caption(f"🟢 Connected • {len(models)} models available")
+    else:
+        st.caption("Ollama disconnected")
