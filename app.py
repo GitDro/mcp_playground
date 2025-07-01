@@ -69,9 +69,9 @@ def web_search(query: str, max_results: int = 5) -> str:
             return f"No search results found for: {query}"
         
         # Format results as markdown
-        formatted_results = f"# Search Results for: {query}\n\n"
+        formatted_results = f"#### Search Results for: {query}\n\n"
         for i, result in enumerate(results, 1):
-            formatted_results += f"## {i}. {result.get('title', 'No Title')}\n"
+            formatted_results += f"**{i}. {result.get('title', 'No Title')}**\n"
             formatted_results += f"**URL**: {result.get('href', 'No URL')}\n"
             formatted_results += f"**Summary**: {result.get('body', 'No description available')}\n\n"
             formatted_results += "---\n\n"
