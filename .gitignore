@@ -60,3 +60,6 @@ data/papers/
 
 # Logs
 *.log
+
+# Alpha Vantage cache
+cache/
