@@ -345,7 +345,7 @@ def arxiv_search(query: str, max_results: int = 3) -> str:
                         formatted_results += "\n**Introduction:**\n\n"
                         for point in paper_content.introduction.bullet_points:
                             clean_point = _clean_markdown_text(point)
-                            formatted_results += f"• {clean_point}\n\n"
+                            formatted_results += f"- {clean_point}\n\n"
                         formatted_results += "\n"
                     
                     # Methods/Approach
@@ -353,7 +353,7 @@ def arxiv_search(query: str, max_results: int = 3) -> str:
                         formatted_results += "\n**Methods:**\n\n"
                         for point in paper_content.methods.bullet_points:
                             clean_point = _clean_markdown_text(point)
-                            formatted_results += f"• {clean_point}\n\n"
+                            formatted_results += f"- {clean_point}\n\n"
                         formatted_results += "\n"
                     
                     # Results
@@ -361,7 +361,7 @@ def arxiv_search(query: str, max_results: int = 3) -> str:
                         formatted_results += "\n**Results:**\n\n"
                         for point in paper_content.results.bullet_points:
                             clean_point = _clean_markdown_text(point)
-                            formatted_results += f"• {clean_point}\n\n"
+                            formatted_results += f"- {clean_point}\n\n"
                         formatted_results += "\n"
                     
                     # Discussion/Limitations
@@ -369,7 +369,7 @@ def arxiv_search(query: str, max_results: int = 3) -> str:
                         formatted_results += "\n**Discussion:**\n\n"
                         for point in paper_content.discussion.bullet_points:
                             clean_point = _clean_markdown_text(point)
-                            formatted_results += f"• {clean_point}\n\n"
+                            formatted_results += f"- {clean_point}\n\n"
                         formatted_results += "\n"
                 else:
                     formatted_results += "*PDF analysis unavailable - using abstract only.*\n\n"
@@ -512,30 +512,30 @@ def get_stock_price(ticker: str) -> str:
         change = float(quote_data.get('09. change', 0))
         change_pct = float(quote_data.get('10. change percent', '0%').replace('%', ''))
         
-        # Ultra simple formatting - no special characters
+        # Plain text only - no markdown at all
         trend_symbol = "📈" if change >= 0 else "📉"
-        formatted_result = f"**{symbol}** {trend_symbol}\n\n"
+        formatted_result = f"{symbol} {trend_symbol}\n\n"
         
-        # Price with simple +/- 
+        # Price with simple +/- - NO MARKDOWN
         if change >= 0:
-            formatted_result += f"• **${current_price:.2f}** +{change:.2f} (+{change_pct:.2f}%)\n"
+            formatted_result += f"- {current_price:.2f} USD +{change:.2f} (+{change_pct:.2f}%)\n\n"
         else:
-            formatted_result += f"• **${current_price:.2f}** {change:.2f} ({change_pct:.2f}%)\n"
+            formatted_result += f"- {current_price:.2f} USD {change:.2f} ({change_pct:.2f}%)\n\n"
         
-        # Add key metrics as simple bullet points
+        # Add key metrics as simple bullet points - NO DOLLAR SIGNS
         if quote_data.get('03. high'):
             high = float(quote_data.get('03. high', 0))
             low = float(quote_data.get('04. low', 0))
-            formatted_result += f"• Range: ${low:.2f} to ${high:.2f}\n"
+            formatted_result += f"- Range: {low:.2f} to {high:.2f}\n\n"
         
         if quote_data.get('06. volume'):
             volume = int(quote_data.get('06. volume', 0))
             if volume > 1e9:
-                formatted_result += f"• Volume: {volume/1e9:.1f}B shares\n"
+                formatted_result += f"- Volume: {volume/1e9:.1f}B shares\n"
             elif volume > 1e6:
-                formatted_result += f"• Volume: {volume/1e6:.1f}M shares\n"
+                formatted_result += f"- Volume: {volume/1e6:.1f}M shares\n"
             else:
-                formatted_result += f"• Volume: {volume:,} shares\n"
+                formatted_result += f"- Volume: {volume:,} shares\n"
         
         return formatted_result
         
@@ -598,29 +598,29 @@ def get_stock_history(ticker: str, period: str = "1mo") -> str:
         low_price = min(float(time_series[d]['3. low']) for d in recent_dates)
         total_return = ((current_price - start_price) / start_price) * 100
         
-        # Ultra simple historical data formatting
+        # Plain text historical data formatting
         trend_symbol = "📈" if total_return >= 0 else "📉"
-        formatted_result = f"**{ticker.upper()} {period.upper()}** {trend_symbol}\n\n"
+        formatted_result = f"{ticker.upper()} {period.upper()} {trend_symbol}\n\n"
         
         # Period return with simple +/-
         if total_return >= 0:
-            formatted_result += f"• Period return: **+{total_return:.2f}%**\n"
+            formatted_result += f"- Period return: +{total_return:.2f}%\n\n"
         else:
-            formatted_result += f"• Period return: **{total_return:.2f}%**\n"
+            formatted_result += f"- Period return: {total_return:.2f}%\n\n"
             
-        formatted_result += f"• Current price: ${current_price:.2f}\n"
-        formatted_result += f"• Period high: ${high_price:.2f}\n"
-        formatted_result += f"• Period low: ${low_price:.2f}\n\n"
+        formatted_result += f"- Current price: {current_price:.2f} USD\n\n"
+        formatted_result += f"- Period high: {high_price:.2f} USD\n\n"
+        formatted_result += f"- Period low: {low_price:.2f} USD\n\n"
         
         # Recent trend with bullet points
-        formatted_result += f"**Recent trading days:**\n"
+        formatted_result += f"Recent trading days:\n\n"
         for date in recent_dates[:3]:
             day_data = time_series[date]
             close_price = float(day_data['4. close'])
             open_price = float(day_data['1. open'])
             daily_change = close_price - open_price
             trend = "📈" if daily_change >= 0 else "📉"
-            formatted_result += f"• {date}: ${close_price:.2f} {trend}\n"
+            formatted_result += f"- {date}: {close_price:.2f} USD {trend}\n\n"
         
         return formatted_result
         
@@ -669,13 +669,13 @@ def get_crypto_price(symbol: str) -> str:
             _save_cached_data(cache_key, {'crypto': crypto_data})
         
         symbol_icon = "🟢" if change_pct >= 0 else "🔴"
-        formatted_result = f"**{symbol.upper()}** {symbol_icon}\n\n"
+        formatted_result = f"{symbol.upper()} {symbol_icon}\n\n"
         
-        # Simple price with +/- handling
+        # Simple price with +/- handling - NO MARKDOWN
         if change_pct >= 0:
-            formatted_result += f"• **${current_price:,.2f}** +{change_pct:.2f}%\n"
+            formatted_result += f"- {current_price:,.2f} USD +{change_pct:.2f}%\n"
         else:
-            formatted_result += f"• **${current_price:,.2f}** {change_pct:.2f}%\n"
+            formatted_result += f"- {current_price:,.2f} USD {change_pct:.2f}%\n"
         
         return formatted_result
         
@@ -694,7 +694,7 @@ def get_market_summary() -> str:
             "Russell 2000": "IWM"
         }
         
-        formatted_result = "**Markets**\n\n"
+        formatted_result = "Markets\n\n"
         
         for name, symbol in indices.items():
             try:
@@ -716,14 +716,14 @@ def get_market_summary() -> str:
                     
                     trend = "📈" if change_pct >= 0 else "📉"
                     if change_pct >= 0:
-                        formatted_result += f"• {name}: ${current_price:.2f} +{change_pct:.2f}% {trend}\n"
+                        formatted_result += f"- {name}: {current_price:.2f} USD +{change_pct:.2f}% {trend}\n\n"
                     else:
-                        formatted_result += f"• {name}: ${current_price:.2f} {change_pct:.2f}% {trend}\n"
+                        formatted_result += f"- {name}: {current_price:.2f} USD {change_pct:.2f}% {trend}\n\n"
                 else:
-                    formatted_result += f"• {name}: unavailable\n"
+                    formatted_result += f"- {name}: unavailable\n\n"
                     
             except Exception as e:
-                formatted_result += f"• {name}: error\n"
+                formatted_result += f"- {name}: error\n\n"
         
         return formatted_result
         

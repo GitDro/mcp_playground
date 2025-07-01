@@ -101,6 +101,8 @@ STRICT RULES FOR TOOL USAGE:
 
 ALWAYS try to answer from your knowledge first. Only use tools as a last resort when current information is specifically requested.
 
+IMPORTANT: When you use tools, the results are already perfectly formatted. DO NOT rewrite, summarize, or reformat the tool results. Simply present them as-is. The tool outputs are designed to be user-ready.
+
 Examples - DO NOT use tools:
 - "Hello" → Just greet back
 - "What is Python?" → Explain from knowledge  
