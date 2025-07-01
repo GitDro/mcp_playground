@@ -253,9 +253,12 @@ Paper text:
 
 
 def _clean_markdown_text(text: str) -> str:
-    """Clean text to prevent overly long sections while preserving formatting"""
+    """Clean text to prevent overly long sections and problematic headers"""
     if not text:
         return text
+    
+    # Remove any header markers that could interfere with layout
+    text = text.replace('####', '').replace('###', '').replace('##', '').replace('#', '')
     
     # Remove extra whitespace and normalize
     text = ' '.join(text.split())
@@ -302,7 +305,7 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
             return f"No relevant papers found for: {query}. Try different keywords or be more specific."
         
         # Format results as markdown with enhanced analysis for top papers
-        formatted_results = f"#### arXiv Papers for: {query}\n\n"
+        formatted_results = f"### arXiv Papers for: {query}\n\n"
         
         for i, result in enumerate(filtered_results, 1):
             # Truncate abstract for readability
@@ -310,6 +313,7 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
             if len(abstract) > 250:
                 abstract = abstract[:247] + "..."
             
+            # Ensure each paper starts fresh with proper formatting
             formatted_results += f"**{i}. {result.title}**\n"
             formatted_results += f"**Authors**: {', '.join([author.name for author in result.authors[:3]])}"
             if len(result.authors) > 3:
@@ -323,7 +327,7 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
             
             # Deep analysis for top 2 papers
             if i <= 2:
-                formatted_results += "\n**📄 Deep Analysis:**\n"
+                formatted_results += "\n#### 📄 Deep Analysis:\n"
                 paper_content = extract_paper_content(result.pdf_url)
                 
                 if paper_content:
@@ -361,6 +365,7 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
                 else:
                     formatted_results += "*PDF analysis unavailable - using abstract only.*\n\n"
             
+            # Add separator with proper spacing
             formatted_results += "---\n\n"
         
         return formatted_results
