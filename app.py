@@ -257,14 +257,43 @@ Examples - USE tools:
             request_data["tools"] = get_function_schema()
         
         # First request with or without tools
-        response = requests.post(
-            "http://localhost:11434/api/chat",
-            json=request_data,
-            timeout=60
-        )
-        
-        if response.status_code != 200:
-            return f"Error: {response.status_code}"
+        try:
+            response = requests.post(
+                "http://localhost:11434/api/chat",
+                json=request_data,
+                timeout=60
+            )
+            
+            if response.status_code != 200:
+                error_detail = ""
+                try:
+                    error_data = response.json()
+                    error_detail = error_data.get("error", "Unknown error")
+                except:
+                    error_detail = response.text or "No error details available"
+                
+                # If function calling fails, try without tools
+                if response.status_code == 400 and use_functions:
+                    print(f"DEBUG: Function calling failed for model {model}, retrying without tools")
+                    request_data_fallback = {
+                        "model": model,
+                        "messages": messages,
+                        "stream": False
+                    }
+                    fallback_response = requests.post(
+                        "http://localhost:11434/api/chat",
+                        json=request_data_fallback,
+                        timeout=60
+                    )
+                    if fallback_response.status_code == 200:
+                        data = fallback_response.json()
+                        return data.get("message", {}).get("content", "No response")
+                
+                return f"Error {response.status_code}: {error_detail}"
+        except requests.exceptions.Timeout:
+            return "Error: Request timed out. Ollama may be overloaded."
+        except requests.exceptions.ConnectionError:
+            return "Error: Could not connect to Ollama. Is it running on localhost:11434?"
         
         data = response.json()
         assistant_message = data.get("message", {})
@@ -307,49 +336,51 @@ Examples - USE tools:
                 })
             
             # Get final response with tool results
-            final_response = requests.post(
-                "http://localhost:11434/api/chat",
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "stream": False
-                },
-                timeout=60
-            )
-            
-            if final_response.status_code == 200:
-                final_data = final_response.json()
-                final_content = final_data.get("message", {}).get("content", "")
+            try:
+                final_response = requests.post(
+                    "http://localhost:11434/api/chat",
+                    json={
+                        "model": model,
+                        "messages": messages,
+                        "stream": False
+                    },
+                    timeout=60
+                )
                 
-                # Return structured response with metadata
-                response_data = {
-                    "content": final_content,
-                    "function_results": function_results,
-                    "has_functions": True
-                }
-                
-                # For now, return simple format - will enhance display later
-                if final_content.strip():
-                    combined_response = final_content + "\n\n---\n\n**Sources:**\n"
+                if final_response.status_code == 200:
+                    final_data = final_response.json()
+                    final_content = final_data.get("message", {}).get("content", "")
+                    
+                    # Format response with sources
+                    if final_content.strip():
+                        combined_response = final_content + "\n\n---\n\n**Sources:**\n"
+                    else:
+                        combined_response = "**Sources:**\n"
+                    
+                    # Add compact function results  
+                    for result in function_results:
+                        # Split result into header and content
+                        lines = result.split('\n', 2)
+                        if len(lines) >= 1:
+                            header = lines[0]  # Function name and query
+                            combined_response += f"- {header}\n"
+                            
+                            # Add full content if available
+                            if len(lines) > 2:
+                                full_content = '\n'.join(lines[2:])
+                                combined_response += f"\n{full_content}\n"
+                    
+                    return combined_response
                 else:
-                    combined_response = "**Sources:**\n"
-                
-                # Add compact function results  
-                for i, result in enumerate(function_results):
-                    # Split result into header and content
-                    lines = result.split('\n', 2)
-                    if len(lines) >= 1:
-                        header = lines[0]  # Function name and query
-                        combined_response += f"- {header}\n"
-                        
-                        # Store full results for the expander (remove this line later if not needed)
-                        if len(lines) > 2:
-                            full_content = '\n'.join(lines[2:])
-                            combined_response += f"\n{full_content}\n"
-                
-                return combined_response
-            else:
-                return f"Error in final response: {final_response.status_code}"
+                    error_detail = ""
+                    try:
+                        error_data = final_response.json()
+                        error_detail = error_data.get("error", "Unknown error")
+                    except:
+                        error_detail = final_response.text or "No error details available"
+                    return f"Error in final response {final_response.status_code}: {error_detail}"
+            except requests.exceptions.RequestException as e:
+                return f"Error in final response: {str(e)}"
         else:
             # No tool calls, return regular response
             return assistant_message.get("content", "No response")
