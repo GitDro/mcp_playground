@@ -5,9 +5,12 @@ This module contains all the tool functions and their schemas for the
 Ollama function calling system.
 """
 
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple
 from duckduckgo_search import DDGS
 import httpx
+import re
+import tempfile
+import os
 
 
 def web_search(query: str, max_results: int = 5) -> str:
@@ -129,6 +132,155 @@ def _filter_relevant_papers(results, original_query: str, max_results: int):
     return [paper for score, paper in scored_results[:max_results] if score > 0]
 
 
+def extract_paper_content(pdf_url: str) -> Optional[Dict[str, str]]:
+    """Extract structured content from arXiv PDF"""
+    try:
+        import fitz  # PyMuPDF
+        
+        # Download PDF to temporary file
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+            response = httpx.get(pdf_url, timeout=30)
+            response.raise_for_status()
+            tmp_file.write(response.content)
+            tmp_path = tmp_file.name
+        
+        try:
+            # Extract text from PDF
+            doc = fitz.open(tmp_path)
+            full_text = ""
+            for page in doc:
+                full_text += page.get_text()
+            doc.close()
+            
+            # Parse sections
+            sections = _parse_paper_sections(full_text)
+            return sections
+            
+        finally:
+            # Clean up temp file
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+                
+    except Exception as e:
+        print(f"Error extracting paper content: {e}")
+        return None
+
+
+def _parse_paper_sections(text: str) -> Dict[str, str]:
+    """Parse academic paper text into structured sections"""
+    # Clean and normalize text
+    text = re.sub(r'\s+', ' ', text.strip())
+    text_lower = text.lower()
+    
+    sections = {
+        'introduction': '',
+        'methodology': '',
+        'results': '',
+        'conclusion': '',
+        'key_contributions': ''
+    }
+    
+    # Define section patterns (case insensitive)
+    section_patterns = {
+        'introduction': [
+            r'\b(?:1\.?\s*)?introduction\b',
+            r'\bintroduction\b',
+            r'\b1\.\s*background\b'
+        ],
+        'methodology': [
+            r'\b(?:\d+\.?\s*)?(?:methodology|methods|approach|model|algorithm)\b',
+            r'\b(?:\d+\.?\s*)?(?:experimental setup|implementation)\b'
+        ],
+        'results': [
+            r'\b(?:\d+\.?\s*)?(?:results|experiments|evaluation|performance)\b',
+            r'\b(?:\d+\.?\s*)?(?:experimental results|findings)\b'
+        ],
+        'conclusion': [
+            r'\b(?:\d+\.?\s*)?(?:conclusion|conclusions|discussion)\b',
+            r'\b(?:\d+\.?\s*)?(?:summary|future work)\b'
+        ]
+    }
+    
+    # Find section boundaries
+    section_positions = {}
+    for section_name, patterns in section_patterns.items():
+        for pattern in patterns:
+            matches = list(re.finditer(pattern, text_lower))
+            if matches:
+                # Take the first match
+                section_positions[section_name] = matches[0].start()
+                break
+    
+    # Extract content between sections
+    sorted_sections = sorted(section_positions.items(), key=lambda x: x[1])
+    
+    for i, (section_name, start_pos) in enumerate(sorted_sections):
+        # Find end position (start of next section or end of text)
+        if i + 1 < len(sorted_sections):
+            end_pos = sorted_sections[i + 1][1]
+        else:
+            end_pos = len(text)
+        
+        # Extract section content
+        content = text[start_pos:end_pos].strip()
+        
+        # Clean section header and take first few sentences
+        lines = content.split('\n')
+        clean_lines = []
+        for line in lines[1:]:  # Skip header line
+            if line.strip() and not re.match(r'^\d+\.?\s*[A-Z]', line.strip()):
+                clean_lines.append(line.strip())
+        
+        # Take first 3-4 sentences
+        section_text = ' '.join(clean_lines)
+        sentences = re.split(r'[.!?]+', section_text)
+        key_sentences = [s.strip() for s in sentences[:4] if s.strip()]
+        
+        sections[section_name] = '. '.join(key_sentences)
+        if sections[section_name]:
+            sections[section_name] += '.'
+    
+    # Extract key contributions from abstract/introduction
+    _extract_key_contributions(text, sections)
+    
+    return sections
+
+
+def _extract_key_contributions(text: str, sections: Dict[str, str]):
+    """Extract key contributions and findings"""
+    # Look for contribution indicators
+    contribution_patterns = [
+        r'we propose',
+        r'we present',
+        r'we introduce',
+        r'our contribution',
+        r'our main contribution',
+        r'we show that',
+        r'we demonstrate'
+    ]
+    
+    text_lower = text.lower()
+    contributions = []
+    
+    for pattern in contribution_patterns:
+        matches = re.finditer(pattern, text_lower)
+        for match in matches:
+            # Extract sentence containing the contribution
+            start = match.start()
+            # Find sentence boundaries
+            sentence_start = text.rfind('.', 0, start) + 1
+            sentence_end = text.find('.', start + len(pattern))
+            if sentence_end == -1:
+                sentence_end = len(text)
+            
+            sentence = text[sentence_start:sentence_end + 1].strip()
+            if len(sentence) > 20 and len(sentence) < 300:
+                contributions.append(sentence)
+    
+    # Take top 2-3 contributions
+    sections['key_contributions'] = ' '.join(contributions[:3])
+
+
 def arxiv_search(query: str, max_results: int = 5) -> str:
     """Search arXiv for academic papers"""
     try:
@@ -163,8 +315,9 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
         if not filtered_results:
             return f"No relevant papers found for: {query}. Try different keywords or be more specific."
         
-        # Format results as markdown
+        # Format results as markdown with enhanced analysis for top papers
         formatted_results = f"#### arXiv Papers for: {query}\n\n"
+        
         for i, result in enumerate(filtered_results, 1):
             # Truncate abstract for readability
             abstract = result.summary.replace('\n', ' ').strip()
@@ -180,7 +333,28 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
             formatted_results += f"**arXiv ID**: {result.entry_id.split('/')[-1]}\n"
             formatted_results += f"**Categories**: {', '.join(result.categories[:2])}\n"
             formatted_results += f"**Abstract**: {abstract}\n"
-            formatted_results += f"**PDF**: {result.pdf_url}\n\n"
+            formatted_results += f"**PDF**: {result.pdf_url}\n"
+            
+            # Deep analysis for top 2 papers
+            if i <= 2:
+                formatted_results += "\n**📄 Deep Analysis:**\n"
+                paper_content = extract_paper_content(result.pdf_url)
+                
+                if paper_content:
+                    if paper_content['key_contributions']:
+                        formatted_results += f"*Key Contributions:* {paper_content['key_contributions']}\n\n"
+                    
+                    if paper_content['methodology']:
+                        formatted_results += f"*Approach:* {paper_content['methodology']}\n\n"
+                    
+                    if paper_content['results']:
+                        formatted_results += f"*Results:* {paper_content['results']}\n\n"
+                    
+                    if paper_content['conclusion']:
+                        formatted_results += f"*Conclusion:* {paper_content['conclusion']}\n\n"
+                else:
+                    formatted_results += "*PDF analysis unavailable - using abstract only.*\n\n"
+            
             formatted_results += "---\n\n"
         
         return formatted_results
