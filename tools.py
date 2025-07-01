@@ -76,6 +76,59 @@ def analyze_url(url: str) -> str:
         return f"Error analyzing URL: {str(e)}"
 
 
+def _enhance_arxiv_query(query: str) -> str:
+    """Enhance search query for better arXiv results"""
+    original_query = query.strip()
+    query = query.lower().strip()
+    
+    # If query already has field specifiers, use as-is
+    if any(field in query for field in ['ti:', 'abs:', 'au:', 'cat:']):
+        return query
+    
+    # If query is very long (like paper titles), use as-is but quoted
+    if len(query.split()) > 6:
+        return f'"{original_query}"'
+    
+    # For 3+ word queries, treat as phrase in title, or individual words in abstract
+    if len(query.split()) >= 3:
+        return f'ti:"{original_query}" OR abs:{query}'
+    
+    # For 1-2 word queries, search in both title and abstract
+    return f"ti:{query} OR abs:{query}"
+
+
+def _filter_relevant_papers(results, original_query: str, max_results: int):
+    """Filter papers for relevance to the original query"""
+    if not results:
+        return []
+    
+    # Simple relevance scoring based on keyword presence
+    query_words = set(original_query.lower().split())
+    scored_results = []
+    
+    for paper in results:
+        score = 0
+        title_words = set(paper.title.lower().split())
+        abstract_words = set(paper.summary.lower().split())
+        
+        # Score based on keyword matches in title (higher weight) and abstract
+        title_matches = len(query_words.intersection(title_words))
+        abstract_matches = len(query_words.intersection(abstract_words))
+        
+        score = title_matches * 3 + abstract_matches
+        
+        # Boost score for papers in relevant categories
+        relevant_categories = ['cs.LG', 'cs.AI', 'cs.CV', 'cs.CL', 'stat.ML', 'cs.IR']
+        if any(cat in paper.categories for cat in relevant_categories):
+            score += 1
+            
+        scored_results.append((score, paper))
+    
+    # Sort by score and return top results
+    scored_results.sort(key=lambda x: x[0], reverse=True)
+    return [paper for score, paper in scored_results[:max_results] if score > 0]
+
+
 def arxiv_search(query: str, max_results: int = 5) -> str:
     """Search arXiv for academic papers"""
     try:
@@ -91,22 +144,28 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
         
         query = query.strip()
         
-        # Create client and search
+        # Enhanced query processing for better relevance
+        enhanced_query = _enhance_arxiv_query(query)
+        
+        # Create client and search - sort by RELEVANCE for better results
         client = arxiv.Client()
         search = arxiv.Search(
-            query=query,
-            max_results=max_results,
-            sort_by=arxiv.SortCriterion.SubmittedDate
+            query=enhanced_query,
+            max_results=max_results * 2,  # Get more results to filter
+            sort_by=arxiv.SortCriterion.Relevance  # Changed from SubmittedDate
         )
         
         results = list(client.results(search))
         
-        if not results:
-            return f"No papers found for: {query}"
+        # Filter results for better relevance
+        filtered_results = _filter_relevant_papers(results, query, max_results)
+        
+        if not filtered_results:
+            return f"No relevant papers found for: {query}. Try different keywords or be more specific."
         
         # Format results as markdown
         formatted_results = f"#### arXiv Papers for: {query}\n\n"
-        for i, result in enumerate(results, 1):
+        for i, result in enumerate(filtered_results, 1):
             # Truncate abstract for readability
             abstract = result.summary.replace('\n', ' ').strip()
             if len(abstract) > 250:
