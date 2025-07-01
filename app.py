@@ -112,6 +112,59 @@ def analyze_url(url: str) -> str:
     except Exception as e:
         return f"Error analyzing URL: {str(e)}"
 
+def arxiv_search(query: str, max_results: int = 5) -> str:
+    """Search arXiv for academic papers"""
+    try:
+        import arxiv
+        
+        # Validate and sanitize inputs
+        if isinstance(max_results, str):
+            max_results = int(max_results)
+        max_results = max(1, min(max_results or 5, 10))
+        
+        if not query or not query.strip():
+            return "Error: Search query cannot be empty"
+        
+        query = query.strip()
+        
+        # Create client and search
+        client = arxiv.Client()
+        search = arxiv.Search(
+            query=query,
+            max_results=max_results,
+            sort_by=arxiv.SortCriterion.SubmittedDate
+        )
+        
+        results = list(client.results(search))
+        
+        if not results:
+            return f"No papers found for: {query}"
+        
+        # Format results as markdown
+        formatted_results = f"#### arXiv Papers for: {query}\n\n"
+        for i, result in enumerate(results, 1):
+            # Truncate abstract for readability
+            abstract = result.summary.replace('\n', ' ').strip()
+            if len(abstract) > 250:
+                abstract = abstract[:247] + "..."
+            
+            formatted_results += f"**{i}. {result.title}**\n"
+            formatted_results += f"**Authors**: {', '.join([author.name for author in result.authors[:3]])}"
+            if len(result.authors) > 3:
+                formatted_results += f" (and {len(result.authors) - 3} others)"
+            formatted_results += "\n"
+            formatted_results += f"**Published**: {result.published.strftime('%Y-%m-%d')}\n"
+            formatted_results += f"**arXiv ID**: {result.entry_id.split('/')[-1]}\n"
+            formatted_results += f"**Categories**: {', '.join(result.categories[:2])}\n"
+            formatted_results += f"**Abstract**: {abstract}\n"
+            formatted_results += f"**PDF**: {result.pdf_url}\n\n"
+            formatted_results += "---\n\n"
+        
+        return formatted_results
+        
+    except Exception as e:
+        return f"Error searching arXiv: {str(e)}"
+
 # ============================================================================
 # FUNCTION CALLING CONFIGURATION
 # ============================================================================
@@ -161,6 +214,27 @@ def get_function_schema():
                     "required": ["url"]
                 }
             }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "arxiv_search",
+                "description": "RESTRICTED: Only use when user explicitly asks to search for academic papers, research, or scientific literature with keywords like 'papers', 'research', 'arxiv', 'academic', 'study'. Never use for general questions.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Academic search query for finding research papers"
+                        },
+                        "max_results": {
+                            "type": "integer",
+                            "description": "Maximum number of papers to return (default: 5)"
+                        }
+                    },
+                    "required": ["query"]
+                }
+            }
         }
     ]
 
@@ -177,6 +251,13 @@ def execute_function(function_name: str, arguments: dict) -> str:
         elif function_name == "analyze_url":
             url = str(arguments.get("url", ""))
             return analyze_url(url)
+        elif function_name == "arxiv_search":
+            query = str(arguments.get("query", ""))
+            max_results = arguments.get("max_results", 5)
+            # Convert max_results to int if it's a string
+            if isinstance(max_results, str):
+                max_results = int(max_results)
+            return arxiv_search(query, max_results)
         else:
             return f"Unknown function: {function_name}"
     except Exception as e:
@@ -226,6 +307,8 @@ STRICT RULES FOR TOOL USAGE:
 
 3. ONLY use analyze_url when user provides a specific URL/link
 
+4. ONLY use arxiv_search when user explicitly asks for academic papers or research with keywords like "papers", "research", "arxiv", "academic", "study"
+
 ALWAYS try to answer from your knowledge first. Only use tools as a last resort when current information is specifically requested.
 
 Examples - DO NOT use tools:
@@ -237,7 +320,9 @@ Examples - DO NOT use tools:
 Examples - USE tools:
 - "Search for Python 3.13 news" → Use web_search
 - "What's the latest on OpenAI?" → Use web_search  
-- "Analyze https://example.com" → Use analyze_url"""
+- "Analyze https://example.com" → Use analyze_url
+- "Find papers on quantum computing" → Use arxiv_search
+- "Search for research on transformers" → Use arxiv_search"""
             }
             messages.append(system_message)
         
@@ -513,7 +598,7 @@ with col2:
             st.session_state.use_functions = st.checkbox(
                 "Tools", 
                 value=st.session_state.use_functions,
-                help="Enable web search and URL analysis"
+                help="Enable web search, URL analysis, and arXiv paper search"
             )
         
     else:
@@ -587,11 +672,14 @@ with col2:
             With **Tools** enabled, I can:
             - **Search** the web for current information
             - **Analyze** content from any URL
+            - **Find** academic papers on arXiv
             
             **Example prompts:**
             - *"Search for Python 3.13 features"*
             - *"What's new on the OpenAI blog?"*
             - *"Analyze https://example.com"*
+            - *"Find papers on quantum computing"*
+            - *"Search for research on transformers"*
             """)
     
     # Add some spacing at bottom
