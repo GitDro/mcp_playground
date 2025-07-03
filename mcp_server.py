@@ -1002,12 +1002,14 @@ def _get_youtube_transcript(url: str) -> str:
         
         # Get transcript from YouTube
         try:
-            transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+            api = YouTubeTranscriptApi()
+            transcript_list = api.fetch(video_id)
             transcript_text = ' '.join([entry['text'] for entry in transcript_list])
         except Exception as e:
             # Try to get any available transcript
             try:
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                api = YouTubeTranscriptApi()
+                transcript_list = api.list(video_id)
                 transcript = transcript_list.find_generated_transcript(['en'])
                 transcript_data = transcript.fetch()
                 transcript_text = ' '.join([entry['text'] for entry in transcript_data])
