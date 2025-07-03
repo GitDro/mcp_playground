@@ -1027,17 +1027,15 @@ def query_youtube_transcript(url: str, question: str) -> str:
             content = f"{beginning}\n\n--- [MIDDLE SECTION OMITTED] ---\n\n{end_text}"
             note = "\n\n*Note: This includes the beginning and ending of a longer video, with the middle section omitted.*"
         
-        # Return formatted content that naturally prompts the LLM to answer the question
-        return f"""I'll analyze this YouTube video to answer your question.
+        # Return formatted content that clearly directs the LLM to answer the specific question
+        return f"""Please answer this specific question about the YouTube video: "{question}"
 
-**Video:** {title}
-**Duration:** {duration_estimate} ({word_count:,} words)
-**Your Question:** {question}
+Video: {title} ({duration_estimate}, {word_count:,} words)
 
-**Transcript:**
+Transcript content:
 {content}{note}
 
-Based on this content, here's my answer to your question:"""
+Answer the question "{question}" based on the above transcript content."""
             
     except Exception as e:
         return f"Error querying video transcript: {str(e)}"
@@ -1076,7 +1074,7 @@ def get_function_schema() -> List[Dict]:
             "type": "function",
             "function": {
                 "name": "analyze_url",
-                "description": "RESTRICTED: Only use when user explicitly provides a URL/link and asks to analyze it. Never use unless user specifically mentions a URL to analyze.",
+                "description": "RESTRICTED: Only use for NON-YOUTUBE URLs when user asks to analyze a website. NEVER use for YouTube URLs (youtube.com, youtu.be) - use YouTube functions instead.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -1181,7 +1179,7 @@ def get_function_schema() -> List[Dict]:
             "type": "function",
             "function": {
                 "name": "summarize_youtube_video",
-                "description": "Analyze and summarize YouTube video content using AI. Use when user asks to 'summarize', 'overview', or 'what is this video about' for a YouTube video.",
+                "description": "Analyze and summarize YouTube video content. Use when user provides a YouTube URL (youtube.com, youtu.be) and asks to 'summarize', 'overview', or 'what is this video about'.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -1198,7 +1196,7 @@ def get_function_schema() -> List[Dict]:
             "type": "function",
             "function": {
                 "name": "query_youtube_transcript",
-                "description": "Answer specific questions about YouTube video content. Use when user asks questions like 'what does the video say about X', 'what are the main points', 'explain the part about Y', etc.",
+                "description": "Answer specific questions about YouTube video content. Use when user provides a YouTube URL (youtube.com, youtu.be) and asks questions about the video content like 'what does the video say about X', 'who won', 'what are the main points', etc.",
                 "parameters": {
                     "type": "object",
                     "properties": {
