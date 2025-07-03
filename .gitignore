@@ -54,6 +54,7 @@ Thumbs.db
 # Data files (optional - comment out if you want to track data)
 data/conversations.db
 data/papers/
+transcripts.json
 
 # Legacy files
 *.legacy
