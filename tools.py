@@ -833,6 +833,214 @@ def get_market_summary() -> str:
         return f"Error fetching market summary: {str(e)}"
 
 
+# ============================================================================
+# YOUTUBE TRANSCRIPT FUNCTIONS - TINYDB WITH CACHING
+# ============================================================================
+
+def _extract_video_id(url: str) -> Optional[str]:
+    """Extract YouTube video ID from various URL formats and clean parameters"""
+    import re
+    
+    # Clean up common URL issues (remove extra spaces, fix protocols)
+    url = url.strip()
+    if not url.startswith(('http://', 'https://')):
+        if url.startswith('www.') or url.startswith('youtube.') or url.startswith('youtu.be'):
+            url = 'https://' + url
+    
+    # YouTube URL patterns - comprehensive to handle all parameters including playlists
+    patterns = [
+        # Standard watch URLs with any parameters (timestamps, playlists, etc.)
+        r'youtube\.com/watch\?.*[?&]?v=([a-zA-Z0-9_-]{11})',
+        # Playlist URLs - extract video ID while ignoring list/index parameters
+        r'youtube\.com/watch\?.*v=([a-zA-Z0-9_-]{11}).*(?:&list=|&index=)',
+        # Short URLs
+        r'youtu\.be/([a-zA-Z0-9_-]{11})',
+        # Embed URLs
+        r'youtube\.com/embed/([a-zA-Z0-9_-]{11})',
+        # Mobile URLs
+        r'youtube\.com/v/([a-zA-Z0-9_-]{11})',
+        # Share URLs with parameters
+        r'youtube\.com/.*[?&]v=([a-zA-Z0-9_-]{11})',
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    
+    return None
+
+def _get_transcript_db():
+    """Get or create TinyDB database for transcripts"""
+    from tinydb import TinyDB
+    return TinyDB('transcripts.json')
+
+def _get_youtube_transcript(url: str) -> str:
+    """Internal function to extract transcript from YouTube video with caching"""
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+        from tinydb import Query
+        
+        # Extract video ID
+        video_id = _extract_video_id(url)
+        if not video_id:
+            return f"Invalid YouTube URL. Please provide a valid YouTube video URL."
+        
+        # Check cache first
+        db = _get_transcript_db()
+        Video = Query()
+        cached = db.search(Video.video_id == video_id)
+        
+        if cached:
+            cached_data = cached[0]
+            return f"**{cached_data.get('title', 'YouTube Video')}**\n\n{cached_data['transcript']}"
+        
+        # Get transcript from YouTube
+        try:
+            transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+            transcript_text = ' '.join([entry['text'] for entry in transcript_list])
+        except Exception as e:
+            # Try to get any available transcript
+            try:
+                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                transcript = transcript_list.find_generated_transcript(['en'])
+                transcript_data = transcript.fetch()
+                transcript_text = ' '.join([entry['text'] for entry in transcript_data])
+            except:
+                return f"No transcript available for this video. The video may not have captions or subtitles."
+        
+        # Try to get video title (basic approach)
+        title = f"YouTube Video ({video_id})"
+        
+        # Cache the transcript
+        db.insert({
+            'video_id': video_id,
+            'url': url,
+            'title': title,
+            'transcript': transcript_text,
+            'created_at': datetime.now().isoformat(),
+            'language': 'en'
+        })
+        
+        return f"**{title}**\n\n{transcript_text}"
+        
+    except Exception as e:
+        return f"Error extracting transcript: {str(e)}"
+
+def summarize_youtube_video(url: str) -> str:
+    """Generate AI summary of YouTube video content"""
+    try:
+        # Get the transcript
+        transcript_result = _get_youtube_transcript(url)
+        
+        if transcript_result.startswith("Error") or transcript_result.startswith("Invalid") or transcript_result.startswith("No transcript"):
+            return transcript_result
+        
+        # Extract title and transcript text  
+        lines = transcript_result.split('\n', 2)
+        title = lines[0].replace('**', '') if lines else "YouTube Video"
+        transcript_text = lines[2] if len(lines) > 2 else transcript_result
+        
+        # Calculate some basic stats
+        word_count = len(transcript_text.split())
+        duration_estimate = f"~{word_count // 150} minutes" if word_count > 150 else "< 1 minute"
+        
+        # Prepare content for LLM analysis with natural prompt
+        max_content_length = 8000  # Total character budget (~8k tokens)
+        
+        if len(transcript_text) <= max_content_length:
+            content = transcript_text
+            note = ""
+        else:
+            # For long videos, include beginning + end (many videos have summaries at the end)
+            words = transcript_text.split()
+            total_words = len(words)
+            
+            # Use ~75% for beginning, ~25% for end
+            beginning_chars = int(max_content_length * 0.75)
+            end_words = min(2000, total_words // 4)  # Last ~2k words or 25% of video
+            
+            # Get beginning portion
+            beginning = transcript_text[:beginning_chars]
+            
+            # Get end portion
+            end_text = ' '.join(words[-end_words:])
+            
+            # Combine with separator
+            content = f"{beginning}\n\n--- [MIDDLE SECTION OMITTED] ---\n\n{end_text}"
+            note = "\n\n*Note: This includes the beginning and ending of a longer video, with the middle section omitted.*"
+        
+        # Return formatted content that naturally prompts the LLM to summarize
+        return f"""I'll analyze this YouTube video for you.
+
+**Video:** {title}
+**Duration:** {duration_estimate} ({word_count:,} words)
+
+**Transcript:**
+{content}{note}
+
+Based on this content, here's my analysis and summary:"""
+            
+    except Exception as e:
+        return f"Error summarizing video: {str(e)}"
+
+def query_youtube_transcript(url: str, question: str) -> str:
+    """Answer questions about YouTube video content using AI analysis"""
+    try:
+        # Get the transcript
+        transcript_result = _get_youtube_transcript(url)
+        
+        if transcript_result.startswith("Error") or transcript_result.startswith("Invalid") or transcript_result.startswith("No transcript"):
+            return transcript_result
+        
+        # Extract title and transcript text
+        lines = transcript_result.split('\n', 2)
+        title = lines[0].replace('**', '') if lines else "YouTube Video"
+        transcript_text = lines[2] if len(lines) > 2 else transcript_result
+        
+        # Calculate some basic stats
+        word_count = len(transcript_text.split())
+        duration_estimate = f"~{word_count // 150} minutes" if word_count > 150 else "< 1 minute"
+        
+        # Prepare content for LLM analysis with natural prompt  
+        max_content_length = 8000  # Total character budget (~8k tokens)
+        
+        if len(transcript_text) <= max_content_length:
+            content = transcript_text
+            note = ""
+        else:
+            # For long videos, include beginning + end (many videos have summaries at the end)
+            words = transcript_text.split()
+            total_words = len(words)
+            
+            # Use ~75% for beginning, ~25% for end
+            beginning_chars = int(max_content_length * 0.75)
+            end_words = min(2000, total_words // 4)  # Last ~2k words or 25% of video
+            
+            # Get beginning portion
+            beginning = transcript_text[:beginning_chars]
+            
+            # Get end portion
+            end_text = ' '.join(words[-end_words:])
+            
+            # Combine with separator
+            content = f"{beginning}\n\n--- [MIDDLE SECTION OMITTED] ---\n\n{end_text}"
+            note = "\n\n*Note: This includes the beginning and ending of a longer video, with the middle section omitted.*"
+        
+        # Return formatted content that clearly directs the LLM to answer the specific question
+        return f"""Please answer this specific question about the YouTube video: "{question}"
+
+Video: {title} ({duration_estimate}, {word_count:,} words)
+
+Transcript content:
+{content}{note}
+
+Answer the question "{question}" based on the above transcript content."""
+            
+    except Exception as e:
+        return f"Error querying video transcript: {str(e)}"
+
+
 def get_function_schema() -> List[Dict]:
     """
     Define available functions for Ollama function calling.
@@ -866,7 +1074,7 @@ def get_function_schema() -> List[Dict]:
             "type": "function",
             "function": {
                 "name": "analyze_url",
-                "description": "RESTRICTED: Only use when user explicitly provides a URL/link and asks to analyze it. Never use unless user specifically mentions a URL to analyze.",
+                "description": "RESTRICTED: Only use for NON-YOUTUBE URLs when user asks to analyze a website. NEVER use for YouTube URLs (youtube.com, youtu.be) - use YouTube functions instead.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -966,6 +1174,44 @@ def get_function_schema() -> List[Dict]:
                     "required": []
                 }
             }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "summarize_youtube_video",
+                "description": "Analyze and summarize YouTube video content. Use when user provides a YouTube URL (youtube.com, youtu.be) and asks to 'summarize', 'overview', or 'what is this video about'.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "YouTube video URL to analyze"
+                        }
+                    },
+                    "required": ["url"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "query_youtube_transcript",
+                "description": "Answer specific questions about YouTube video content. Use when user provides a YouTube URL (youtube.com, youtu.be) and asks questions about the video content like 'what does the video say about X', 'who won', 'what are the main points', etc.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "YouTube video URL to analyze"
+                        },
+                        "question": {
+                            "type": "string",
+                            "description": "Specific question about the video content"
+                        }
+                    },
+                    "required": ["url", "question"]
+                }
+            }
         }
     ]
 
@@ -1002,6 +1248,13 @@ def execute_function(function_name: str, arguments: dict) -> str:
             return get_crypto_price(symbol)
         elif function_name == "get_market_summary":
             return get_market_summary()
+        elif function_name == "summarize_youtube_video":
+            url = str(arguments.get("url", ""))
+            return summarize_youtube_video(url)
+        elif function_name == "query_youtube_transcript":
+            url = str(arguments.get("url", ""))
+            question = str(arguments.get("question", ""))
+            return query_youtube_transcript(url, question)
         else:
             return f"Unknown function: {function_name}"
     except Exception as e:

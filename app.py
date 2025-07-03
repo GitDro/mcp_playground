@@ -141,6 +141,7 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
         if tool_calls and use_functions:
             # Execute function calls
             function_results = []
+            function_names = []
             
             for tool_call in tool_calls:
                 function_info = tool_call.get("function", {})
@@ -150,6 +151,7 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
                 # Execute the function
                 result = execute_function(function_name, arguments)
                 function_results.append(result)
+                function_names.append(function_name)
                 
                 # Add tool call and result to conversation
                 messages.append({
@@ -179,16 +181,27 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
                     final_content = final_data.get("message", {}).get("content", "")
                     
                     # Format response with function results
-                    if final_content.strip():
-                        combined_response = final_content + "\n\n---\n\n"
+                    # Only show function results for certain types of functions
+                    # YouTube functions are meant to be processed by LLM, not shown to user
+                    show_function_results = []
+                    for i, (func_name, result) in enumerate(zip(function_names, function_results)):
+                        if not func_name.startswith('summarize_youtube') and not func_name.startswith('query_youtube'):
+                            show_function_results.append(result)
+                    
+                    if show_function_results:
+                        if final_content.strip():
+                            combined_response = final_content + "\n\n---\n\n"
+                        else:
+                            combined_response = ""
+                        
+                        # Add non-YouTube function results
+                        for result in show_function_results:
+                            combined_response += f"{result}\n\n"
+                        
+                        return combined_response
                     else:
-                        combined_response = ""
-                    
-                    # Add function results directly
-                    for result in function_results:
-                        combined_response += f"{result}\n\n"
-                    
-                    return combined_response
+                        # No function results to show (likely YouTube functions), just return LLM response
+                        return final_content
                 else:
                     error_detail = ""
                     try:
@@ -272,6 +285,10 @@ with col2:
                         purpose = "crypto prices"
                     elif 'market_summary' in func_name:
                         purpose = "market overview"
+                    elif 'summarize_youtube' in func_name:
+                        purpose = "YouTube summaries"
+                    elif 'query_youtube' in func_name:
+                        purpose = "YouTube Q&A"
                     else:
                         purpose = "tool"
                     

@@ -25,7 +25,8 @@ Open http://localhost:8501
 - **🔍 Web Search**: Real-time DuckDuckGo search with current information
 - **📄 URL Analysis**: Analyze and summarize content from any website  
 - **📚 arXiv Search**: Find and deeply analyze academic papers with structured insights
-- **📈 Financial Data**: Get stock prices, crypto rates, and market summaries via Alpha Vantage API
+- **📈 Financial Data**: Get stock prices, crypto rates, and market summaries without API keys
+- **🎥 YouTube Analysis**: Analyze and summarize video content from YouTube links (includes beginning + ending for longer videos)
 - **🎛️ Function Toggle**: Enable/disable AI tool usage per conversation
 
 ## 🎯 Example Prompts
@@ -44,9 +45,14 @@ Open http://localhost:8501
 
 **Financial Data:**
 - "What's Apple's stock price?"
-- "Show Tesla's performance this month"
+- "Show Tesla's performance this month"  
 - "Get Bitcoin price"
 - "How are the markets doing?"
+
+**YouTube Videos:**
+- "Summarize this YouTube video: [paste URL]"
+- "What are the main points discussed in this video?"
+- "What does the video say about [specific topic]?"
 
 ## 🏗️ Architecture
 
