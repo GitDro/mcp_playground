@@ -415,11 +415,10 @@ def arxiv_search(query: str, max_results: int = 3) -> str:
 
 
 # ============================================================================
-# FINANCIAL DATA FUNCTIONS - ALPHA VANTAGE WITH CACHING
+# FINANCIAL DATA FUNCTIONS - YFINANCE WITH CACHING
 # ============================================================================
 
-# Alpha Vantage configuration
-ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY')
+# Financial data cache configuration
 CACHE_DIR = os.getenv('CACHE_DIRECTORY', 'cache')
 MAX_CACHE_DAYS = int(os.getenv('MAX_CACHE_DAYS', '7'))
 
@@ -482,42 +481,13 @@ def _cleanup_old_cache() -> None:
     except Exception as e:
         print(f"Warning: Cache cleanup failed: {e}")
 
-def _make_alpha_vantage_request(function: str, symbol: str, **kwargs) -> Optional[Dict]:
-    """Make a request to Alpha Vantage API"""
-    if not ALPHA_VANTAGE_API_KEY:
-        raise ValueError("Alpha Vantage API key not found. Please set ALPHA_VANTAGE_API_KEY in .env file.")
-    
-    try:
-        params = {
-            'function': function,
-            'symbol': symbol,
-            'apikey': ALPHA_VANTAGE_API_KEY,
-            **kwargs
-        }
-        
-        response = requests.get(
-            'https://www.alphavantage.co/query',
-            params=params,
-            timeout=10
-        )
-        response.raise_for_status()
-        
-        data = response.json()
-        
-        # Check for API errors
-        if 'Error Message' in data:
-            raise ValueError(f"Alpha Vantage API Error: {data['Error Message']}")
-        if 'Note' in data:
-            raise ValueError(f"Alpha Vantage API Note: {data['Note']}")
-            
-        return data
-        
-    except requests.exceptions.RequestException as e:
-        raise ValueError(f"Network error: {str(e)}")
 
 def get_stock_price(ticker: str) -> str:
-    """Get current stock price and basic information using Alpha Vantage"""
+    """Get current stock price and basic information using Yahoo Finance API"""
     try:
+        import requests
+        import json
+        
         # Clean up old cache periodically
         _cleanup_old_cache()
         
@@ -526,9 +496,38 @@ def get_stock_price(ticker: str) -> str:
         if cached_data and 'quote' in cached_data:
             quote_data = cached_data['quote']
         else:
-            # Make API request
-            data = _make_alpha_vantage_request('GLOBAL_QUOTE', ticker)
-            quote_data = data.get('Global Quote', {})
+            # Get data using Yahoo Finance API directly
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+            }
+            
+            url = f'https://query1.finance.yahoo.com/v8/finance/chart/{ticker}'
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code != 200:
+                return f"Could not find data for ticker: {ticker}"
+            
+            data = response.json()
+            if not data.get('chart') or not data['chart'].get('result'):
+                return f"Could not find data for ticker: {ticker}"
+            
+            result = data['chart']['result'][0]
+            meta = result.get('meta', {})
+            
+            current_price = meta.get('regularMarketPrice', 0)
+            prev_close = meta.get('previousClose', current_price)
+            change = current_price - prev_close
+            change_pct = (change / prev_close * 100) if prev_close != 0 else 0
+            
+            quote_data = {
+                'symbol': meta.get('symbol', ticker.upper()),
+                'current_price': current_price,
+                'change': change,
+                'change_pct': change_pct,
+                'high': meta.get('regularMarketDayHigh', current_price),
+                'low': meta.get('regularMarketDayLow', current_price),
+                'volume': meta.get('regularMarketVolume', 0)
+            }
             
             # Cache the result
             _save_cached_data(ticker, {'quote': quote_data})
@@ -536,12 +535,11 @@ def get_stock_price(ticker: str) -> str:
         if not quote_data:
             return f"Could not find data for ticker: {ticker}"
         
-        # Parse Alpha Vantage response
-        symbol = quote_data.get('01. symbol', ticker.upper())
-        current_price = float(quote_data.get('05. price', 0))
-        prev_close = float(quote_data.get('08. previous close', 0))
-        change = float(quote_data.get('09. change', 0))
-        change_pct = float(quote_data.get('10. change percent', '0%').replace('%', ''))
+        # Parse data
+        symbol = quote_data.get('symbol', ticker.upper())
+        current_price = float(quote_data.get('current_price', 0))
+        change = float(quote_data.get('change', 0))
+        change_pct = float(quote_data.get('change_pct', 0))
         
         # Plain text only - no markdown at all
         trend_symbol = "📈" if change >= 0 else "📉"
@@ -554,13 +552,13 @@ def get_stock_price(ticker: str) -> str:
             formatted_result += f"- {current_price:.2f} USD {change:.2f} ({change_pct:.2f}%)\n\n"
         
         # Add key metrics as simple bullet points - NO DOLLAR SIGNS
-        if quote_data.get('03. high'):
-            high = float(quote_data.get('03. high', 0))
-            low = float(quote_data.get('04. low', 0))
+        if quote_data.get('high') and quote_data.get('low'):
+            high = float(quote_data.get('high', 0))
+            low = float(quote_data.get('low', 0))
             formatted_result += f"- Range: {low:.2f} to {high:.2f}\n\n"
         
-        if quote_data.get('06. volume'):
-            volume = int(quote_data.get('06. volume', 0))
+        if quote_data.get('volume'):
+            volume = int(quote_data.get('volume', 0))
             if volume > 1e9:
                 formatted_result += f"- Volume: {volume/1e9:.1f}B shares\n"
             elif volume > 1e6:
@@ -571,62 +569,106 @@ def get_stock_price(ticker: str) -> str:
         return formatted_result
         
     except Exception as e:
-        if "API" in str(e) or "rate limit" in str(e).lower():
-            return f"Unable to fetch stock data for {ticker}: {str(e)}"
         return f"Error fetching stock data for {ticker}: {str(e)}"
 
 def get_stock_history(ticker: str, period: str = "1mo") -> str:
-    """Get historical stock price data using Alpha Vantage"""
+    """Get historical stock price data using Yahoo Finance API"""
     try:
-        # For historical data, we'll use TIME_SERIES_DAILY
-        # Note: Alpha Vantage free tier gives last 100 data points for daily
+        import requests
+        from datetime import datetime, timedelta
         
-        cache_key = f"{ticker}_history"
+        cache_key = f"{ticker}_history_{period}"
         cached_data = _load_cached_data(cache_key)
         
         if cached_data and 'history' in cached_data:
-            time_series = cached_data['history']
+            hist_data = cached_data['history']
         else:
-            # Make API request for daily data
-            data = _make_alpha_vantage_request('TIME_SERIES_DAILY', ticker, outputsize='compact')
-            time_series = data.get('Time Series (Daily)', {})
+            # Map period to range parameter for Yahoo Finance
+            period_map = {
+                '1d': '1d', '5d': '5d', '1mo': '1mo', '3mo': '3mo',
+                '6mo': '6mo', '1y': '1y', '2y': '2y', '5y': '5y', 
+                '10y': '10y', 'ytd': 'ytd', 'max': 'max'
+            }
+            range_param = period_map.get(period, '1mo')
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+            }
+            
+            url = f'https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range={range_param}&interval=1d'
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code != 200:
+                return f"Could not find historical data for ticker: {ticker}"
+            
+            data = response.json()
+            if not data.get('chart') or not data['chart'].get('result'):
+                return f"Could not find historical data for ticker: {ticker}"
+            
+            result = data['chart']['result'][0]
+            timestamps = result.get('timestamp', [])
+            indicators = result.get('indicators', {})
+            quote = indicators.get('quote', [{}])[0]
+            
+            if not timestamps or not quote:
+                return f"Could not find historical data for ticker: {ticker}"
+            
+            closes = quote.get('close', [])
+            opens = quote.get('open', [])
+            highs = quote.get('high', [])
+            lows = quote.get('low', [])
+            
+            # Filter out None values and get valid data
+            valid_data = []
+            for i, ts in enumerate(timestamps):
+                if (i < len(closes) and closes[i] is not None and
+                    i < len(opens) and opens[i] is not None):
+                    valid_data.append({
+                        'timestamp': ts,
+                        'close': closes[i],
+                        'open': opens[i],
+                        'high': highs[i] if i < len(highs) and highs[i] is not None else closes[i],
+                        'low': lows[i] if i < len(lows) and lows[i] is not None else closes[i]
+                    })
+            
+            if not valid_data:
+                return f"Could not find valid historical data for ticker: {ticker}"
+            
+            # Calculate statistics
+            current_price = valid_data[-1]['close']
+            start_price = valid_data[0]['close']
+            high_price = max(d['high'] for d in valid_data)
+            low_price = min(d['low'] for d in valid_data)
+            
+            hist_data = {
+                'current_price': current_price,
+                'start_price': start_price,
+                'high_price': high_price,
+                'low_price': low_price,
+                'recent_days': []
+            }
+            
+            # Get last 3 days of data
+            for i in range(min(3, len(valid_data))):
+                day_data = valid_data[-(i+1)]  # Start from most recent
+                date_str = datetime.fromtimestamp(day_data['timestamp']).strftime('%Y-%m-%d')
+                hist_data['recent_days'].append({
+                    'date': date_str,
+                    'close': day_data['close'],
+                    'open': day_data['open']
+                })
             
             # Cache the result
-            _save_cached_data(cache_key, {'history': time_series})
+            _save_cached_data(cache_key, {'history': hist_data})
         
-        if not time_series:
+        if not hist_data:
             return f"Could not find historical data for ticker: {ticker}"
         
-        # Convert to list of dates and sort
-        dates = sorted(time_series.keys(), reverse=True)
-        
-        # Calculate period-specific data
-        period_days = {
-            '1d': 1, '5d': 5, '1mo': 22, '3mo': 66, 
-            '6mo': 132, '1y': 252, 'ytd': None
-        }
-        
-        days = period_days.get(period, 22)  # Default to 1 month
-        if days:
-            recent_dates = dates[:days]
-        else:
-            # YTD calculation
-            current_year = datetime.now().year
-            recent_dates = [d for d in dates if d.startswith(str(current_year))]
-        
-        if not recent_dates:
-            return f"Insufficient historical data for {ticker}"
-        
-        # Get current and start prices
-        current_data = time_series[recent_dates[0]]
-        start_data = time_series[recent_dates[-1]]
-        
-        current_price = float(current_data['4. close'])
-        start_price = float(start_data['4. close'])
-        
         # Calculate statistics
-        high_price = max(float(time_series[d]['2. high']) for d in recent_dates)
-        low_price = min(float(time_series[d]['3. low']) for d in recent_dates)
+        current_price = float(hist_data['current_price'])
+        start_price = float(hist_data['start_price'])
+        high_price = float(hist_data['high_price'])
+        low_price = float(hist_data['low_price'])
         total_return = ((current_price - start_price) / start_price) * 100
         
         # Plain text historical data formatting
@@ -645,25 +687,29 @@ def get_stock_history(ticker: str, period: str = "1mo") -> str:
         
         # Recent trend with bullet points
         formatted_result += f"Recent trading days:\n\n"
-        for date in recent_dates[:3]:
-            day_data = time_series[date]
-            close_price = float(day_data['4. close'])
-            open_price = float(day_data['1. open'])
+        for day_data in hist_data['recent_days']:
+            close_price = float(day_data['close'])
+            open_price = float(day_data['open'])
             daily_change = close_price - open_price
             trend = "📈" if daily_change >= 0 else "📉"
-            formatted_result += f"- {date}: {close_price:.2f} USD {trend}\n\n"
+            formatted_result += f"- {day_data['date']}: {close_price:.2f} USD {trend}\n\n"
         
         return formatted_result
         
     except Exception as e:
-        if "API" in str(e) or "rate limit" in str(e).lower():
-            return f"Unable to fetch historical data for {ticker}: {str(e)}"
         return f"Error fetching historical data for {ticker}: {str(e)}"
 
 def get_crypto_price(symbol: str) -> str:
-    """Get current cryptocurrency price using Alpha Vantage"""
+    """Get current cryptocurrency price using Yahoo Finance API"""
     try:
-        # Alpha Vantage uses different function for crypto
+        import requests
+        
+        # Convert symbol to Yahoo Finance format for crypto (e.g., BTC -> BTC-USD)
+        if not symbol.endswith('-USD'):
+            crypto_ticker = f"{symbol.upper()}-USD"
+        else:
+            crypto_ticker = symbol.upper()
+        
         cache_key = f"{symbol}_crypto"
         cached_data = _load_cached_data(cache_key)
         
@@ -673,27 +719,27 @@ def get_crypto_price(symbol: str) -> str:
             current_price = data['price']
             change_pct = data.get('change_pct', 0)
         else:
-            # Make API request for crypto
-            data = _make_alpha_vantage_request('DIGITAL_CURRENCY_DAILY', symbol, market='USD')
-            time_series = data.get('Time Series (Digital Currency Daily)', {})
+            # Get data using Yahoo Finance API directly
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+            }
             
-            if not time_series:
+            url = f'https://query1.finance.yahoo.com/v8/finance/chart/{crypto_ticker}'
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code != 200:
                 return f"Could not find data for cryptocurrency: {symbol}"
             
-            # Get most recent date
-            recent_date = max(time_series.keys())
-            recent_data = time_series[recent_date]
+            data = response.json()
+            if not data.get('chart') or not data['chart'].get('result'):
+                return f"Could not find data for cryptocurrency: {symbol}"
             
-            current_price = float(recent_data['4. close'])
+            result = data['chart']['result'][0]
+            meta = result.get('meta', {})
             
-            # Try to calculate change (if we have previous day)
-            dates = sorted(time_series.keys(), reverse=True)
-            if len(dates) > 1:
-                prev_data = time_series[dates[1]]
-                prev_price = float(prev_data['4. close'])
-                change_pct = ((current_price - prev_price) / prev_price) * 100
-            else:
-                change_pct = 0
+            current_price = meta.get('regularMarketPrice', 0)
+            prev_close = meta.get('previousClose', current_price)
+            change_pct = ((current_price - prev_close) / prev_close) * 100 if prev_close != 0 else 0
             
             # Cache the result
             crypto_data = {'price': current_price, 'change_pct': change_pct}
@@ -711,16 +757,16 @@ def get_crypto_price(symbol: str) -> str:
         return formatted_result
         
     except Exception as e:
-        if "API" in str(e) or "rate limit" in str(e).lower():
-            return f"Unable to fetch crypto data for {symbol}: {str(e)}"
         return f"Error fetching crypto data for {symbol}: {str(e)}"
 
 def get_market_summary() -> str:
-    """Get summary of major market indices using Alpha Vantage"""
+    """Get summary of major market indices using Yahoo Finance API"""
     try:
+        import requests
+        
         indices = {
-            "S&P 500": "SPY",  # Using ETF tickers for better Alpha Vantage support
-            "NASDAQ": "QQQ",
+            "S&P 500": "SPY",
+            "NASDAQ": "QQQ", 
             "Dow Jones": "DIA",
             "Russell 2000": "IWM"
         }
@@ -734,16 +780,41 @@ def get_market_summary() -> str:
                 if cached_data and 'quote' in cached_data:
                     quote_data = cached_data['quote']
                 else:
-                    # Make API request
-                    data = _make_alpha_vantage_request('GLOBAL_QUOTE', symbol)
-                    quote_data = data.get('Global Quote', {})
+                    # Get data using Yahoo Finance API directly
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+                    }
+                    
+                    url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}'
+                    response = requests.get(url, headers=headers, timeout=10)
+                    
+                    if response.status_code != 200:
+                        formatted_result += f"- {name}: unavailable\n\n"
+                        continue
+                    
+                    data = response.json()
+                    if not data.get('chart') or not data['chart'].get('result'):
+                        formatted_result += f"- {name}: unavailable\n\n"
+                        continue
+                    
+                    result = data['chart']['result'][0]
+                    meta = result.get('meta', {})
+                    
+                    current_price = meta.get('regularMarketPrice', 0)
+                    prev_close = meta.get('previousClose', current_price)
+                    change_pct = ((current_price - prev_close) / prev_close) * 100 if prev_close != 0 else 0
+                    
+                    quote_data = {
+                        'current_price': current_price,
+                        'change_pct': change_pct
+                    }
                     
                     # Cache the result
                     _save_cached_data(f"{symbol}_market", {'quote': quote_data})
                 
                 if quote_data:
-                    current_price = float(quote_data.get('05. price', 0))
-                    change_pct = float(quote_data.get('10. change percent', '0%').replace('%', ''))
+                    current_price = float(quote_data.get('current_price', 0))
+                    change_pct = float(quote_data.get('change_pct', 0))
                     
                     trend = "📈" if change_pct >= 0 else "📉"
                     if change_pct >= 0:
@@ -759,8 +830,6 @@ def get_market_summary() -> str:
         return formatted_result
         
     except Exception as e:
-        if "API" in str(e) or "rate limit" in str(e).lower():
-            return f"Unable to fetch market data: {str(e)}"
         return f"Error fetching market summary: {str(e)}"
 
 
