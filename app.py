@@ -1,22 +1,25 @@
 """
-MCP Playground - Simple Streamlit Chat App with Function Calling
+MCP Playground - FastMCP Version
+Simple Streamlit Chat App with FastMCP Integration
 
-A minimal, working chat application that integrates with Ollama for local AI
-and includes web search, URL analysis, and arXiv paper search capabilities.
+A modernized chat application that integrates with Ollama for local AI
+and uses FastMCP for tool execution.
 
 Author: MCP Arena Team
-Version: 1.0.0
+Version: 2.0.0 (FastMCP)
 """
 
 import streamlit as st
 import requests
+import asyncio
 from typing import List, Dict
 from datetime import datetime
 
 # Import our modules
-from tools import get_function_schema, execute_function
 from ui_config import STREAMLIT_STYLE, TOOLS_HELP_TEXT, get_system_prompt
 
+# Import FastMCP client
+from fastmcp import Client
 
 # Page config - Minimalist setup
 st.set_page_config(
@@ -26,6 +29,57 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+async def get_mcp_tools():
+    """Get available tools from the FastMCP server using in-memory transport"""
+    try:
+        # Import the FastMCP server instance
+        from mcp_server import mcp
+        from fastmcp import Client
+        
+        # Create a client with in-memory transport (FastMCPTransport auto-inferred)
+        async with Client(mcp) as client:
+            tools_data = await client.list_tools()
+            
+            # Convert to the format expected by the app
+            tools = []
+            for tool in tools_data:
+                tools.append({
+                    "name": tool.name, 
+                    "description": tool.description or f"Tool: {tool.name}",
+                    "inputSchema": tool.inputSchema
+                })
+            
+            return tools
+    except Exception as e:
+        st.error(f"Failed to get MCP tools: {e}")
+        return []
+
+async def call_mcp_tool(tool_name: str, arguments: dict):
+    """Call a tool using the FastMCP client with in-memory transport"""
+    try:
+        # Import the FastMCP server instance
+        from mcp_server import mcp
+        from fastmcp import Client
+        
+        # Create a client with in-memory transport
+        async with Client(mcp) as client:
+            result = await client.call_tool(tool_name, arguments)
+            
+            # Extract the content from the result (updated for MCP 2.10.0+)
+            if hasattr(result, 'content') and result.content:
+                # Handle different content types
+                content_item = result.content[0]
+                if hasattr(content_item, 'text'):
+                    return content_item.text
+                else:
+                    return str(content_item)
+            elif hasattr(result, 'data'):
+                # Structured output from the tool
+                return str(result.data)
+            else:
+                return str(result)
+    except Exception as e:
+        return f"Error calling tool {tool_name}: {str(e)}"
 
 def get_ollama_models() -> List[str]:
     """
@@ -44,10 +98,30 @@ def get_ollama_models() -> List[str]:
     except:
         return []
 
+def create_function_schema_from_mcp_tools(mcp_tools: List[Dict]) -> List[Dict]:
+    """Convert MCP tools to OpenAI function schema format using FastMCP's native schemas"""
+    schemas = []
+    for tool in mcp_tools:
+        # Use FastMCP's native schema generation instead of manual inference
+        schema = {
+            "type": "function",
+            "function": {
+                "name": tool["name"],
+                "description": tool["description"],
+                "parameters": tool.get("inputSchema", {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                })
+            }
+        }
+        schemas.append(schema)
+    
+    return schemas
 
-def chat_with_ollama(model: str, message: str, conversation_history: List[Dict], use_functions: bool = True) -> str:
+async def chat_with_ollama_and_mcp(model: str, message: str, conversation_history: List[Dict], use_functions: bool = True) -> str:
     """
-    Send chat message to Ollama with optional function calling support.
+    Send chat message to Ollama with FastMCP function calling support.
     
     Args:
         model: Ollama model name to use
@@ -59,6 +133,13 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
         AI response string, potentially including function call results
     """
     try:
+        # Get MCP tools if functions are enabled
+        mcp_tools = []
+        if use_functions:
+            mcp_tools = await get_mcp_tools()
+            if not mcp_tools:
+                use_functions = False  # Disable if no tools available
+        
         # Format conversation for Ollama with system guidance
         messages = []
         
@@ -83,8 +164,8 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
         }
         
         # Add tools if function calling is enabled
-        if use_functions:
-            request_data["tools"] = get_function_schema()
+        if use_functions and mcp_tools:
+            request_data["tools"] = create_function_schema_from_mcp_tools(mcp_tools)
         
         # First request with or without tools
         try:
@@ -139,7 +220,7 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
                 print("DEBUG: AI chose NOT to use any functions")
         
         if tool_calls and use_functions:
-            # Execute function calls
+            # Execute function calls using FastMCP
             function_results = []
             function_names = []
             
@@ -148,8 +229,8 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
                 function_name = function_info.get("name", "")
                 arguments = function_info.get("arguments", {})
                 
-                # Execute the function
-                result = execute_function(function_name, arguments)
+                # Execute the function using FastMCP
+                result = await call_mcp_tool(function_name, arguments)
                 function_results.append(result)
                 function_names.append(function_name)
                 
@@ -217,8 +298,25 @@ def chat_with_ollama(model: str, message: str, conversation_history: List[Dict],
             return assistant_message.get("content", "No response")
             
     except Exception as e:
-        return f"Error connecting to Ollama: {str(e)}"
+        return f"Error connecting to Ollama or MCP: {str(e)}"
 
+def chat_with_ollama_sync(*args, **kwargs):
+    """Synchronous wrapper for the async chat function"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(chat_with_ollama_and_mcp(*args, **kwargs))
+    finally:
+        loop.close()
+
+def get_mcp_tools_sync():
+    """Synchronous wrapper for getting MCP tools"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(get_mcp_tools())
+    finally:
+        loop.close()
 
 # Apply CSS styles
 st.markdown(STREAMLIT_STYLE, unsafe_allow_html=True)
@@ -243,7 +341,8 @@ with col2:
     # Status section with expandable hierarchy
     models = get_ollama_models()
     if models:
-        tool_count = len(get_function_schema()) if st.session_state.get('use_functions', True) else 0
+        mcp_tools = get_mcp_tools_sync() if st.session_state.get('use_functions', True) else []
+        tool_count = len(mcp_tools)
         
         # Create expandable status hierarchy
         with st.expander(f"{len(models)} models available, {tool_count} tools available", expanded=False):
@@ -266,37 +365,36 @@ with col2:
             # Tools section
             if st.session_state.get('use_functions', True):
                 st.markdown("**Tools:**")
-                function_schemas = get_function_schema()
-                for i, func in enumerate(function_schemas):
-                    func_name = func['function']['name']
+                for i, tool in enumerate(mcp_tools):
+                    tool_name = tool['name']
                     
                     # Extract concise inline descriptions
-                    if 'web_search' in func_name:
+                    if 'web_search' in tool_name:
                         purpose = "web search"
-                    elif 'analyze_url' in func_name:
+                    elif 'analyze_url' in tool_name:
                         purpose = "URL analysis"
-                    elif 'arxiv_search' in func_name:
+                    elif 'arxiv_search' in tool_name:
                         purpose = "academic papers"
-                    elif 'stock_price' in func_name:
+                    elif 'stock_price' in tool_name:
                         purpose = "stock prices"
-                    elif 'stock_history' in func_name:
+                    elif 'stock_history' in tool_name:
                         purpose = "stock history"
-                    elif 'crypto_price' in func_name:
+                    elif 'crypto_price' in tool_name:
                         purpose = "crypto prices"
-                    elif 'market_summary' in func_name:
+                    elif 'market_summary' in tool_name:
                         purpose = "market overview"
-                    elif 'summarize_youtube' in func_name:
+                    elif 'summarize_youtube' in tool_name:
                         purpose = "YouTube summaries"
-                    elif 'query_youtube' in func_name:
+                    elif 'query_youtube' in tool_name:
                         purpose = "YouTube Q&A"
                     else:
                         purpose = "tool"
                     
                     # Add tree-like formatting with inline descriptions
-                    if i == len(function_schemas) - 1:
-                        st.markdown(f"<div style='font-family: monospace; font-size: 12px; color: #666;'>└── {func_name} <span style='color: #888;'>({purpose})</span></div>", unsafe_allow_html=True)
+                    if i == len(mcp_tools) - 1:
+                        st.markdown(f"<div style='font-family: monospace; font-size: 12px; color: #666;'>└── {tool_name} <span style='color: #888;'>({purpose})</span></div>", unsafe_allow_html=True)
                     else:
-                        st.markdown(f"<div style='font-family: monospace; font-size: 12px; color: #666;'>├── {func_name} <span style='color: #888;'>({purpose})</span></div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='font-family: monospace; font-size: 12px; color: #666;'>├── {tool_name} <span style='color: #888;'>({purpose})</span></div>", unsafe_allow_html=True)
             else:
                 st.markdown("**Tools:** *Disabled*")
     else:
@@ -343,7 +441,7 @@ with col2:
             st.session_state.use_functions = st.checkbox(
                 "Tools", 
                 value=st.session_state.use_functions,
-                help="Enable web search, URL analysis, and arXiv paper search"
+                help="Enable tools for web search, URL analysis, arXiv papers, finance, and YouTube"
             )
         
     else:
@@ -395,7 +493,7 @@ with col2:
             # Get AI response
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
-                    response = chat_with_ollama(
+                    response = chat_with_ollama_sync(
                         st.session_state.selected_model, 
                         prompt, 
                         st.session_state.messages[:-1],  # Exclude the just-added user message
@@ -408,8 +506,8 @@ with col2:
     
     else:
         # Clean empty state
-        st.markdown("### Welcome")
-        st.markdown("Select a model above to start chatting")
+        st.markdown("### Welcome to MCP Playground")
+        st.markdown("Select a model above to start chatting with AI tools")
         
         # Subtle help section
         with st.expander("What can I do?"):

@@ -57,7 +57,7 @@ if __name__ == "__main__":
     success = asyncio.run(test_mcp_server())
     
     if success:
-        print("\n✅ Ready to run: uv run streamlit run app_fastmcp.py")
+        print("\n✅ Ready to run: uv run streamlit run app.py")
         sys.exit(0)
     else:
         print("\n❌ Please fix the issues above before running the Streamlit app")
