@@ -272,6 +272,10 @@ with col2:
                         purpose = "crypto prices"
                     elif 'market_summary' in func_name:
                         purpose = "market overview"
+                    elif 'summarize_youtube' in func_name:
+                        purpose = "YouTube summaries"
+                    elif 'query_youtube' in func_name:
+                        purpose = "YouTube Q&A"
                     else:
                         purpose = "tool"
                     

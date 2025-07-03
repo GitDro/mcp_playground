@@ -50,9 +50,9 @@ Open http://localhost:8501
 - "How are the markets doing?"
 
 **YouTube Videos:**
-- "Extract transcript from https://youtu.be/VIDEO_ID"
 - "Summarize this YouTube video: [paste URL]"
 - "What are the main points discussed in this video?"
+- "What does the video say about [specific topic]?"
 
 ## 🏗️ Architecture
 

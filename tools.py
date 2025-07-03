@@ -838,7 +838,7 @@ def get_market_summary() -> str:
 # ============================================================================
 
 def _extract_video_id(url: str) -> Optional[str]:
-    """Extract YouTube video ID from various URL formats"""
+    """Extract YouTube video ID from various URL formats and clean parameters"""
     import re
     
     # Clean up common URL issues (remove extra spaces, fix protocols)
@@ -847,10 +847,20 @@ def _extract_video_id(url: str) -> Optional[str]:
         if url.startswith('www.') or url.startswith('youtube.') or url.startswith('youtu.be'):
             url = 'https://' + url
     
-    # YouTube URL patterns
+    # YouTube URL patterns - comprehensive to handle all parameters including playlists
     patterns = [
-        r'(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)([a-zA-Z0-9_-]{11})',
-        r'youtube\.com.*[?&]v=([a-zA-Z0-9_-]{11})',
+        # Standard watch URLs with any parameters (timestamps, playlists, etc.)
+        r'youtube\.com/watch\?.*[?&]?v=([a-zA-Z0-9_-]{11})',
+        # Playlist URLs - extract video ID while ignoring list/index parameters
+        r'youtube\.com/watch\?.*v=([a-zA-Z0-9_-]{11}).*(?:&list=|&index=)',
+        # Short URLs
+        r'youtu\.be/([a-zA-Z0-9_-]{11})',
+        # Embed URLs
+        r'youtube\.com/embed/([a-zA-Z0-9_-]{11})',
+        # Mobile URLs
+        r'youtube\.com/v/([a-zA-Z0-9_-]{11})',
+        # Share URLs with parameters
+        r'youtube\.com/.*[?&]v=([a-zA-Z0-9_-]{11})',
     ]
     
     for pattern in patterns:
@@ -865,8 +875,8 @@ def _get_transcript_db():
     from tinydb import TinyDB
     return TinyDB('transcripts.json')
 
-def get_youtube_transcript(url: str) -> str:
-    """Extract transcript from YouTube video with caching"""
+def _get_youtube_transcript(url: str) -> str:
+    """Internal function to extract transcript from YouTube video with caching"""
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
         from tinydb import Query
@@ -921,57 +931,50 @@ def summarize_youtube_video(url: str) -> str:
     """Generate AI summary of YouTube video content"""
     try:
         # Get the transcript
-        transcript_result = get_youtube_transcript(url)
+        transcript_result = _get_youtube_transcript(url)
         
         if transcript_result.startswith("Error") or transcript_result.startswith("Invalid") or transcript_result.startswith("No transcript"):
             return transcript_result
         
-        # Extract title and transcript text
+        # Extract title and transcript text  
         lines = transcript_result.split('\n', 2)
         title = lines[0].replace('**', '') if lines else "YouTube Video"
         transcript_text = lines[2] if len(lines) > 2 else transcript_result
         
-        # Chunk transcript if it's too long (approximate token limit)
-        max_chunk_length = 8000  # Conservative estimate for context window
+        # Calculate some basic stats
+        word_count = len(transcript_text.split())
+        duration_estimate = f"~{word_count // 150} minutes" if word_count > 150 else "< 1 minute"
         
-        if len(transcript_text) <= max_chunk_length:
-            # Single chunk - direct summary
-            summary_prompt = f"""Please provide a concise summary of this YouTube video transcript:
-
-Title: {title}
-
-Transcript:
-{transcript_text}
-
-Provide a structured summary with:
-- Main topic/subject (1-2 sentences)
-- Key points (3-5 bullet points)
-- Conclusion or takeaway (1-2 sentences)"""
-            
-            return summary_prompt  # This will be processed by the LLM
+        # Prepare content for LLM analysis with natural prompt
+        max_content_length = 6000  # Leave room for prompt and response
+        
+        if len(transcript_text) <= max_content_length:
+            content = transcript_text
+            note = ""
         else:
-            # Multi-chunk processing
-            chunks = [transcript_text[i:i+max_chunk_length] for i in range(0, len(transcript_text), max_chunk_length)]
-            
-            summary_prompt = f"""This is a long YouTube video transcript that I'll provide in chunks. Please summarize the key points:
+            # For long videos, include first part and mention it's partial
+            content = transcript_text[:max_content_length]
+            note = "\n\n*Note: This is a partial transcript from a longer video.*"
+        
+        # Return formatted content that naturally prompts the LLM to summarize
+        return f"""I'll analyze this YouTube video for you.
 
-Title: {title}
+**Video:** {title}
+**Duration:** {duration_estimate} ({word_count:,} words)
 
-Transcript (Part 1 of {len(chunks)}):
-{chunks[0]}
+**Transcript:**
+{content}{note}
 
-Note: This is part of a longer transcript. Focus on the key concepts and main points in this section."""
-            
-            return summary_prompt  # This will be processed by the LLM
+Based on this content, here's my analysis and summary:"""
             
     except Exception as e:
         return f"Error summarizing video: {str(e)}"
 
 def query_youtube_transcript(url: str, question: str) -> str:
-    """Answer questions about YouTube video content"""
+    """Answer questions about YouTube video content using AI analysis"""
     try:
         # Get the transcript
-        transcript_result = get_youtube_transcript(url)
+        transcript_result = _get_youtube_transcript(url)
         
         if transcript_result.startswith("Error") or transcript_result.startswith("Invalid") or transcript_result.startswith("No transcript"):
             return transcript_result
@@ -981,38 +984,32 @@ def query_youtube_transcript(url: str, question: str) -> str:
         title = lines[0].replace('**', '') if lines else "YouTube Video"
         transcript_text = lines[2] if len(lines) > 2 else transcript_result
         
-        # Chunk transcript if it's too long
-        max_chunk_length = 8000
+        # Calculate some basic stats
+        word_count = len(transcript_text.split())
+        duration_estimate = f"~{word_count // 150} minutes" if word_count > 150 else "< 1 minute"
         
-        if len(transcript_text) <= max_chunk_length:
-            query_prompt = f"""Based on this YouTube video transcript, please answer the following question:
-
-Title: {title}
-
-Question: {question}
-
-Transcript:
-{transcript_text}
-
-Please provide a detailed answer based only on the content from this video transcript."""
-            
-            return query_prompt  # This will be processed by the LLM
+        # Prepare content for LLM analysis with natural prompt
+        max_content_length = 5000  # Leave room for question and response
+        
+        if len(transcript_text) <= max_content_length:
+            content = transcript_text
+            note = ""
         else:
-            # For long transcripts, use first chunk and mention it's partial
-            chunk = transcript_text[:max_chunk_length]
-            
-            query_prompt = f"""Based on this YouTube video transcript (partial - long video), please answer the following question:
+            # For long videos, include first part and mention it's partial
+            content = transcript_text[:max_content_length]
+            note = "\n\n*Note: This is a partial transcript from a longer video.*"
+        
+        # Return formatted content that naturally prompts the LLM to answer the question
+        return f"""I'll analyze this YouTube video to answer your question.
 
-Title: {title}
+**Video:** {title}
+**Duration:** {duration_estimate} ({word_count:,} words)
+**Your Question:** {question}
 
-Question: {question}
+**Transcript:**
+{content}{note}
 
-Transcript (First part):
-{chunk}
-
-Note: This is a partial transcript from a longer video. Answer based on the available content, and mention if more context might be needed."""
-            
-            return query_prompt  # This will be processed by the LLM
+Based on this content, here's my answer to your question:"""
             
     except Exception as e:
         return f"Error querying video transcript: {str(e)}"
@@ -1155,31 +1152,14 @@ def get_function_schema() -> List[Dict]:
         {
             "type": "function",
             "function": {
-                "name": "get_youtube_transcript",
-                "description": "Extract transcript/subtitles from YouTube videos. Use when user provides a YouTube URL or asks to extract transcript from a video.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "url": {
-                            "type": "string",
-                            "description": "YouTube video URL (supports various formats: youtube.com/watch?v=, youtu.be/, etc.)"
-                        }
-                    },
-                    "required": ["url"]
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
                 "name": "summarize_youtube_video",
-                "description": "Generate an AI summary of YouTube video content using the transcript. Use when user asks to summarize a YouTube video.",
+                "description": "Analyze and summarize YouTube video content using AI. Use when user asks to 'summarize', 'overview', or 'what is this video about' for a YouTube video.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "url": {
                             "type": "string",
-                            "description": "YouTube video URL to summarize"
+                            "description": "YouTube video URL to analyze"
                         }
                     },
                     "required": ["url"]
@@ -1190,17 +1170,17 @@ def get_function_schema() -> List[Dict]:
             "type": "function",
             "function": {
                 "name": "query_youtube_transcript",
-                "description": "Answer questions about YouTube video content based on the transcript. Use when user asks specific questions about a YouTube video.",
+                "description": "Answer specific questions about YouTube video content. Use when user asks questions like 'what does the video say about X', 'what are the main points', 'explain the part about Y', etc.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "url": {
                             "type": "string",
-                            "description": "YouTube video URL to query"
+                            "description": "YouTube video URL to analyze"
                         },
                         "question": {
                             "type": "string",
-                            "description": "Question to answer about the video content"
+                            "description": "Specific question about the video content"
                         }
                     },
                     "required": ["url", "question"]
@@ -1242,9 +1222,6 @@ def execute_function(function_name: str, arguments: dict) -> str:
             return get_crypto_price(symbol)
         elif function_name == "get_market_summary":
             return get_market_summary()
-        elif function_name == "get_youtube_transcript":
-            url = str(arguments.get("url", ""))
-            return get_youtube_transcript(url)
         elif function_name == "summarize_youtube_video":
             url = str(arguments.get("url", ""))
             return summarize_youtube_video(url)
