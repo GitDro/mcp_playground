@@ -27,6 +27,43 @@ uv run streamlit run app_subprocess.py
 
 Open http://localhost:8501
 
+#### Add to Windsurf IDE
+
+You can use these tools directly in Windsurf IDE through MCP integration:
+
+1. **Create Windsurf MCP config file**:
+   ```bash
+   mkdir -p ~/.codeium/windsurf
+   ```
+
+2. **Add this configuration** to `~/.codeium/windsurf/mcp_config.json`:
+   ```json
+   {
+     "mcpServers": {
+       "mcp-playground": {
+         "command": "/Users/YOUR_USERNAME/Documents/GitHub/mcp_playground/.venv/bin/python3",
+         "args": ["/Users/YOUR_USERNAME/Documents/GitHub/mcp_playground/mcp_server.py", "stdio"],
+         "cwd": "/Users/YOUR_USERNAME/Documents/GitHub/mcp_playground"
+       }
+     }
+   }
+   ```
+   
+   **Note**: Replace `YOUR_USERNAME` with your actual username, or use the full path to your project.
+
+3. **Restart Windsurf** and access tools via Cascade panel → Plugins
+
+**Available Tools in Windsurf:**
+- `web_search` - Real-time web search with DuckDuckGo
+- `analyze_url` - Website content analysis and summarization
+- `arxiv_search` - Academic paper search with deep PDF analysis
+- `get_stock_price` - Current stock prices and market data
+- `get_stock_history` - Historical stock performance
+- `get_crypto_price` - Cryptocurrency prices
+- `get_market_summary` - Market indices overview
+- `summarize_youtube_video` - AI-powered YouTube video summaries
+- `query_youtube_transcript` - Answer questions about YouTube videos
+
 #### Standalone MCP Server
 ```bash
 # Run as standalone MCP server (stdio mode)
@@ -182,5 +219,12 @@ ollama pull llama3.2
 uv sync
 python --version  # Requires Python 3.12+
 ```
+
+**Windsurf MCP integration issues?**
+- Ensure you're using the full absolute path to the virtual environment Python
+- Check that the path in `mcp_config.json` matches your actual project location
+- Restart Windsurf after adding the configuration
+- Test the server manually: `uv run python mcp_server.py stdio`
+- Tools will appear in Cascade panel → Plugins after restart
 
 ---
