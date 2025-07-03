@@ -45,7 +45,8 @@ async def get_mcp_tools():
             for tool in tools_data:
                 tools.append({
                     "name": tool.name, 
-                    "description": tool.description or f"Tool: {tool.name}"
+                    "description": tool.description or f"Tool: {tool.name}",
+                    "inputSchema": tool.inputSchema
                 })
             
             return tools
@@ -98,71 +99,22 @@ def get_ollama_models() -> List[str]:
         return []
 
 def create_function_schema_from_mcp_tools(mcp_tools: List[Dict]) -> List[Dict]:
-    """Convert MCP tools to OpenAI function schema format"""
+    """Convert MCP tools to OpenAI function schema format using FastMCP's native schemas"""
     schemas = []
     for tool in mcp_tools:
-        # Create a basic schema - FastMCP handles the detailed schema generation
+        # Use FastMCP's native schema generation instead of manual inference
         schema = {
             "type": "function",
             "function": {
                 "name": tool["name"],
                 "description": tool["description"],
-                "parameters": {
+                "parameters": tool.get("inputSchema", {
                     "type": "object",
                     "properties": {},
                     "required": []
-                }
+                })
             }
         }
-        
-        # Add basic parameter inference based on tool name
-        if "search" in tool["name"]:
-            schema["function"]["parameters"]["properties"]["query"] = {
-                "type": "string",
-                "description": "Search query"
-            }
-            schema["function"]["parameters"]["required"] = ["query"]
-            if "max_results" not in tool["name"]:
-                schema["function"]["parameters"]["properties"]["max_results"] = {
-                    "type": "integer",
-                    "description": "Maximum number of results"
-                }
-        elif "url" in tool["name"]:
-            schema["function"]["parameters"]["properties"]["url"] = {
-                "type": "string",
-                "description": "URL to analyze"
-            }
-            schema["function"]["parameters"]["required"] = ["url"]
-        elif "stock" in tool["name"]:
-            schema["function"]["parameters"]["properties"]["ticker"] = {
-                "type": "string",
-                "description": "Stock ticker symbol"
-            }
-            schema["function"]["parameters"]["required"] = ["ticker"]
-            if "history" in tool["name"]:
-                schema["function"]["parameters"]["properties"]["period"] = {
-                    "type": "string",
-                    "description": "Time period for historical data"
-                }
-        elif "crypto" in tool["name"]:
-            schema["function"]["parameters"]["properties"]["symbol"] = {
-                "type": "string",
-                "description": "Cryptocurrency symbol"
-            }
-            schema["function"]["parameters"]["required"] = ["symbol"]
-        elif "youtube" in tool["name"]:
-            schema["function"]["parameters"]["properties"]["url"] = {
-                "type": "string",
-                "description": "YouTube video URL"
-            }
-            schema["function"]["parameters"]["required"] = ["url"]
-            if "query" in tool["name"]:
-                schema["function"]["parameters"]["properties"]["question"] = {
-                    "type": "string",
-                    "description": "Question about the video"
-                }
-                schema["function"]["parameters"]["required"].append("question")
-        
         schemas.append(schema)
     
     return schemas

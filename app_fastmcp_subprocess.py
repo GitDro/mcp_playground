@@ -39,7 +39,8 @@ async def get_mcp_tools():
             for tool in tools_data:
                 tools.append({
                     "name": tool.name, 
-                    "description": tool.description or f"Tool: {tool.name}"
+                    "description": tool.description or f"Tool: {tool.name}",
+                    "inputSchema": tool.inputSchema
                 })
             
             return tools
@@ -83,80 +84,22 @@ def get_ollama_models() -> List[str]:
         return []
 
 def create_function_schema_from_mcp_tools(mcp_tools: List[Dict]) -> List[Dict]:
-    """Convert MCP tools to OpenAI function schema format"""
+    """Convert MCP tools to OpenAI function schema format using FastMCP's native schemas"""
     schemas = []
     for tool in mcp_tools:
-        tool_name = tool["name"]
+        # Use FastMCP's native schema generation instead of manual inference
         schema = {
             "type": "function",
             "function": {
-                "name": tool_name,
+                "name": tool["name"],
                 "description": tool["description"],
-                "parameters": {
+                "parameters": tool.get("inputSchema", {
                     "type": "object",
                     "properties": {},
                     "required": []
-                }
+                })
             }
         }
-        
-        # Add basic parameter inference based on tool name
-        if "search" in tool_name and "arxiv" not in tool_name:
-            schema["function"]["parameters"]["properties"]["query"] = {
-                "type": "string",
-                "description": "Search query"
-            }
-            schema["function"]["parameters"]["required"] = ["query"]
-            schema["function"]["parameters"]["properties"]["max_results"] = {
-                "type": "integer",
-                "description": "Maximum number of results"
-            }
-        elif tool_name == "arxiv_search":
-            schema["function"]["parameters"]["properties"]["query"] = {
-                "type": "string",
-                "description": "Academic search query for finding research papers"
-            }
-            schema["function"]["parameters"]["required"] = ["query"]
-            schema["function"]["parameters"]["properties"]["max_results"] = {
-                "type": "integer",
-                "description": "Maximum number of papers to return"
-            }
-        elif "url" in tool_name:
-            schema["function"]["parameters"]["properties"]["url"] = {
-                "type": "string",
-                "description": "URL to analyze"
-            }
-            schema["function"]["parameters"]["required"] = ["url"]
-        elif "stock" in tool_name:
-            schema["function"]["parameters"]["properties"]["ticker"] = {
-                "type": "string",
-                "description": "Stock ticker symbol"
-            }
-            schema["function"]["parameters"]["required"] = ["ticker"]
-            if "history" in tool_name:
-                schema["function"]["parameters"]["properties"]["period"] = {
-                    "type": "string",
-                    "description": "Time period for historical data"
-                }
-        elif "crypto" in tool_name:
-            schema["function"]["parameters"]["properties"]["symbol"] = {
-                "type": "string",
-                "description": "Cryptocurrency symbol"
-            }
-            schema["function"]["parameters"]["required"] = ["symbol"]
-        elif "youtube" in tool_name:
-            schema["function"]["parameters"]["properties"]["url"] = {
-                "type": "string",
-                "description": "YouTube video URL"
-            }
-            schema["function"]["parameters"]["required"] = ["url"]
-            if "query" in tool_name:
-                schema["function"]["parameters"]["properties"]["question"] = {
-                    "type": "string",
-                    "description": "Question about the video"
-                }
-                schema["function"]["parameters"]["required"].append("question")
-        
         schemas.append(schema)
     
     return schemas

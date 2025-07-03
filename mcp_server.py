@@ -374,13 +374,15 @@ def _clean_markdown_text(text: str) -> str:
     return text
 
 @mcp.tool
-def arxiv_search(query: str, max_results: int = 3) -> str:
+def arxiv_search(query: str, max_results: Optional[int] = 3) -> str:
     """Search arXiv for academic papers and research publications"""
     try:
         import arxiv
         
-        # Validate and sanitize inputs
-        max_results = max(1, min(max_results or 5, 10))
+        # Validate and sanitize inputs - handle None case explicitly
+        if max_results is None:
+            max_results = 3
+        max_results = max(1, min(max_results, 10))
         
         if not query or not query.strip():
             return "Error: Search query cannot be empty"
