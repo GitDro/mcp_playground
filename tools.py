@@ -875,6 +875,56 @@ def _get_transcript_db():
     from tinydb import TinyDB
     return TinyDB('transcripts.json')
 
+def _filter_sponsor_content(transcript_text: str) -> str:
+    """Remove sponsor segments and promotional content from transcript"""
+    import re
+    
+    # Common patterns for sponsor/ad content
+    sponsor_patterns = [
+        # Sponsor mentions
+        r'this video is sponsored by[^.]*\.',
+        r'our sponsor[^.]*\.',
+        r'today\'?s sponsor[^.]*\.',
+        r'brought to you by[^.]*\.',
+        r'special thanks to[^.]*\.',
+        r'thanks to.*?for sponsoring[^.]*\.',
+        
+        # Common sponsor transitions
+        r'but first[^.]*sponsor[^.]*\.',
+        r'before we get started[^.]*sponsor[^.]*\.',
+        r'speaking of[^.]*\.',
+        
+        # Skillshare/common sponsors
+        r'skillshare[^.]*\.',
+        r'nordvpn[^.]*\.',
+        r'squarespace[^.]*\.',
+        r'brilliant[^.]*\.',
+        r'audible[^.]*\.',
+        r'honey[^.]*\.',
+        r'raid shadow legends[^.]*\.',
+        
+        # Subscribe/like requests (often clustered with ads)
+        r'don\'?t forget to like and subscribe[^.]*\.',
+        r'if you enjoyed this video[^.]*subscribe[^.]*\.',
+        r'smash that like button[^.]*\.',
+        
+        # Merchandise/channel promotion
+        r'check out my merch[^.]*\.',
+        r'link in the description[^.]*\.',
+        r'patreon[^.]*\.',
+    ]
+    
+    # Apply filters (case insensitive)
+    filtered_text = transcript_text
+    for pattern in sponsor_patterns:
+        filtered_text = re.sub(pattern, '', filtered_text, flags=re.IGNORECASE)
+    
+    # Remove multiple spaces and clean up
+    filtered_text = re.sub(r'\s+', ' ', filtered_text)
+    filtered_text = filtered_text.strip()
+    
+    return filtered_text
+
 def _get_youtube_transcript(url: str) -> str:
     """Internal function to extract transcript from YouTube video with caching"""
     try:
@@ -941,6 +991,9 @@ def summarize_youtube_video(url: str) -> str:
         title = lines[0].replace('**', '') if lines else "YouTube Video"
         transcript_text = lines[2] if len(lines) > 2 else transcript_result
         
+        # Filter out sponsor/ad content
+        transcript_text = _filter_sponsor_content(transcript_text)
+        
         # Calculate some basic stats
         word_count = len(transcript_text.split())
         duration_estimate = f"~{word_count // 150} minutes" if word_count > 150 else "< 1 minute"
@@ -971,15 +1024,14 @@ def summarize_youtube_video(url: str) -> str:
             note = "\n\n*Note: This includes the beginning and ending of a longer video, with the middle section omitted.*"
         
         # Return formatted content that naturally prompts the LLM to summarize
-        return f"""I'll analyze this YouTube video for you.
+        return f"""Analyze this YouTube video content and provide a focused summary.
 
-**Video:** {title}
-**Duration:** {duration_estimate} ({word_count:,} words)
+Video: {title} ({duration_estimate}, {word_count:,} words)
 
-**Transcript:**
+Transcript content:
 {content}{note}
 
-Based on this content, here's my analysis and summary:"""
+Provide a concise summary focusing on the main content, key points, and conclusions. Ignore any sponsor mentions, advertisements, or channel promotion content."""
             
     except Exception as e:
         return f"Error summarizing video: {str(e)}"
@@ -997,6 +1049,9 @@ def query_youtube_transcript(url: str, question: str) -> str:
         lines = transcript_result.split('\n', 2)
         title = lines[0].replace('**', '') if lines else "YouTube Video"
         transcript_text = lines[2] if len(lines) > 2 else transcript_result
+        
+        # Filter out sponsor/ad content
+        transcript_text = _filter_sponsor_content(transcript_text)
         
         # Calculate some basic stats
         word_count = len(transcript_text.split())
@@ -1035,7 +1090,7 @@ Video: {title} ({duration_estimate}, {word_count:,} words)
 Transcript content:
 {content}{note}
 
-Answer the question "{question}" based on the above transcript content."""
+Focus on answering "{question}" based on the main video content. Ignore any sponsor mentions, advertisements, or channel promotion content."""
             
     except Exception as e:
         return f"Error querying video transcript: {str(e)}"
