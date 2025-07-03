@@ -26,7 +26,7 @@ Open http://localhost:8501
 - **📄 URL Analysis**: Analyze and summarize content from any website  
 - **📚 arXiv Search**: Find and deeply analyze academic papers with structured insights
 - **📈 Financial Data**: Get stock prices, crypto rates, and market summaries without API keys
-- **🎥 YouTube Transcripts**: Extract, summarize, and query video content from YouTube links
+- **🎥 YouTube Analysis**: Analyze and summarize video content from YouTube links (includes beginning + ending for longer videos)
 - **🎛️ Function Toggle**: Enable/disable AI tool usage per conversation
 
 ## 🎯 Example Prompts

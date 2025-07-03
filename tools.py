@@ -946,15 +946,29 @@ def summarize_youtube_video(url: str) -> str:
         duration_estimate = f"~{word_count // 150} minutes" if word_count > 150 else "< 1 minute"
         
         # Prepare content for LLM analysis with natural prompt
-        max_content_length = 8000  # Increased for better context (~8k tokens)
+        max_content_length = 8000  # Total character budget (~8k tokens)
         
         if len(transcript_text) <= max_content_length:
             content = transcript_text
             note = ""
         else:
-            # For long videos, include first part and mention it's partial
-            content = transcript_text[:max_content_length]
-            note = "\n\n*Note: This is a partial transcript from a longer video.*"
+            # For long videos, include beginning + end (many videos have summaries at the end)
+            words = transcript_text.split()
+            total_words = len(words)
+            
+            # Use ~75% for beginning, ~25% for end
+            beginning_chars = int(max_content_length * 0.75)
+            end_words = min(2000, total_words // 4)  # Last ~2k words or 25% of video
+            
+            # Get beginning portion
+            beginning = transcript_text[:beginning_chars]
+            
+            # Get end portion
+            end_text = ' '.join(words[-end_words:])
+            
+            # Combine with separator
+            content = f"{beginning}\n\n--- [MIDDLE SECTION OMITTED] ---\n\n{end_text}"
+            note = "\n\n*Note: This includes the beginning and ending of a longer video, with the middle section omitted.*"
         
         # Return formatted content that naturally prompts the LLM to summarize
         return f"""I'll analyze this YouTube video for you.
@@ -989,15 +1003,29 @@ def query_youtube_transcript(url: str, question: str) -> str:
         duration_estimate = f"~{word_count // 150} minutes" if word_count > 150 else "< 1 minute"
         
         # Prepare content for LLM analysis with natural prompt  
-        max_content_length = 8000  # Increased for better context (~8k tokens)
+        max_content_length = 8000  # Total character budget (~8k tokens)
         
         if len(transcript_text) <= max_content_length:
             content = transcript_text
             note = ""
         else:
-            # For long videos, include first part and mention it's partial
-            content = transcript_text[:max_content_length]
-            note = "\n\n*Note: This is a partial transcript from a longer video.*"
+            # For long videos, include beginning + end (many videos have summaries at the end)
+            words = transcript_text.split()
+            total_words = len(words)
+            
+            # Use ~75% for beginning, ~25% for end
+            beginning_chars = int(max_content_length * 0.75)
+            end_words = min(2000, total_words // 4)  # Last ~2k words or 25% of video
+            
+            # Get beginning portion
+            beginning = transcript_text[:beginning_chars]
+            
+            # Get end portion
+            end_text = ' '.join(words[-end_words:])
+            
+            # Combine with separator
+            content = f"{beginning}\n\n--- [MIDDLE SECTION OMITTED] ---\n\n{end_text}"
+            note = "\n\n*Note: This includes the beginning and ending of a longer video, with the middle section omitted.*"
         
         # Return formatted content that naturally prompts the LLM to answer the question
         return f"""I'll analyze this YouTube video to answer your question.
