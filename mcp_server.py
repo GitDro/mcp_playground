@@ -309,14 +309,17 @@ def _analyze_paper_with_structured_output(full_text: str) -> Optional[PaperAnaly
             logger.info(f"Truncated text from {original_length} to {len(full_text)} chars")
         
         # Create comprehensive prompt for paper analysis
-        prompt = f"""Analyze this research paper and extract key insights for each section.
+        prompt = f"""You must analyze this research paper and provide structured insights in JSON format.
 
-For each section that exists in the paper, provide 2-3 concise bullet points:
+Examine the paper text and provide analysis for these sections (include ALL sections that apply):
 
-Introduction: Focus on the main problem/gap, key contribution, and novelty
-Methods: Focus on novel techniques, key innovations, and unique aspects  
-Results: Focus on performance improvements, comparisons, and significant findings
-Discussion: Focus on conclusions, limitations, and future work (be sure to include limitations)
+1. Introduction: What is the main problem/gap? What is the key contribution? What makes this novel?
+2. Methods: What novel techniques are used? What are the key innovations? What unique approaches?
+3. Results: What performance improvements are shown? What comparisons are made? What significant findings?
+4. Discussion: What conclusions are drawn? What limitations exist? What future work is suggested?
+
+For each section that exists in the paper, provide 2-3 specific, informative bullet points.
+You MUST respond in the exact JSON format requested. Do not include any text outside the JSON.
 
 Paper text:
 {full_text}"""
@@ -331,15 +334,27 @@ Paper text:
             model='llama3.2',  # Use available model
             format=PaperAnalysis.model_json_schema(),
             options={
-                'temperature': 0.2,  # Lower temperature for consistency
-                'num_predict': 800   # Enough tokens for structured response
+                'temperature': 0.3,  # Slightly higher temperature for more content
+                'num_predict': 1200,  # More tokens for complete analysis
+                'top_p': 0.9,  # Add top_p for better generation
+                'repeat_penalty': 1.1  # Prevent repetition
             }
         )
         
         logger.info(f"Got Ollama response, length: {len(response.message.content)}")
         
+        # Check if response is too short (likely an error)
+        if len(response.message.content.strip()) < 20:
+            logger.warning(f"Ollama response too short: '{response.message.content}'")
+            return None
+        
         # Parse and validate the structured response
-        analysis = PaperAnalysis.model_validate_json(response.message.content)
+        try:
+            analysis = PaperAnalysis.model_validate_json(response.message.content)
+        except Exception as parse_error:
+            logger.error(f"Failed to parse Ollama response as JSON: {parse_error}")
+            logger.error(f"Raw response: {response.message.content}")
+            return None
         
         # Check if analysis has content
         sections_with_content = sum([
@@ -350,6 +365,12 @@ Paper text:
         ])
         
         logger.info(f"Analysis parsed with {sections_with_content} sections containing content")
+        
+        # If no sections have content, return None to indicate failure
+        if sections_with_content == 0:
+            logger.warning("Analysis succeeded but contains no content in any section")
+            return None
+            
         return analysis
         
     except Exception as e:
