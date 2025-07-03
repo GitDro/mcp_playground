@@ -1,0 +1,83 @@
+# Claude Development Notes
+
+## Dependency Management
+- **Always use `uv` for dependency management** instead of `pip` or `python -m`
+- Run commands with `uv run python` instead of just `python`
+- Install packages with `uv add package-name`
+
+## FastMCP Schema Modernization
+
+### Issue Fixed
+The `create_function_schema_from_mcp_tools` function was manually inferring OpenAI function schemas based on tool names, which is unnecessary since FastMCP automatically generates proper schemas from Python type hints.
+
+### Before (Manual Schema Inference)
+```python
+# 70+ lines of manual parameter inference
+if "search" in tool_name:
+    schema["function"]["parameters"]["properties"]["query"] = {
+        "type": "string",
+        "description": "Search query"
+    }
+    # ... more manual work
+```
+
+### After (Native FastMCP Schemas)
+```python
+def create_function_schema_from_mcp_tools(mcp_tools: List[Dict]) -> List[Dict]:
+    """Convert MCP tools to OpenAI function schema format using FastMCP's native schemas"""
+    schemas = []
+    for tool in mcp_tools:
+        # Use FastMCP's native schema generation instead of manual inference
+        schema = {
+            "type": "function",
+            "function": {
+                "name": tool["name"],
+                "description": tool["description"],
+                "parameters": tool.get("inputSchema", {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                })
+            }
+        }
+        schemas.append(schema)
+    
+    return schemas
+```
+
+### Benefits
+- **90% less code** - Eliminated 70+ lines of manual schema inference
+- **Automatic accuracy** - FastMCP generates schemas directly from Python type hints
+- **Maintainability** - No need to manually update schemas when tools change
+- **Type safety** - Proper validation and defaults from actual function signatures
+
+### Example Generated Schema
+```python
+# From @mcp.tool decorator:
+# def web_search(query: str, max_results: int = 5) -> str:
+
+# FastMCP automatically generates:
+{
+    'properties': {
+        'query': {'title': 'Query', 'type': 'string'}, 
+        'max_results': {'default': 5, 'title': 'Max Results', 'type': 'integer'}
+    }, 
+    'required': ['query'], 
+    'type': 'object'
+}
+```
+
+## Testing Commands
+```bash
+# Test MCP server
+uv run python test_mcp.py
+
+# Run Streamlit apps
+uv run streamlit run app.py              # Main app (in-memory transport)
+uv run streamlit run app_subprocess.py  # Subprocess transport version
+```
+
+## Architecture Notes
+- **In-memory transport**: `Client(mcp)` - Direct server instance, fastest
+- **Subprocess transport**: `Client("mcp_server.py")` - Auto-inferred, client-server separation
+- Both approaches use identical tool schemas generated automatically from type hints

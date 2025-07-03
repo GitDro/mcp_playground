@@ -1,6 +1,8 @@
 # MCP Playground
 
-A **minimal** Streamlit chat app with Ollama integration and function calling capabilities.
+A **modern** Streamlit chat app with Ollama integration and AI-powered tool calling capabilities.
+
+> **🚀 Built with Modern Standards!** This project uses the Model Context Protocol (MCP) for scalable, standards-compliant tool execution.
 
 ## 🚀 Quick Start
 
@@ -10,14 +12,66 @@ A **minimal** Streamlit chat app with Ollama integration and function calling ca
 3. **Pull a model**: `ollama pull llama3.2`
 
 ### Run the App
+
 ```bash
 git clone <your-repo>
-cd mcp_arena
+cd mcp_playground
 uv sync
+
+# Run the main application
 uv run streamlit run app.py
+
+# Or run the subprocess version
+uv run streamlit run app_subprocess.py
 ```
 
 Open http://localhost:8501
+
+#### Add to Windsurf IDE
+
+You can use these tools directly in Windsurf IDE through MCP integration:
+
+1. **Create Windsurf MCP config file**:
+   ```bash
+   mkdir -p ~/.codeium/windsurf
+   ```
+
+2. **Add this configuration** to `~/.codeium/windsurf/mcp_config.json`:
+   ```json
+   {
+     "mcpServers": {
+       "mcp-playground": {
+         "command": "/Users/YOUR_USERNAME/Documents/GitHub/mcp_playground/.venv/bin/python3",
+         "args": ["/Users/YOUR_USERNAME/Documents/GitHub/mcp_playground/mcp_server.py", "stdio"],
+         "cwd": "/Users/YOUR_USERNAME/Documents/GitHub/mcp_playground"
+       }
+     }
+   }
+   ```
+   
+   **Note**: Replace `YOUR_USERNAME` with your actual username, or use the full path to your project.
+
+3. **Restart Windsurf** and access tools via Cascade panel → Plugins
+
+**Available Tools in Windsurf:**
+- `web_search` - Real-time web search with DuckDuckGo
+- `analyze_url` - Website content analysis and summarization
+- `arxiv_search` - Academic paper search with deep PDF analysis
+- `get_stock_price` - Current stock prices and market data
+- `get_stock_history` - Historical stock performance
+- `get_crypto_price` - Cryptocurrency prices
+- `get_market_summary` - Market indices overview
+- `summarize_youtube_video` - AI-powered YouTube video summaries
+- `query_youtube_transcript` - Answer questions about YouTube videos
+
+#### Standalone MCP Server
+```bash
+# Run as standalone MCP server (stdio mode)
+uv run python mcp_server.py
+
+# Run as HTTP server for web integration
+uv run python mcp_server.py http 8000
+```
 
 ## ✨ Capabilities
 
@@ -56,10 +110,95 @@ Open http://localhost:8501
 
 ## 🏗️ Architecture
 
+### Core Files
 ```
-app.py          # Main Streamlit application & chat logic
-tools.py        # Function calling: web search, URL analysis, arXiv
+app.py          # Main Streamlit application with in-memory MCP integration
+app_subprocess.py # Alternative version using subprocess MCP transport
+mcp_server.py   # MCP server with all tools using @mcp.tool decorators
 ui_config.py    # UI styling and system prompts
+```
+
+### Key Benefits of Modern MCP Architecture
+
+- **🏗️ Standards-Compliant**: Uses the official Model Context Protocol (MCP) standard
+- **🎯 Automatic Schema Generation**: Automatically generates tool schemas from Python type hints
+- **🔧 Simplified Tool Definition**: Clean `@mcp.tool` decorators replace manual schema definitions
+- **📡 Multiple Transport Support**: Supports stdio, HTTP, and SSE transports
+- **🔌 Better Integration**: Can be used as standalone server or embedded in applications
+- **🚀 Scalable**: Built for production use with proper error handling and logging
+
+## 🔧 Using the MCP Server
+
+### As a Standalone Server
+
+The MCP server can run independently and be used by any MCP-compatible client:
+
+```bash
+# Run in stdio mode (for local development)
+uv run python mcp_server.py stdio
+
+# Run as HTTP server (for web applications)
+uv run python mcp_server.py http 8000
+
+# Run as HTTP server with custom host
+uv run python mcp_server.py http 8000 localhost
+```
+
+### Integration with Other Applications
+
+The server provides all the same tools available in the Streamlit app:
+
+- **web_search**: Real-time web search using DuckDuckGo
+- **analyze_url**: Analyze and extract information from web pages
+- **arxiv_search**: Search and analyze academic papers with deep PDF analysis
+- **get_stock_price**: Current stock prices and information
+- **get_stock_history**: Historical stock data and trends
+- **get_crypto_price**: Cryptocurrency prices
+- **get_market_summary**: Market indices overview
+- **summarize_youtube_video**: AI-powered YouTube video summaries
+- **query_youtube_transcript**: Answer questions about YouTube video content
+
+### MCP Client Usage
+
+#### Option 1: In-Memory Transport (Recommended for embedded use)
+```python
+from fastmcp import Client
+from mcp_server import mcp
+import asyncio
+
+async def use_mcp_tools():
+    # Direct server instance - fastest, embedded approach
+    async with Client(mcp) as client:
+        # List available tools
+        tools = await client.list_tools()
+        print(f"Available tools: {[t.name for t in tools]}")
+        
+        # Call a tool
+        result = await client.call_tool("web_search", {"query": "MCP framework"})
+        print(result.content[0].text)
+
+# Run the example
+asyncio.run(use_mcp_tools())
+```
+
+#### Option 2: Subprocess Transport (For client-server separation)
+```python
+from fastmcp import Client
+import asyncio
+
+async def use_mcp_tools():
+    # Auto-inferred subprocess transport - handles process management
+    async with Client("mcp_server.py") as client:
+        # List available tools
+        tools = await client.list_tools()
+        print(f"Available tools: {[t.name for t in tools]}")
+        
+        # Call a tool
+        result = await client.call_tool("web_search", {"query": "MCP framework"})
+        print(result.content[0].text)
+
+# Run the example
+asyncio.run(use_mcp_tools())
 ```
 
 ## 🔧 Troubleshooting
@@ -81,6 +220,11 @@ uv sync
 python --version  # Requires Python 3.12+
 ```
 
----
+**Windsurf MCP integration issues?**
+- Ensure you're using the full absolute path to the virtual environment Python
+- Check that the path in `mcp_config.json` matches your actual project location
+- Restart Windsurf after adding the configuration
+- Test the server manually: `uv run python mcp_server.py stdio`
+- Tools will appear in Cascade panel → Plugins after restart
 
-**Simple. Fast. Actually works.** 🚀
+---

@@ -1,12 +1,9 @@
 """
-MCP Playground - FastMCP Version
-Simple Streamlit Chat App with FastMCP Integration
+MCP Playground - FastMCP Subprocess Version
+Streamlit Chat App with FastMCP PythonStdioTransport
 
-A modernized chat application that integrates with Ollama for local AI
-and uses FastMCP for tool execution.
-
-Author: MCP Arena Team
-Version: 2.0.0 (FastMCP)
+This version uses PythonStdioTransport to run the FastMCP server as a subprocess,
+demonstrating true client-server separation with proper transport handling.
 """
 
 import streamlit as st
@@ -18,26 +15,23 @@ from datetime import datetime
 # Import our modules
 from ui_config import STREAMLIT_STYLE, TOOLS_HELP_TEXT, get_system_prompt
 
-# Import FastMCP client
+# Import FastMCP client and transport
 from fastmcp import Client
+from fastmcp.client.transports import PythonStdioTransport
 
-# Page config - Minimalist setup
+# Page config
 st.set_page_config(
-    page_title="MCP Playground",
+    page_title="MCP Playground (Subprocess)",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
 async def get_mcp_tools():
-    """Get available tools from the FastMCP server using in-memory transport"""
+    """Get available tools from the FastMCP server using auto-inferred subprocess transport"""
     try:
-        # Import the FastMCP server instance
-        from mcp_server import mcp
-        from fastmcp import Client
-        
-        # Create a client with in-memory transport (FastMCPTransport auto-inferred)
-        async with Client(mcp) as client:
+        # Auto-inferred transport from .py file (FastMCP handles subprocess automatically)
+        async with Client("mcp_server.py") as client:
             tools_data = await client.list_tools()
             
             # Convert to the format expected by the app
@@ -55,14 +49,10 @@ async def get_mcp_tools():
         return []
 
 async def call_mcp_tool(tool_name: str, arguments: dict):
-    """Call a tool using the FastMCP client with in-memory transport"""
+    """Call a tool using the FastMCP client with auto-inferred subprocess transport"""
     try:
-        # Import the FastMCP server instance
-        from mcp_server import mcp
-        from fastmcp import Client
-        
-        # Create a client with in-memory transport
-        async with Client(mcp) as client:
+        # Auto-inferred transport from .py file (FastMCP handles subprocess automatically)
+        async with Client("mcp_server.py") as client:
             result = await client.call_tool(tool_name, arguments)
             
             # Extract the content from the result (updated for MCP 2.10.0+)
@@ -82,12 +72,7 @@ async def call_mcp_tool(tool_name: str, arguments: dict):
         return f"Error calling tool {tool_name}: {str(e)}"
 
 def get_ollama_models() -> List[str]:
-    """
-    Fetch available Ollama models from the local Ollama instance.
-    
-    Returns:
-        List of model names, empty list if Ollama is not accessible
-    """
+    """Fetch available Ollama models from the local Ollama instance."""
     try:
         response = requests.get("http://localhost:11434/api/tags", timeout=5)
         if response.status_code == 200:
@@ -121,16 +106,7 @@ def create_function_schema_from_mcp_tools(mcp_tools: List[Dict]) -> List[Dict]:
 
 async def chat_with_ollama_and_mcp(model: str, message: str, conversation_history: List[Dict], use_functions: bool = True) -> str:
     """
-    Send chat message to Ollama with FastMCP function calling support.
-    
-    Args:
-        model: Ollama model name to use
-        message: User's message
-        conversation_history: Previous messages in the conversation
-        use_functions: Whether to enable function calling
-        
-    Returns:
-        AI response string, potentially including function call results
+    Send chat message to Ollama with FastMCP function calling support using subprocess transport.
     """
     try:
         # Get MCP tools if functions are enabled
@@ -336,7 +312,7 @@ col1, col2, col3 = st.columns([1, 3, 1])
 
 with col2:
     # Clean header
-    st.markdown("# **MCP Playground**")
+    st.markdown("# **MCP Playground (Subprocess)**")
     
     # Status section with expandable hierarchy
     models = get_ollama_models()

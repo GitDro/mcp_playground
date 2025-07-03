@@ -1,22 +1,21 @@
 """
-Function calling tools for MCP Playground
+FastMCP Server for MCP Playground
 
-This module contains all the tool functions and their schemas for the
-Ollama function calling system.
+This module contains all the tool functions converted to FastMCP format.
+The server provides web search, URL analysis, arXiv search, financial data,
+and YouTube analysis capabilities.
 """
 
-from typing import List, Dict, Optional, Tuple
-from duckduckgo_search import DDGS
-import httpx
-import re
-import tempfile
 import os
 import json
-import requests
+import tempfile
 import logging
-from pydantic import BaseModel, Field
+from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+
+from fastmcp import FastMCP, Context
+from pydantic import BaseModel, Field
 
 # Load environment variables
 load_dotenv()
@@ -25,6 +24,8 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Create the FastMCP server
+mcp = FastMCP(name="MCPPlaygroundServer")
 
 # ============================================================================
 # PYDANTIC MODELS FOR STRUCTURED OUTPUTS
@@ -57,18 +58,105 @@ class PaperAnalysis(BaseModel):
         description="Conclusions, limitations, and future work"
     )
 
-
 # ============================================================================
-# TOOL FUNCTIONS
+# HELPER FUNCTIONS AND UTILITIES
 # ============================================================================
 
-def web_search(query: str, max_results: int = 5) -> str:
-    """Search the web using DuckDuckGo"""
+# Financial data cache configuration
+def _get_cache_directory() -> str:
+    """Get writable cache directory, falling back to temp if needed"""
+    cache_dir = os.getenv('CACHE_DIRECTORY')
+    if not cache_dir:
+        # Try user cache directory first
+        cache_dir = os.path.expanduser('~/.cache/mcp_playground')
+    
     try:
-        # Ensure max_results is an integer (in case it comes as string from JSON)
-        if isinstance(max_results, str):
-            max_results = int(max_results)
-        max_results = max(1, min(max_results or 5, 10))  # Clamp between 1 and 10
+        os.makedirs(cache_dir, exist_ok=True)
+        # Test if directory is writable
+        test_file = os.path.join(cache_dir, '.write_test')
+        with open(test_file, 'w') as f:
+            f.write('test')
+        os.remove(test_file)
+        return cache_dir
+    except (OSError, PermissionError):
+        # Fallback to temp directory
+        import tempfile
+        return tempfile.gettempdir()
+
+CACHE_DIR = _get_cache_directory()
+MAX_CACHE_DAYS = int(os.getenv('MAX_CACHE_DAYS', '7'))
+
+def _get_cache_file_path(ticker: str, date_str: str = None) -> str:
+    """Get the cache file path for a ticker on a specific date"""
+    if date_str is None:
+        date_str = datetime.now().strftime('%Y-%m-%d')
+    
+    cache_date_dir = os.path.join(CACHE_DIR, date_str)
+    os.makedirs(cache_date_dir, exist_ok=True)
+    return os.path.join(cache_date_dir, f"{ticker.upper()}.json")
+
+def _load_cached_data(ticker: str) -> Optional[Dict]:
+    """Load cached stock data for today if it exists"""
+    try:
+        cache_file = _get_cache_file_path(ticker)
+        if os.path.exists(cache_file):
+            with open(cache_file, 'r') as f:
+                data = json.load(f)
+                # Check if data is from today
+                if data.get('date') == datetime.now().strftime('%Y-%m-%d'):
+                    return data
+        return None
+    except Exception:
+        return None
+
+def _save_cached_data(ticker: str, data: Dict) -> None:
+    """Save stock data to cache"""
+    try:
+        data['date'] = datetime.now().strftime('%Y-%m-%d')
+        data['cached_at'] = datetime.now().isoformat()
+        
+        cache_file = _get_cache_file_path(ticker)
+        with open(cache_file, 'w') as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        logger.warning(f"Failed to cache data for {ticker}: {e}")
+
+def _cleanup_old_cache() -> None:
+    """Remove cache directories older than MAX_CACHE_DAYS"""
+    try:
+        if not os.path.exists(CACHE_DIR):
+            return
+            
+        cutoff_date = datetime.now() - timedelta(days=MAX_CACHE_DAYS)
+        
+        for item in os.listdir(CACHE_DIR):
+            item_path = os.path.join(CACHE_DIR, item)
+            if os.path.isdir(item_path):
+                try:
+                    # Check if directory name is a date
+                    dir_date = datetime.strptime(item, '%Y-%m-%d')
+                    if dir_date < cutoff_date:
+                        import shutil
+                        shutil.rmtree(item_path)
+                        logger.info(f"Cleaned up old cache directory: {item}")
+                except ValueError:
+                    # Not a date directory, skip
+                    continue
+    except Exception as e:
+        logger.warning(f"Cache cleanup failed: {e}")
+
+# ============================================================================
+# FASTMCP TOOLS - WEB SEARCH AND URL ANALYSIS
+# ============================================================================
+
+@mcp.tool
+def web_search(query: str, max_results: int = 5) -> str:
+    """Search the web using DuckDuckGo for current information"""
+    try:
+        from duckduckgo_search import DDGS
+        
+        # Ensure max_results is an integer and within bounds
+        max_results = max(1, min(max_results or 5, 10))
         
         # Validate query
         if not query or not query.strip():
@@ -95,10 +183,12 @@ def web_search(query: str, max_results: int = 5) -> str:
     except Exception as e:
         return f"Error performing search: {str(e)}"
 
-
+@mcp.tool
 def analyze_url(url: str) -> str:
-    """Analyze a URL and return basic info"""
+    """Analyze a URL and return basic information about the webpage"""
     try:
+        import httpx
+        
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
@@ -127,6 +217,9 @@ def analyze_url(url: str) -> str:
     except Exception as e:
         return f"Error analyzing URL: {str(e)}"
 
+# ============================================================================
+# FASTMCP TOOLS - ARXIV SEARCH AND ACADEMIC PAPERS
+# ============================================================================
 
 def _enhance_arxiv_query(query: str) -> str:
     """Enhance search query for better arXiv results"""
@@ -147,7 +240,6 @@ def _enhance_arxiv_query(query: str) -> str:
     
     # For 1-2 word queries, search in both title and abstract
     return f"ti:{query} OR abs:{query}"
-
 
 def _filter_relevant_papers(results, original_query: str, max_results: int):
     """Filter papers for relevance to the original query"""
@@ -180,11 +272,11 @@ def _filter_relevant_papers(results, original_query: str, max_results: int):
     scored_results.sort(key=lambda x: x[0], reverse=True)
     return [paper for score, paper in scored_results[:max_results] if score > 0]
 
-
-def extract_paper_content(pdf_url: str) -> Optional[PaperAnalysis]:
+def _extract_paper_content(pdf_url: str) -> Optional[PaperAnalysis]:
     """Extract structured content from arXiv PDF using LLM analysis"""
     try:
         import fitz  # PyMuPDF
+        import httpx
         logger.info(f"Starting PDF analysis for {pdf_url}")
         
         # Download PDF to temporary file
@@ -225,7 +317,6 @@ def extract_paper_content(pdf_url: str) -> Optional[PaperAnalysis]:
         logger.error(f"Error extracting paper content: {e}")
         return None
 
-
 def _analyze_paper_with_structured_output(full_text: str) -> Optional[PaperAnalysis]:
     """Use Ollama structured output to analyze a research paper"""
     try:
@@ -238,14 +329,17 @@ def _analyze_paper_with_structured_output(full_text: str) -> Optional[PaperAnaly
             logger.info(f"Truncated text from {original_length} to {len(full_text)} chars")
         
         # Create comprehensive prompt for paper analysis
-        prompt = f"""Analyze this research paper and extract key insights for each section.
+        prompt = f"""You must analyze this research paper and provide structured insights in JSON format.
 
-For each section that exists in the paper, provide 2-3 concise bullet points:
+Examine the paper text and provide analysis for these sections (include ALL sections that apply):
 
-Introduction: Focus on the main problem/gap, key contribution, and novelty
-Methods: Focus on novel techniques, key innovations, and unique aspects  
-Results: Focus on performance improvements, comparisons, and significant findings
-Discussion: Focus on conclusions, limitations, and future work (be sure to include limitations)
+1. Introduction: What is the main problem/gap? What is the key contribution? What makes this novel?
+2. Methods: What novel techniques are used? What are the key innovations? What unique approaches?
+3. Results: What performance improvements are shown? What comparisons are made? What significant findings?
+4. Discussion: What conclusions are drawn? What limitations exist? What future work is suggested?
+
+For each section that exists in the paper, provide 2-3 specific, informative bullet points.
+You MUST respond in the exact JSON format requested. Do not include any text outside the JSON.
 
 Paper text:
 {full_text}"""
@@ -257,18 +351,30 @@ Paper text:
                 'role': 'user',
                 'content': prompt,
             }],
-            model='llama3.2',  # Use available model
+            model='llama3.2',  # Use available model, might make it dynamic
             format=PaperAnalysis.model_json_schema(),
             options={
-                'temperature': 0.2,  # Lower temperature for consistency
-                'num_predict': 800   # Enough tokens for structured response
+                'temperature': 0.2,  # Slightly higher temperature for more content
+                'num_predict': 1200,  # More tokens for complete analysis
+                'top_p': 0.9,  # Add top_p for better generation
+                'repeat_penalty': 1.1  # Prevent repetition
             }
         )
         
         logger.info(f"Got Ollama response, length: {len(response.message.content)}")
         
+        # Check if response is too short (likely an error)
+        if len(response.message.content.strip()) < 20:
+            logger.warning(f"Ollama response too short: '{response.message.content}'")
+            return None
+        
         # Parse and validate the structured response
-        analysis = PaperAnalysis.model_validate_json(response.message.content)
+        try:
+            analysis = PaperAnalysis.model_validate_json(response.message.content)
+        except Exception as parse_error:
+            logger.error(f"Failed to parse Ollama response as JSON: {parse_error}")
+            logger.error(f"Raw response: {response.message.content}")
+            return None
         
         # Check if analysis has content
         sections_with_content = sum([
@@ -279,16 +385,17 @@ Paper text:
         ])
         
         logger.info(f"Analysis parsed with {sections_with_content} sections containing content")
+        
+        # If no sections have content, return None to indicate failure
+        if sections_with_content == 0:
+            logger.warning("Analysis succeeded but contains no content in any section")
+            return None
+            
         return analysis
         
     except Exception as e:
         logger.error(f"Error in structured LLM analysis: {e}")
         return None
-
-
-
-
-
 
 def _clean_markdown_text(text: str) -> str:
     """Clean text to prevent overly long sections and problematic headers"""
@@ -307,16 +414,16 @@ def _clean_markdown_text(text: str) -> str:
     
     return text
 
-
-def arxiv_search(query: str, max_results: int = 3) -> str:
-    """Search arXiv for academic papers"""
+@mcp.tool
+def arxiv_search(query: str, max_results: Optional[int] = 3) -> str:
+    """Search arXiv for academic papers and research publications"""
     try:
         import arxiv
         
-        # Validate and sanitize inputs
-        if isinstance(max_results, str):
-            max_results = int(max_results)
-        max_results = max(1, min(max_results or 5, 10))
+        # Validate and sanitize inputs - handle None case explicitly
+        if max_results is None:
+            max_results = 3
+        max_results = max(1, min(max_results, 10))
         
         if not query or not query.strip():
             return "Error: Search query cannot be empty"
@@ -368,7 +475,7 @@ def arxiv_search(query: str, max_results: int = 3) -> str:
             # Deep analysis for top 1 paper only
             if i <= 1:
                 formatted_results += "\n**📄 Deep Analysis:**\n"
-                paper_content = extract_paper_content(result.pdf_url)
+                paper_content = _extract_paper_content(result.pdf_url)
                 
                 if paper_content:
                     # Introduction/Background
@@ -413,80 +520,15 @@ def arxiv_search(query: str, max_results: int = 3) -> str:
     except Exception as e:
         return f"Error searching arXiv: {str(e)}"
 
-
 # ============================================================================
-# FINANCIAL DATA FUNCTIONS - YFINANCE WITH CACHING
+# FASTMCP TOOLS - FINANCIAL DATA (STOCKS, CRYPTO, MARKETS)
 # ============================================================================
 
-# Financial data cache configuration
-CACHE_DIR = os.getenv('CACHE_DIRECTORY', 'cache')
-MAX_CACHE_DAYS = int(os.getenv('MAX_CACHE_DAYS', '7'))
-
-def _get_cache_file_path(ticker: str, date_str: str = None) -> str:
-    """Get the cache file path for a ticker on a specific date"""
-    if date_str is None:
-        date_str = datetime.now().strftime('%Y-%m-%d')
-    
-    cache_date_dir = os.path.join(CACHE_DIR, date_str)
-    os.makedirs(cache_date_dir, exist_ok=True)
-    return os.path.join(cache_date_dir, f"{ticker.upper()}.json")
-
-def _load_cached_data(ticker: str) -> Optional[Dict]:
-    """Load cached stock data for today if it exists"""
-    try:
-        cache_file = _get_cache_file_path(ticker)
-        if os.path.exists(cache_file):
-            with open(cache_file, 'r') as f:
-                data = json.load(f)
-                # Check if data is from today
-                if data.get('date') == datetime.now().strftime('%Y-%m-%d'):
-                    return data
-        return None
-    except Exception:
-        return None
-
-def _save_cached_data(ticker: str, data: Dict) -> None:
-    """Save stock data to cache"""
-    try:
-        data['date'] = datetime.now().strftime('%Y-%m-%d')
-        data['cached_at'] = datetime.now().isoformat()
-        
-        cache_file = _get_cache_file_path(ticker)
-        with open(cache_file, 'w') as f:
-            json.dump(data, f, indent=2)
-    except Exception as e:
-        print(f"Warning: Failed to cache data for {ticker}: {e}")
-
-def _cleanup_old_cache() -> None:
-    """Remove cache directories older than MAX_CACHE_DAYS"""
-    try:
-        if not os.path.exists(CACHE_DIR):
-            return
-            
-        cutoff_date = datetime.now() - timedelta(days=MAX_CACHE_DAYS)
-        
-        for item in os.listdir(CACHE_DIR):
-            item_path = os.path.join(CACHE_DIR, item)
-            if os.path.isdir(item_path):
-                try:
-                    # Check if directory name is a date
-                    dir_date = datetime.strptime(item, '%Y-%m-%d')
-                    if dir_date < cutoff_date:
-                        import shutil
-                        shutil.rmtree(item_path)
-                        print(f"Cleaned up old cache directory: {item}")
-                except ValueError:
-                    # Not a date directory, skip
-                    continue
-    except Exception as e:
-        print(f"Warning: Cache cleanup failed: {e}")
-
-
+@mcp.tool
 def get_stock_price(ticker: str) -> str:
     """Get current stock price and basic information using Yahoo Finance API"""
     try:
         import requests
-        import json
         
         # Clean up old cache periodically
         _cleanup_old_cache()
@@ -571,11 +613,11 @@ def get_stock_price(ticker: str) -> str:
     except Exception as e:
         return f"Error fetching stock data for {ticker}: {str(e)}"
 
+@mcp.tool
 def get_stock_history(ticker: str, period: str = "1mo") -> str:
     """Get historical stock price data using Yahoo Finance API"""
     try:
         import requests
-        from datetime import datetime, timedelta
         
         cache_key = f"{ticker}_history_{period}"
         cached_data = _load_cached_data(cache_key)
@@ -699,6 +741,7 @@ def get_stock_history(ticker: str, period: str = "1mo") -> str:
     except Exception as e:
         return f"Error fetching historical data for {ticker}: {str(e)}"
 
+@mcp.tool
 def get_crypto_price(symbol: str) -> str:
     """Get current cryptocurrency price using Yahoo Finance API"""
     try:
@@ -759,6 +802,7 @@ def get_crypto_price(symbol: str) -> str:
     except Exception as e:
         return f"Error fetching crypto data for {symbol}: {str(e)}"
 
+@mcp.tool
 def get_market_summary() -> str:
     """Get summary of major market indices using Yahoo Finance API"""
     try:
@@ -832,9 +876,8 @@ def get_market_summary() -> str:
     except Exception as e:
         return f"Error fetching market summary: {str(e)}"
 
-
 # ============================================================================
-# YOUTUBE TRANSCRIPT FUNCTIONS - TINYDB WITH CACHING
+# FASTMCP TOOLS - YOUTUBE ANALYSIS
 # ============================================================================
 
 def _extract_video_id(url: str) -> Optional[str]:
@@ -873,7 +916,19 @@ def _extract_video_id(url: str) -> Optional[str]:
 def _get_transcript_db():
     """Get or create TinyDB database for transcripts"""
     from tinydb import TinyDB
-    return TinyDB('transcripts.json')
+    import tempfile
+    import os
+    
+    # Use user's cache directory or temp directory if read-only
+    cache_dir = os.path.expanduser('~/.cache/mcp_playground')
+    try:
+        os.makedirs(cache_dir, exist_ok=True)
+        db_path = os.path.join(cache_dir, 'transcripts.json')
+    except (OSError, PermissionError):
+        # Fallback to temp directory if cache dir is not writable
+        db_path = os.path.join(tempfile.gettempdir(), 'mcp_playground_transcripts.json')
+    
+    return TinyDB(db_path)
 
 def _filter_sponsor_content(transcript_text: str) -> str:
     """Remove sponsor segments and promotional content from transcript"""
@@ -947,12 +1002,14 @@ def _get_youtube_transcript(url: str) -> str:
         
         # Get transcript from YouTube
         try:
-            transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+            api = YouTubeTranscriptApi()
+            transcript_list = api.fetch(video_id)
             transcript_text = ' '.join([entry['text'] for entry in transcript_list])
         except Exception as e:
             # Try to get any available transcript
             try:
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                api = YouTubeTranscriptApi()
+                transcript_list = api.list(video_id)
                 transcript = transcript_list.find_generated_transcript(['en'])
                 transcript_data = transcript.fetch()
                 transcript_text = ' '.join([entry['text'] for entry in transcript_data])
@@ -977,6 +1034,7 @@ def _get_youtube_transcript(url: str) -> str:
     except Exception as e:
         return f"Error extracting transcript: {str(e)}"
 
+@mcp.tool
 def summarize_youtube_video(url: str) -> str:
     """Generate AI summary of YouTube video content"""
     try:
@@ -1036,6 +1094,7 @@ Provide a concise summary focusing on the main content, key points, and conclusi
     except Exception as e:
         return f"Error summarizing video: {str(e)}"
 
+@mcp.tool
 def query_youtube_transcript(url: str, question: str) -> str:
     """Answer questions about YouTube video content using AI analysis"""
     try:
@@ -1095,222 +1154,36 @@ Focus on answering "{question}" based on the main video content. Ignore any spon
     except Exception as e:
         return f"Error querying video transcript: {str(e)}"
 
+# ============================================================================
+# MAIN FUNCTION TO RUN THE SERVER
+# ============================================================================
 
-def get_function_schema() -> List[Dict]:
-    """
-    Define available functions for Ollama function calling.
+def main():
+    """Main function to run the FastMCP server"""
+    import sys
     
-    Returns:
-        List of function schemas in OpenAI format
-    """
-    return [
-        {
-            "type": "function",
-            "function": {
-                "name": "web_search",
-                "description": "RESTRICTED: Only use when user EXPLICITLY asks for current/recent/latest information with keywords like 'search', 'find', 'latest', 'current', 'recent', 'today', 'now'. Never use for general questions or explanations.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "Search query for time-sensitive information explicitly requested by user"
-                        },
-                        "max_results": {
-                            "type": "integer",
-                            "description": "Maximum number of results (default: 5)"
-                        }
-                    },
-                    "required": ["query"]
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "analyze_url",
-                "description": "RESTRICTED: Only use for NON-YOUTUBE URLs when user asks to analyze a website. NEVER use for YouTube URLs (youtube.com, youtu.be) - use YouTube functions instead.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "url": {
-                            "type": "string",
-                            "description": "The specific URL provided by user to analyze"
-                        }
-                    },
-                    "required": ["url"]
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "arxiv_search",
-                "description": "RESTRICTED: Only use when user explicitly asks to search for academic papers, research, or scientific literature with keywords like 'papers', 'research', 'arxiv', 'academic', 'study'. Never use for general questions.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "Academic search query for finding research papers"
-                        },
-                        "max_results": {
-                            "type": "integer",
-                            "description": "Maximum number of papers to return (default: 3)"
-                        }
-                    },
-                    "required": ["query"]
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "get_stock_price",
-                "description": "RESTRICTED: Only use when user explicitly asks for stock prices, stock information, or financial data for specific companies with keywords like 'stock price', 'share price', 'ticker', company names, or stock symbols.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "ticker": {
-                            "type": "string",
-                            "description": "Stock ticker symbol (e.g., AAPL, MSFT, TSLA)"
-                        }
-                    },
-                    "required": ["ticker"]
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "get_stock_history",
-                "description": "RESTRICTED: Only use when user explicitly asks for historical stock data, price trends, or performance over time with keywords like 'historical', 'trend', 'performance', 'chart'.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "ticker": {
-                            "type": "string",
-                            "description": "Stock ticker symbol (e.g., AAPL, MSFT, TSLA)"
-                        },
-                        "period": {
-                            "type": "string",
-                            "description": "Time period for historical data (1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max)"
-                        }
-                    },
-                    "required": ["ticker"]
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "get_crypto_price",
-                "description": "RESTRICTED: Only use when user explicitly asks for cryptocurrency prices or crypto information with keywords like 'crypto', 'bitcoin', 'ethereum', 'cryptocurrency'.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "symbol": {
-                            "type": "string",
-                            "description": "Cryptocurrency symbol (e.g., BTC, ETH, ADA, DOGE)"
-                        }
-                    },
-                    "required": ["symbol"]
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "get_market_summary",
-                "description": "RESTRICTED: Only use when user explicitly asks for market overview, market summary, or general market performance with keywords like 'market', 'indices', 'dow', 'nasdaq', 's&p'.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {},
-                    "required": []
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "summarize_youtube_video",
-                "description": "Analyze and summarize YouTube video content. Use when user provides a YouTube URL (youtube.com, youtu.be) and asks to 'summarize', 'overview', or 'what is this video about'.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "url": {
-                            "type": "string",
-                            "description": "YouTube video URL to analyze"
-                        }
-                    },
-                    "required": ["url"]
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "query_youtube_transcript",
-                "description": "Answer specific questions about YouTube video content. Use when user provides a YouTube URL (youtube.com, youtu.be) and asks questions about the video content like 'what does the video say about X', 'who won', 'what are the main points', etc.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "url": {
-                            "type": "string",
-                            "description": "YouTube video URL to analyze"
-                        },
-                        "question": {
-                            "type": "string",
-                            "description": "Specific question about the video content"
-                        }
-                    },
-                    "required": ["url", "question"]
-                }
-            }
-        }
-    ]
-
-
-def execute_function(function_name: str, arguments: dict) -> str:
-    """Execute a function call with proper type conversion"""
-    try:
-        if function_name == "web_search":
-            query = str(arguments.get("query", ""))
-            max_results = arguments.get("max_results", 5)
-            # Convert max_results to int if it's a string
-            if isinstance(max_results, str):
-                max_results = int(max_results)
-            return web_search(query, max_results)
-        elif function_name == "analyze_url":
-            url = str(arguments.get("url", ""))
-            return analyze_url(url)
-        elif function_name == "arxiv_search":
-            query = str(arguments.get("query", ""))
-            max_results = arguments.get("max_results", 3)
-            # Convert max_results to int if it's a string
-            if isinstance(max_results, str):
-                max_results = int(max_results)
-            return arxiv_search(query, max_results)
-        elif function_name == "get_stock_price":
-            ticker = str(arguments.get("ticker", ""))
-            return get_stock_price(ticker)
-        elif function_name == "get_stock_history":
-            ticker = str(arguments.get("ticker", ""))
-            period = str(arguments.get("period", "1mo"))
-            return get_stock_history(ticker, period)
-        elif function_name == "get_crypto_price":
-            symbol = str(arguments.get("symbol", ""))
-            return get_crypto_price(symbol)
-        elif function_name == "get_market_summary":
-            return get_market_summary()
-        elif function_name == "summarize_youtube_video":
-            url = str(arguments.get("url", ""))
-            return summarize_youtube_video(url)
-        elif function_name == "query_youtube_transcript":
-            url = str(arguments.get("url", ""))
-            question = str(arguments.get("question", ""))
-            return query_youtube_transcript(url, question)
+    # Check for command line arguments for different modes
+    if len(sys.argv) > 1:
+        mode = sys.argv[1].lower()
+        if mode == "http":
+            # Run as HTTP server for web-based clients
+            port = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
+            host = sys.argv[3] if len(sys.argv) > 3 else "0.0.0.0"
+            print(f"Starting FastMCP HTTP server on {host}:{port}")
+            mcp.run(transport="http", host=host, port=port)
+        elif mode == "stdio":
+            # Run as stdio server (default for local clients)
+            print("Starting FastMCP stdio server")
+            mcp.run(transport="stdio")
         else:
-            return f"Unknown function: {function_name}"
-    except Exception as e:
-        return f"Error executing {function_name}: {str(e)}"
+            print(f"Unknown mode: {mode}")
+            print("Usage: python mcp_server.py [stdio|http] [port] [host]")
+            sys.exit(1)
+    else:
+        # Default to stdio transport for local development
+        print("Starting FastMCP server in stdio mode (default)")
+        print("Use 'python mcp_server.py http 8000' for web mode")
+        mcp.run(transport="stdio")
+
+if __name__ == "__main__":
+    main()
