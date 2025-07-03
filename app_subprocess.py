@@ -22,7 +22,7 @@ from fastmcp.client.transports import PythonStdioTransport
 # Page config
 st.set_page_config(
     page_title="MCP Playground (Subprocess)",
-    page_icon="⚡",
+    page_icon="🤖",
     layout="wide",
     initial_sidebar_state="collapsed"
 )

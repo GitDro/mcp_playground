@@ -24,7 +24,7 @@ from fastmcp import Client
 # Page config - Minimalist setup
 st.set_page_config(
     page_title="MCP Playground",
-    page_icon="⚡",
+    page_icon="🤖",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
