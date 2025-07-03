@@ -946,7 +946,7 @@ def summarize_youtube_video(url: str) -> str:
         duration_estimate = f"~{word_count // 150} minutes" if word_count > 150 else "< 1 minute"
         
         # Prepare content for LLM analysis with natural prompt
-        max_content_length = 6000  # Leave room for prompt and response
+        max_content_length = 8000  # Increased for better context (~8k tokens)
         
         if len(transcript_text) <= max_content_length:
             content = transcript_text
@@ -988,8 +988,8 @@ def query_youtube_transcript(url: str, question: str) -> str:
         word_count = len(transcript_text.split())
         duration_estimate = f"~{word_count // 150} minutes" if word_count > 150 else "< 1 minute"
         
-        # Prepare content for LLM analysis with natural prompt
-        max_content_length = 5000  # Leave room for question and response
+        # Prepare content for LLM analysis with natural prompt  
+        max_content_length = 8000  # Increased for better context (~8k tokens)
         
         if len(transcript_text) <= max_content_length:
             content = transcript_text
