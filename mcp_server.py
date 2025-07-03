@@ -63,7 +63,27 @@ class PaperAnalysis(BaseModel):
 # ============================================================================
 
 # Financial data cache configuration
-CACHE_DIR = os.getenv('CACHE_DIRECTORY', 'cache')
+def _get_cache_directory() -> str:
+    """Get writable cache directory, falling back to temp if needed"""
+    cache_dir = os.getenv('CACHE_DIRECTORY')
+    if not cache_dir:
+        # Try user cache directory first
+        cache_dir = os.path.expanduser('~/.cache/mcp_playground')
+    
+    try:
+        os.makedirs(cache_dir, exist_ok=True)
+        # Test if directory is writable
+        test_file = os.path.join(cache_dir, '.write_test')
+        with open(test_file, 'w') as f:
+            f.write('test')
+        os.remove(test_file)
+        return cache_dir
+    except (OSError, PermissionError):
+        # Fallback to temp directory
+        import tempfile
+        return tempfile.gettempdir()
+
+CACHE_DIR = _get_cache_directory()
 MAX_CACHE_DAYS = int(os.getenv('MAX_CACHE_DAYS', '7'))
 
 def _get_cache_file_path(ticker: str, date_str: str = None) -> str:
@@ -331,10 +351,10 @@ Paper text:
                 'role': 'user',
                 'content': prompt,
             }],
-            model='llama3.2',  # Use available model
+            model='llama3.2',  # Use available model, might make it dynamic
             format=PaperAnalysis.model_json_schema(),
             options={
-                'temperature': 0.3,  # Slightly higher temperature for more content
+                'temperature': 0.2,  # Slightly higher temperature for more content
                 'num_predict': 1200,  # More tokens for complete analysis
                 'top_p': 0.9,  # Add top_p for better generation
                 'repeat_penalty': 1.1  # Prevent repetition
@@ -896,7 +916,19 @@ def _extract_video_id(url: str) -> Optional[str]:
 def _get_transcript_db():
     """Get or create TinyDB database for transcripts"""
     from tinydb import TinyDB
-    return TinyDB('transcripts.json')
+    import tempfile
+    import os
+    
+    # Use user's cache directory or temp directory if read-only
+    cache_dir = os.path.expanduser('~/.cache/mcp_playground')
+    try:
+        os.makedirs(cache_dir, exist_ok=True)
+        db_path = os.path.join(cache_dir, 'transcripts.json')
+    except (OSError, PermissionError):
+        # Fallback to temp directory if cache dir is not writable
+        db_path = os.path.join(tempfile.gettempdir(), 'mcp_playground_transcripts.json')
+    
+    return TinyDB(db_path)
 
 def _filter_sponsor_content(transcript_text: str) -> str:
     """Remove sponsor segments and promotional content from transcript"""
