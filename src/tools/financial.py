@@ -17,7 +17,7 @@ def register_financial_tools(mcp: FastMCP):
     
     @mcp.tool
     def get_stock_price(ticker: str) -> str:
-        """Get current stock price and basic information using Yahoo Finance API"""
+        """Get real-time stock price, daily change, and market data for any stock ticker (e.g., AAPL, TSLA, NVDA) using Yahoo Finance."""
         try:
             import requests
             
@@ -106,7 +106,7 @@ def register_financial_tools(mcp: FastMCP):
     
     @mcp.tool
     def get_stock_history(ticker: str, period: str = "1mo") -> str:
-        """Get historical stock price data using Yahoo Finance API"""
+        """Get historical stock price data and performance trends. Period options: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max."""
         try:
             import requests
             
@@ -234,7 +234,7 @@ def register_financial_tools(mcp: FastMCP):
     
     @mcp.tool
     def get_crypto_price(symbol: str) -> str:
-        """Get current cryptocurrency price using Yahoo Finance API"""
+        """Get real-time cryptocurrency price and 24h change for major coins (e.g., BTC-USD, ETH-USD, ADA-USD) using Yahoo Finance."""
         try:
             import requests
             
@@ -295,7 +295,7 @@ def register_financial_tools(mcp: FastMCP):
     
     @mcp.tool
     def get_market_summary() -> str:
-        """Get summary of major market indices using Yahoo Finance API"""
+        """Get current performance overview of major market indices including S&P 500, Dow Jones, NASDAQ, and other key market indicators."""
         try:
             import requests
             

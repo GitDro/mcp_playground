@@ -83,7 +83,7 @@ def register_youtube_tools(mcp: FastMCP):
     
     @mcp.tool
     def summarize_youtube_video(url: str) -> str:
-        """Generate AI summary of YouTube video content"""
+        """Extract transcript and generate comprehensive summary of YouTube video content. Handles videos up to 2-3 hours with adaptive context management."""
         try:
             # Get the transcript
             transcript_result = _get_youtube_transcript(url)
@@ -160,7 +160,7 @@ Provide a concise summary focusing on the main content, key points, and conclusi
     
     @mcp.tool
     def query_youtube_transcript(url: str, question: str) -> str:
-        """Answer questions about YouTube video content using AI analysis"""
+        """Search YouTube video transcript to answer specific questions about the content. Best for finding specific information or quotes from the video."""
         try:
             # Get the transcript
             transcript_result = _get_youtube_transcript(url)
