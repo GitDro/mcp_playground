@@ -10,7 +10,7 @@ def register_web_tools(mcp: FastMCP):
     
     @mcp.tool
     def web_search(query: str, max_results: int = 5) -> str:
-        """Search the web using DuckDuckGo for current information"""
+        """Search the web using DuckDuckGo and return current information with titles, URLs, and summaries. Returns up to 10 results (default: 5)."""
         try:
             from duckduckgo_search import DDGS
             
@@ -44,7 +44,7 @@ def register_web_tools(mcp: FastMCP):
     
     @mcp.tool
     def analyze_url(url: str) -> str:
-        """Analyze a URL and return basic information about the webpage"""
+        """Fetch and analyze a URL to extract content type, size, and preview text. Best for HTML pages and basic content inspection."""
         try:
             import httpx
             
