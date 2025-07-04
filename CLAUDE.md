@@ -132,11 +132,20 @@ from ..core.utils import clean_markdown_text
 
 ## Recent Fixes
 
-### YouTube Transcript Issue (Fixed)
-- **Issue**: YouTube tools returned "No transcript available" for videos with captions
+### YouTube Transcript Issues (Fixed)
+
+**Issue 1: No Transcript Available**
+- **Problem**: YouTube tools returned "No transcript available" for videos with captions
 - **Root cause**: Using `entry['text']` instead of `entry.text` (API object vs dict)
 - **Fix**: Updated to use newer `YouTubeTranscriptApi` methods with proper attribute access
 - **Result**: Now supports multiple languages and auto-generated captions
+
+**Issue 2: Tiny Context Window**
+- **Problem**: Only 8,000 characters (~2K tokens) severely limited video analysis
+- **Fix**: Enhanced to support 24K+ tokens (96K+ characters) by default
+- **Configuration**: Set `YOUTUBE_MAX_TOKENS` environment variable (default: 24000)
+- **Smart truncation**: For very long videos, preserves beginning (60%) and end (40%) content
+- **Result**: Can now analyze videos up to 2-3 hours vs previous ~10 minute limit
 
 ## Architecture Notes
 - **In-memory transport**: `Client(mcp)` - Direct server instance, fastest
