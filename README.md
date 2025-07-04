@@ -83,6 +83,7 @@ uv run python mcp_server.py http 8000
 - **📈 Financial Data**: Get stock prices, crypto rates, and market summaries without API keys
 - **🎥 YouTube Analysis**: Analyze and summarize video content from YouTube links (includes beginning + ending for longer videos)
 - **🌤️ Weather**: Get current weather and 7-day forecasts by IP location, city name, or coordinates (prefers Canada, no API keys needed)
+- **🧠 Memory System**: Persistent memory across conversations with fact storage, preferences, and conversation history
 - **🎛️ Function Toggle**: Enable/disable AI tool usage per conversation
 
 ## 🎯 Example Prompts
@@ -116,6 +117,13 @@ uv run python mcp_server.py http 8000
 - "Get weather for Niagara Falls"
 - "Weather in Toronto"
 - "Show weather for Berlin" (coordinates: 52.52,13.41)
+
+**Memory & Preferences:**
+- "Remember that I prefer concise responses"
+- "I work as a software engineer at OpenAI"
+- "Set my preferred model to llama3.2"
+- "What do you remember about me?"
+- "Show my conversation history about machine learning"
 
 ## 🏗️ Architecture
 
@@ -167,6 +175,10 @@ The server provides all the same tools available in the Streamlit app:
 - **summarize_youtube_video**: AI-powered YouTube video summaries
 - **query_youtube_transcript**: Answer questions about YouTube video content
 - **get_weather**: Current weather and 7-day forecast by IP, city name, or coordinates
+- **remember_fact**: Store important facts about the user
+- **recall_information**: Retrieve relevant stored information
+- **set_user_preference**: Set user preferences for conversations
+- **get_conversation_history**: Access summaries of past conversations
 
 ### MCP Client Usage
 
@@ -210,6 +222,25 @@ async def use_mcp_tools():
 # Run the example
 asyncio.run(use_mcp_tools())
 ```
+
+## 🧠 Memory System
+
+The app includes a sophisticated memory system that enables persistent conversations and personalized interactions:
+
+- **Working Memory**: Session-based conversation context and tool usage tracking
+- **Short-Term Memory**: Cross-session conversation summaries (7-day retention)  
+- **Long-Term Memory**: Persistent user facts, preferences, and interaction patterns
+- **Storage**: Local TinyDB database at `~/.cache/mcp_playground/memory.json`
+- **Privacy**: All memory data stays on your local machine
+
+### Memory Tools
+- `remember_fact`: Store important user information with categories
+- `recall_information`: Search and retrieve relevant stored facts
+- `set_user_preference`: Save user preferences (response style, models, etc.)
+- `get_conversation_history`: Access summaries of relevant past conversations
+- `get_memory_stats`: View memory system statistics
+
+The system automatically injects relevant context from memory into conversations and saves conversation summaries when you clear the chat.
 
 ## 🔧 Troubleshooting
 

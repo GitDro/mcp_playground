@@ -17,6 +17,8 @@ from datetime import datetime
 
 # Import our modules
 from ui_config import STREAMLIT_STYLE, TOOLS_HELP_TEXT, get_system_prompt
+from src.core.memory import memory_manager
+import uuid
 
 # Import FastMCP client
 from fastmcp import Client
@@ -119,7 +121,7 @@ def create_function_schema_from_mcp_tools(mcp_tools: List[Dict]) -> List[Dict]:
     
     return schemas
 
-async def chat_with_ollama_and_mcp(model: str, message: str, conversation_history: List[Dict], use_functions: bool = True) -> str:
+async def chat_with_ollama_and_mcp(model: str, message: str, conversation_history: List[Dict], use_functions: bool = True) -> tuple[str, List[str]]:
     """
     Send chat message to Ollama with FastMCP function calling support.
     
@@ -130,7 +132,7 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
         use_functions: Whether to enable function calling
         
     Returns:
-        AI response string, potentially including function call results
+        Tuple of (AI response string, list of tool names used)
     """
     try:
         # Get MCP tools if functions are enabled
@@ -146,9 +148,22 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
         # Add system message for function calling guidance
         if use_functions:
             current_date = datetime.now().strftime("%Y-%m-%d")
+            base_prompt = get_system_prompt(current_date)
+            
+            # Add memory context if available
+            try:
+                memory_context = memory_manager.build_conversation_context(
+                    message, 
+                    conversation_history
+                )
+                if memory_context:
+                    base_prompt += f"\n\n{memory_context}"
+            except Exception as e:
+                print(f"Failed to get memory context: {e}")  # Debug print
+            
             system_message = {
                 "role": "system",
-                "content": get_system_prompt(current_date)
+                "content": base_prompt
             }
             messages.append(system_message)
         
@@ -198,13 +213,13 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
                     )
                     if fallback_response.status_code == 200:
                         data = fallback_response.json()
-                        return data.get("message", {}).get("content", "No response")
+                        return data.get("message", {}).get("content", "No response"), []
                 
-                return f"Error {response.status_code}: {error_detail}"
+                return f"Error {response.status_code}: {error_detail}", []
         except requests.exceptions.Timeout:
-            return "Error: Request timed out. Ollama may be overloaded."
+            return "Error: Request timed out. Ollama may be overloaded.", []
         except requests.exceptions.ConnectionError:
-            return "Error: Could not connect to Ollama. Is it running on localhost:11434?"
+            return "Error: Could not connect to Ollama. Is it running on localhost:11434?", []
         
         data = response.json()
         assistant_message = data.get("message", {})
@@ -233,6 +248,8 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
                 result = await call_mcp_tool(function_name, arguments)
                 function_results.append(result)
                 function_names.append(function_name)
+                
+                # Track tool usage for memory - this will be handled by the sync wrapper
                 
                 # Add tool call and result to conversation
                 messages.append({
@@ -279,10 +296,10 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
                         for result in show_function_results:
                             combined_response += f"{result}\n\n"
                         
-                        return combined_response
+                        return combined_response, function_names
                     else:
                         # No function results to show (likely YouTube functions), just return LLM response
-                        return final_content
+                        return final_content, function_names
                 else:
                     error_detail = ""
                     try:
@@ -290,22 +307,28 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
                         error_detail = error_data.get("error", "Unknown error")
                     except:
                         error_detail = final_response.text or "No error details available"
-                    return f"Error in final response {final_response.status_code}: {error_detail}"
+                    return f"Error in final response {final_response.status_code}: {error_detail}", []
             except requests.exceptions.RequestException as e:
-                return f"Error in final response: {str(e)}"
+                return f"Error in final response: {str(e)}", []
         else:
             # No tool calls, return regular response
-            return assistant_message.get("content", "No response")
+            return assistant_message.get("content", "No response"), []
             
     except Exception as e:
-        return f"Error connecting to Ollama or MCP: {str(e)}"
+        return f"Error connecting to Ollama or MCP: {str(e)}", []
 
 def chat_with_ollama_sync(*args, **kwargs):
     """Synchronous wrapper for the async chat function"""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
-        return loop.run_until_complete(chat_with_ollama_and_mcp(*args, **kwargs))
+        response, tool_names = loop.run_until_complete(chat_with_ollama_and_mcp(*args, **kwargs))
+        
+        # Track tool usage in session state
+        for tool_name in tool_names:
+            update_tool_usage(tool_name)
+        
+        return response
     finally:
         loop.close()
 
@@ -317,6 +340,37 @@ def get_mcp_tools_sync():
         return loop.run_until_complete(get_mcp_tools())
     finally:
         loop.close()
+
+def save_conversation_summary():
+    """Save conversation summary to memory when session ends"""
+    if st.session_state.messages and len(st.session_state.messages) > 2:
+        try:
+            memory_manager.save_conversation_summary(
+                st.session_state.session_id,
+                st.session_state.messages,
+                st.session_state.tool_usage
+            )
+        except Exception as e:
+            st.error(f"Failed to save conversation summary: {e}")
+
+def update_tool_usage(tool_name: str):
+    """Update tool usage tracking"""
+    if tool_name in st.session_state.tool_usage:
+        st.session_state.tool_usage[tool_name] += 1
+    else:
+        st.session_state.tool_usage[tool_name] = 1
+
+def get_memory_context(user_message: str) -> str:
+    """Get relevant memory context for the current conversation"""
+    try:
+        context = memory_manager.build_conversation_context(
+            user_message,
+            st.session_state.messages
+        )
+        return context
+    except Exception as e:
+        st.error(f"Failed to get memory context: {e}")
+        return ""
 
 # Apply CSS styles
 st.markdown(STREAMLIT_STYLE, unsafe_allow_html=True)
@@ -330,6 +384,16 @@ if "selected_model" not in st.session_state:
 
 if "use_functions" not in st.session_state:
     st.session_state.use_functions = True
+
+# Initialize memory-related session state
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
+
+if "tool_usage" not in st.session_state:
+    st.session_state.tool_usage = {}
+
+if "memory_context" not in st.session_state:
+    st.session_state.memory_context = ""
 
 # Centered layout with breathing room
 col1, col2, col3 = st.columns([1, 3, 1])
@@ -389,6 +453,22 @@ with col2:
                         purpose = "YouTube Q&A"
                     elif 'get_weather' in tool_name:
                         purpose = "weather forecast"
+                    elif 'remember_fact' in tool_name:
+                        purpose = "store memories"
+                    elif 'recall_information' in tool_name:
+                        purpose = "recall memories"
+                    elif 'forget_information' in tool_name:
+                        purpose = "forget memories"
+                    elif 'set_user_preference' in tool_name:
+                        purpose = "set preferences"
+                    elif 'get_user_preferences' in tool_name:
+                        purpose = "get preferences"
+                    elif 'get_conversation_history' in tool_name:
+                        purpose = "past conversations"
+                    elif 'get_memory_stats' in tool_name:
+                        purpose = "memory statistics"
+                    elif 'build_context_from_memory' in tool_name:
+                        purpose = "memory context"
                     else:
                         purpose = "tool"
                     
@@ -458,7 +538,13 @@ with col2:
         # Clear button - positioned above chat
         if st.session_state.messages:
             if st.button("Clear conversation", type="secondary", help="Clear all messages"):
+                # Save conversation summary before clearing
+                save_conversation_summary()
+                
+                # Clear session state
                 st.session_state.messages = []
+                st.session_state.tool_usage = {}
+                st.session_state.session_id = str(uuid.uuid4())
                 st.rerun()
         
         # Display chat messages
