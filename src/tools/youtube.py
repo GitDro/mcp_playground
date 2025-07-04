@@ -113,23 +113,37 @@ def register_youtube_tools(mcp: FastMCP):
                 content = transcript_text
                 note = ""
             else:
-                # Smart truncation strategy for very long videos
-                words = transcript_text.split()
-                total_words = len(words)
+                # Adaptive truncation strategy based on how much content exceeds limit
+                original_length = len(transcript_text)
+                overflow_ratio = original_length / max_content_length
                 
-                # Use ~60% for beginning, ~40% for end to preserve conclusions
-                beginning_chars = int(max_content_length * 0.6)
-                end_words = min(int(total_words * 0.4), total_words // 2)
+                # Determine truncation percentages based on how much we're over limit
+                if overflow_ratio <= 1.5:  # Moderately long (up to 1.5x limit)
+                    beginning_pct, end_pct = 0.50, 0.30  # 80% of limit
+                elif overflow_ratio <= 3.0:  # Very long (up to 3x limit) 
+                    beginning_pct, end_pct = 0.35, 0.25  # 60% of limit
+                elif overflow_ratio <= 5.0:  # Extremely long (up to 5x limit)
+                    beginning_pct, end_pct = 0.25, 0.20  # 45% of limit
+                else:  # Massive videos (5x+ limit)
+                    beginning_pct, end_pct = 0.20, 0.15  # 35% of limit
                 
-                # Get beginning portion (preserve early content)
+                # Calculate actual character limits
+                beginning_chars = int(max_content_length * beginning_pct)
+                end_chars = int(max_content_length * end_pct)
+                
+                # Get beginning and end portions
                 beginning = transcript_text[:beginning_chars]
+                end_text = transcript_text[-end_chars:] if end_chars < len(transcript_text) else transcript_text
                 
-                # Get end portion (preserve conclusions and summaries)
-                end_text = ' '.join(words[-end_words:])
-                
-                # Combine with separator
-                content = f"{beginning}\n\n--- [MIDDLE SECTION OMITTED FOR LENGTH] ---\n\n{end_text}"
-                note = f"\n\n*Note: Video exceeds {max_tokens:,} token limit. Showing beginning ({beginning_chars:,} chars) and ending ({len(end_text):,} chars) with middle section omitted.*"
+                # Ensure no overlap (shouldn't happen with these ratios, but safety check)
+                if beginning_chars + end_chars >= original_length:
+                    content = beginning
+                    note = f"\n\n*Note: Video is {overflow_ratio:.1f}x the {max_tokens:,} token limit. Showing first {beginning_chars:,} characters only.*"
+                else:
+                    content = f"{beginning}\n\n--- [MIDDLE SECTION OMITTED - VIDEO {overflow_ratio:.1f}X CONTEXT LIMIT] ---\n\n{end_text}"
+                    omitted_chars = original_length - beginning_chars - end_chars
+                    omitted_pct = (omitted_chars / original_length) * 100
+                    note = f"\n\n*Note: Video is {overflow_ratio:.1f}x the {max_tokens:,} token limit. Showing beginning ({beginning_pct*100:.0f}%) and ending ({end_pct*100:.0f}%). Omitted {omitted_pct:.0f}% of content ({omitted_chars:,} chars).*"
             
             # Return formatted content that naturally prompts the LLM to summarize
             return f"""Analyze this YouTube video content and provide a focused summary.
@@ -176,23 +190,37 @@ Provide a concise summary focusing on the main content, key points, and conclusi
                 content = transcript_text
                 note = ""
             else:
-                # Smart truncation strategy for very long videos
-                words = transcript_text.split()
-                total_words = len(words)
+                # Adaptive truncation strategy based on how much content exceeds limit
+                original_length = len(transcript_text)
+                overflow_ratio = original_length / max_content_length
                 
-                # Use ~60% for beginning, ~40% for end to preserve conclusions
-                beginning_chars = int(max_content_length * 0.6)
-                end_words = min(int(total_words * 0.4), total_words // 2)
+                # Determine truncation percentages based on how much we're over limit
+                if overflow_ratio <= 1.5:  # Moderately long (up to 1.5x limit)
+                    beginning_pct, end_pct = 0.50, 0.30  # 80% of limit
+                elif overflow_ratio <= 3.0:  # Very long (up to 3x limit) 
+                    beginning_pct, end_pct = 0.35, 0.25  # 60% of limit
+                elif overflow_ratio <= 5.0:  # Extremely long (up to 5x limit)
+                    beginning_pct, end_pct = 0.25, 0.20  # 45% of limit
+                else:  # Massive videos (5x+ limit)
+                    beginning_pct, end_pct = 0.20, 0.15  # 35% of limit
                 
-                # Get beginning portion (preserve early content)
+                # Calculate actual character limits
+                beginning_chars = int(max_content_length * beginning_pct)
+                end_chars = int(max_content_length * end_pct)
+                
+                # Get beginning and end portions
                 beginning = transcript_text[:beginning_chars]
+                end_text = transcript_text[-end_chars:] if end_chars < len(transcript_text) else transcript_text
                 
-                # Get end portion (preserve conclusions and summaries)
-                end_text = ' '.join(words[-end_words:])
-                
-                # Combine with separator
-                content = f"{beginning}\n\n--- [MIDDLE SECTION OMITTED FOR LENGTH] ---\n\n{end_text}"
-                note = f"\n\n*Note: Video exceeds {max_tokens:,} token limit. Showing beginning ({beginning_chars:,} chars) and ending ({len(end_text):,} chars) with middle section omitted.*"
+                # Ensure no overlap (shouldn't happen with these ratios, but safety check)
+                if beginning_chars + end_chars >= original_length:
+                    content = beginning
+                    note = f"\n\n*Note: Video is {overflow_ratio:.1f}x the {max_tokens:,} token limit. Showing first {beginning_chars:,} characters only.*"
+                else:
+                    content = f"{beginning}\n\n--- [MIDDLE SECTION OMITTED - VIDEO {overflow_ratio:.1f}X CONTEXT LIMIT] ---\n\n{end_text}"
+                    omitted_chars = original_length - beginning_chars - end_chars
+                    omitted_pct = (omitted_chars / original_length) * 100
+                    note = f"\n\n*Note: Video is {overflow_ratio:.1f}x the {max_tokens:,} token limit. Showing beginning ({beginning_pct*100:.0f}%) and ending ({end_pct*100:.0f}%). Omitted {omitted_pct:.0f}% of content ({omitted_chars:,} chars).*"
             
             # Return formatted content that clearly directs the LLM to answer the specific question
             return f"""Please answer this specific question about the YouTube video: "{question}"
