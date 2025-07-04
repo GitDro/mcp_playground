@@ -144,7 +144,11 @@ from ..core.utils import clean_markdown_text
 - **Problem**: Only 8,000 characters (~2K tokens) severely limited video analysis
 - **Fix**: Enhanced to support 24K+ tokens (96K+ characters) by default
 - **Configuration**: Set `YOUTUBE_MAX_TOKENS` environment variable (default: 24000)
-- **Smart truncation**: For very long videos, preserves beginning (60%) and end (40%) content
+- **Adaptive truncation**: Scales based on video length vs context limit:
+  - 1.5x limit: Keep 50% beginning + 30% end (80% of limit)
+  - 3x limit: Keep 35% beginning + 25% end (60% of limit)  
+  - 5x limit: Keep 25% beginning + 20% end (45% of limit)
+  - 5x+ limit: Keep 20% beginning + 15% end (35% of limit)
 - **Result**: Can now analyze videos up to 2-3 hours vs previous ~10 minute limit
 
 ## Architecture Notes
