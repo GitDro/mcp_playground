@@ -1,5 +1,7 @@
 """
 YouTube video analysis and transcript handling tools
+
+Supports large context windows (24K+ tokens) for comprehensive video analysis.
 """
 
 from typing import Optional
@@ -101,30 +103,33 @@ def register_youtube_tools(mcp: FastMCP):
             word_count = len(transcript_text.split())
             duration_estimate = f"~{word_count // 150} minutes" if word_count > 150 else "< 1 minute"
             
-            # Prepare content for LLM analysis with natural prompt
-            max_content_length = 8000  # Total character budget (~8k tokens)
+            # Prepare content for LLM analysis with much larger context support
+            # Default to 24K tokens ≈ 96K characters (configurable via env var)
+            import os
+            max_tokens = int(os.getenv('YOUTUBE_MAX_TOKENS', '24000'))
+            max_content_length = max_tokens * 4  # Rough estimate: 1 token ≈ 4 characters
             
             if len(transcript_text) <= max_content_length:
                 content = transcript_text
                 note = ""
             else:
-                # For long videos, include beginning + end (many videos have summaries at the end)
+                # Smart truncation strategy for very long videos
                 words = transcript_text.split()
                 total_words = len(words)
                 
-                # Use ~75% for beginning, ~25% for end
-                beginning_chars = int(max_content_length * 0.75)
-                end_words = min(2000, total_words // 4)  # Last ~2k words or 25% of video
+                # Use ~60% for beginning, ~40% for end to preserve conclusions
+                beginning_chars = int(max_content_length * 0.6)
+                end_words = min(int(total_words * 0.4), total_words // 2)
                 
-                # Get beginning portion
+                # Get beginning portion (preserve early content)
                 beginning = transcript_text[:beginning_chars]
                 
-                # Get end portion
+                # Get end portion (preserve conclusions and summaries)
                 end_text = ' '.join(words[-end_words:])
                 
                 # Combine with separator
-                content = f"{beginning}\n\n--- [MIDDLE SECTION OMITTED] ---\n\n{end_text}"
-                note = "\n\n*Note: This includes the beginning and ending of a longer video, with the middle section omitted.*"
+                content = f"{beginning}\n\n--- [MIDDLE SECTION OMITTED FOR LENGTH] ---\n\n{end_text}"
+                note = f"\n\n*Note: Video exceeds {max_tokens:,} token limit. Showing beginning ({beginning_chars:,} chars) and ending ({len(end_text):,} chars) with middle section omitted.*"
             
             # Return formatted content that naturally prompts the LLM to summarize
             return f"""Analyze this YouTube video content and provide a focused summary.
@@ -161,30 +166,33 @@ Provide a concise summary focusing on the main content, key points, and conclusi
             word_count = len(transcript_text.split())
             duration_estimate = f"~{word_count // 150} minutes" if word_count > 150 else "< 1 minute"
             
-            # Prepare content for LLM analysis with natural prompt  
-            max_content_length = 8000  # Total character budget (~8k tokens)
+            # Prepare content for LLM analysis with much larger context support
+            # Default to 24K tokens ≈ 96K characters (configurable via env var)
+            import os
+            max_tokens = int(os.getenv('YOUTUBE_MAX_TOKENS', '24000'))
+            max_content_length = max_tokens * 4  # Rough estimate: 1 token ≈ 4 characters
             
             if len(transcript_text) <= max_content_length:
                 content = transcript_text
                 note = ""
             else:
-                # For long videos, include beginning + end (many videos have summaries at the end)
+                # Smart truncation strategy for very long videos
                 words = transcript_text.split()
                 total_words = len(words)
                 
-                # Use ~75% for beginning, ~25% for end
-                beginning_chars = int(max_content_length * 0.75)
-                end_words = min(2000, total_words // 4)  # Last ~2k words or 25% of video
+                # Use ~60% for beginning, ~40% for end to preserve conclusions
+                beginning_chars = int(max_content_length * 0.6)
+                end_words = min(int(total_words * 0.4), total_words // 2)
                 
-                # Get beginning portion
+                # Get beginning portion (preserve early content)
                 beginning = transcript_text[:beginning_chars]
                 
-                # Get end portion
+                # Get end portion (preserve conclusions and summaries)
                 end_text = ' '.join(words[-end_words:])
                 
                 # Combine with separator
-                content = f"{beginning}\n\n--- [MIDDLE SECTION OMITTED] ---\n\n{end_text}"
-                note = "\n\n*Note: This includes the beginning and ending of a longer video, with the middle section omitted.*"
+                content = f"{beginning}\n\n--- [MIDDLE SECTION OMITTED FOR LENGTH] ---\n\n{end_text}"
+                note = f"\n\n*Note: Video exceeds {max_tokens:,} token limit. Showing beginning ({beginning_chars:,} chars) and ending ({len(end_text):,} chars) with middle section omitted.*"
             
             # Return formatted content that clearly directs the LLM to answer the specific question
             return f"""Please answer this specific question about the YouTube video: "{question}"
