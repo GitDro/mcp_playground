@@ -2,12 +2,13 @@
 Memory tools for the MCP server
 
 Streamlined memory tools that allow the AI to store and retrieve information 
-about the user and previous conversations. Reduced from 8 tools to 3 for clarity.
+about the user and previous conversations. Uses vector-based semantic search
+with ChromaDB and Ollama embeddings for better understanding.
 """
 
 import logging
 from typing import Dict, List, Optional
-from ..core.memory import memory_manager
+from ..core.vector_memory import vector_memory_manager
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ def register_memory_tools(mcp):
             else:
                 category = 'general'
             
-            fact_id = memory_manager.store_fact(content, category)
+            fact_id = vector_memory_manager.store_fact(content, category)
             if fact_id:
                 return f"✓ Remembered: {content}"
             else:
@@ -83,42 +84,86 @@ def register_memory_tools(mcp):
             All relevant information found in memory
         """
         try:
-            # Search facts
-            facts = memory_manager.retrieve_facts(query, limit=5)
+            query_lower = query.lower()
             
-            # Search conversation history  
-            conversations = memory_manager.get_relevant_conversations(query, limit=3)
+            # Handle general "about me" or "what do you know" queries by returning everything
+            general_queries = ['about me', 'what do you know', 'what do you recall', 'tell me about', 
+                             'what do you remember', 'about this user', 'what have we discussed']
             
-            # Get all preferences if query is about preferences
-            preferences = {}
-            if any(word in query.lower() for word in ['preference', 'setting', 'config', 'like', 'prefer']):
-                preferences = memory_manager.get_all_preferences()
+            is_general_query = any(phrase in query_lower for phrase in general_queries)
             
-            # Build comprehensive response
-            result_parts = []
+            if is_general_query:
+                # Return all stored information for general queries
+                all_facts = vector_memory_manager.get_all_facts()
+                all_preferences = vector_memory_manager.get_all_preferences()
+                recent_conversations = vector_memory_manager.get_relevant_conversations("", limit=3)
+                
+                result_parts = []
+                
+                if all_facts:
+                    facts_text = "Stored information about you:\n"
+                    for fact in all_facts:
+                        facts_text += f"• {fact.content}\n"
+                    result_parts.append(facts_text.strip())
+                
+                if all_preferences:
+                    prefs_text = "Your preferences:\n"
+                    for key, value in all_preferences.items():
+                        prefs_text += f"• {key}: {value}\n"
+                    result_parts.append(prefs_text.strip())
+                
+                if recent_conversations:
+                    conv_text = "Recent conversation topics:\n"
+                    for conv in recent_conversations:
+                        conv_text += f"• {conv.timestamp.strftime('%Y-%m-%d')}: {conv.summary}\n"
+                    result_parts.append(conv_text.strip())
+                
+                if not result_parts:
+                    return "No information stored in memory yet."
+                
+                return "\n\n".join(result_parts)
             
-            if facts:
-                facts_text = "Stored information:\n"
-                for fact in facts:
-                    facts_text += f"• {fact.content}\n"
-                result_parts.append(facts_text.strip())
-            
-            if preferences:
-                prefs_text = "User preferences:\n"
-                for key, value in preferences.items():
-                    prefs_text += f"• {key}: {value}\n"
-                result_parts.append(prefs_text.strip())
-            
-            if conversations:
-                conv_text = "Related past conversations:\n"
-                for conv in conversations:
-                    conv_text += f"• {conv.timestamp.strftime('%Y-%m-%d')}: {conv.summary}\n"
-                result_parts.append(conv_text.strip())
-            
-            if not result_parts:
-                return "No relevant information found in memory."
-            
-            return "\n\n".join(result_parts)
+            else:
+                # For specific queries, use semantic search
+                facts = vector_memory_manager.retrieve_facts_hybrid(query, limit=5)
+                conversations = vector_memory_manager.get_relevant_conversations(query, limit=3)
+                
+                # Get all preferences if query is about preferences
+                preferences = {}
+                if any(word in query_lower for word in ['preference', 'setting', 'config', 'like', 'prefer']):
+                    preferences = vector_memory_manager.get_all_preferences()
+                
+                # Build comprehensive response
+                result_parts = []
+                
+                if facts:
+                    facts_text = "Stored information:\n"
+                    for fact in facts:
+                        # Include relevance score for semantic matches
+                        relevance_indicator = ""
+                        if fact.relevance_score > 0.7:
+                            relevance_indicator = " (highly relevant)"
+                        elif fact.relevance_score > 0.4:
+                            relevance_indicator = " (relevant)"
+                        facts_text += f"• {fact.content}{relevance_indicator}\n"
+                    result_parts.append(facts_text.strip())
+                
+                if preferences:
+                    prefs_text = "User preferences:\n"
+                    for key, value in preferences.items():
+                        prefs_text += f"• {key}: {value}\n"
+                    result_parts.append(prefs_text.strip())
+                
+                if conversations:
+                    conv_text = "Related past conversations:\n"
+                    for conv in conversations:
+                        conv_text += f"• {conv.timestamp.strftime('%Y-%m-%d')}: {conv.summary}\n"
+                    result_parts.append(conv_text.strip())
+                
+                if not result_parts:
+                    return "No relevant information found in memory."
+                
+                return "\n\n".join(result_parts)
             
         except Exception as e:
             logger.error(f"Error in recall: {e}")
@@ -145,30 +190,16 @@ def register_memory_tools(mcp):
             Success message indicating what was removed
         """
         try:
-            # Search for matching facts to remove
-            facts = memory_manager.retrieve_facts(description, limit=10)
+            # Use vector memory manager to forget facts
+            success, removed_items = vector_memory_manager.forget_fact(description)
             
-            if not facts:
-                return f"No information found matching: {description}"
-            
-            removed_count = 0
-            removed_items = []
-            
-            for fact in facts:
-                # Check if the fact content is similar to what user wants to forget
-                if any(word in fact.content.lower() for word in description.lower().split()):
-                    success = memory_manager.forget_fact(fact.id)
-                    if success:
-                        removed_count += 1
-                        removed_items.append(fact.content[:50] + "..." if len(fact.content) > 50 else fact.content)
-            
-            if removed_count > 0:
-                result = f"✓ Removed {removed_count} item(s) from memory:\n"
+            if success and removed_items:
+                result = f"✓ Removed {len(removed_items)} item(s) from memory:\n"
                 for item in removed_items:
                     result += f"• {item}\n"
                 return result.strip()
             else:
-                return f"No matching information was removed for: {description}"
+                return f"No matching information was found to remove for: {description}"
                 
         except Exception as e:
             logger.error(f"Error in forget: {e}")

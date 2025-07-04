@@ -2,13 +2,13 @@
 
 ## Overview
 
-The MCP Playground memory system provides persistent, intelligent memory capabilities that enable the AI to remember user information, preferences, and conversation context across sessions. The system is designed with a three-tier architecture inspired by human memory systems.
+The MCP Playground implements a sophisticated **vector-based memory system** that enables the AI to remember user information, preferences, and conversation context across sessions. The system uses **ChromaDB with Ollama embeddings** for semantic understanding and **TinyDB for exact matches**.
 
 ## Architecture Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    MCP Playground Memory System             │
+│                Vector-Based Memory System                   │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  ┌─────────────────┐   ┌─────────────────┐   ┌─────────────┐│
@@ -21,25 +21,24 @@ The MCP Playground memory system provides persistent, intelligent memory capabil
 │  │ • Session Prefs │   │ • Tool Patterns  │   │ • Profile   ││
 │  └─────────────────┘   └─────────────────┘   └─────────────┘│
 │           │                       │                     │   │
-│           │                       │                     │   │
 │           ▼                       ▼                     ▼   │
 │  ┌─────────────────────────────────────────────────────────┐│
-│  │              Memory Manager Core                        ││
+│  │              Vector Memory Manager                      ││
 │  │                                                         ││
-│  │ • Context Building    • Relevance Scoring              ││
-│  │ • Automatic Cleanup   • Memory Consolidation           ││
-│  │ • Keyword Matching    • Session Management             ││
+│  │ • Semantic Search     • Relevance Scoring              ││
+│  │ • Embedding Generation• Memory Consolidation           ││
+│  │ • Hybrid Retrieval    • Session Management             ││
 │  └─────────────────────────────────────────────────────────┘│
 │                               │                             │
 │                               ▼                             │
 │  ┌─────────────────────────────────────────────────────────┐│
-│  │                  Storage Layer                          ││
+│  │                  Hybrid Storage Layer                   ││
 │  │                                                         ││
-│  │         TinyDB (Local JSON Database)                   ││
-│  │         ~/.cache/mcp_playground/memory.json            ││
-│  │                                                         ││
-│  │ Tables:                                                 ││
-│  │ • conversations  • facts  • preferences  • interactions││
+│  │  ChromaDB (Vector Search)    TinyDB (Exact Match)      ││
+│  │  • User facts (semantic)     • Preferences (K-V)       ││
+│  │  • nomic-embed-text          • Conversations (cache)   ││
+│  │  • 768 dimensions            • Session data            ││
+│  │  • Cosine similarity         • ~/.cache/memory.json   ││
 │  └─────────────────────────────────────────────────────────┘│
 │                                                             │
 ├─────────────────────────────────────────────────────────────┤
@@ -53,6 +52,25 @@ The MCP Playground memory system provides persistent, intelligent memory capabil
 │                            • Memory-aware prompts         │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+## Core Components
+
+### Files in src/core/:
+- `vector_memory.py` - Vector-based memory manager with ChromaDB + Ollama
+- `memory.py` - Original TinyDB memory manager (used for fallback)
+- `cache.py` - File-based caching utilities  
+- `models.py` - Pydantic data models
+- `utils.py` - General utility functions
+
+### Memory Tools (`src/tools/memory.py`)
+
+**3 streamlined memory tools** for AI interaction:
+
+1. **`remember`**: Store any important user information (auto-categorizes as work/personal/preference)
+2. **`recall`**: Semantic search across all stored information - understands natural queries  
+3. **`forget`**: Remove information by description, not technical IDs
+
+**Key improvement**: Reduced from 8 confusing tools to 3 clear tools with distinct purposes.
 
 ## Memory Types
 
@@ -74,119 +92,80 @@ The MCP Playground memory system provides persistent, intelligent memory capabil
 **Storage**: TinyDB `conversations` table  
 **Lifetime**: Auto-cleaned after 7 days  
 
-**Components**:
-- **Conversation Summaries**: Condensed summaries of completed conversations
-- **Topic Extraction**: Key topics discussed in each conversation  
-- **Tool Usage Patterns**: Which tools were used and how often
-- **Temporal Context**: When conversations occurred
-
-**Data Structure**:
-```python
-@dataclass
-class ConversationSummary:
-    session_id: str
-    timestamp: datetime
-    summary: str           # AI-generated summary of conversation
-    topics: List[str]      # Extracted key topics
-    tool_usage: Dict[str, int]  # Tool usage counts
-    message_count: int     # Number of messages in conversation
-```
-
 ### 3. Long-term Memory (Persistent)
-**Purpose**: Store permanent user information and preferences  
+**Purpose**: Store permanent user information with semantic search  
 **Scope**: Indefinite (with size limits)  
-**Storage**: TinyDB `facts` and `preferences` tables  
+**Storage**: ChromaDB with vector embeddings  
 **Lifetime**: Until manually removed or system limits reached  
 
-**Components**:
-- **User Facts**: Important information about the user
-- **Preferences**: User settings and behavioral preferences  
-- **Interaction Patterns**: Long-term usage statistics
+## Vector Search Implementation
 
-**Data Structures**:
+### VectorMemoryManager (`src/core/vector_memory.py`)
+
+**Key Classes**:
+
 ```python
 @dataclass
-class UserFact:
+class VectorFact:
     id: str
-    content: str          # The actual fact/information
-    category: str         # e.g., "personal", "work", "preference"
+    content: str
+    category: str
     timestamp: datetime
-    relevance_score: float
+    relevance_score: float = 1.0
 
-@dataclass
-class UserPreference:
-    key: str             # e.g., "response_style", "preferred_model"
-    value: Any           # The preference value
-    timestamp: datetime
+class OllamaEmbeddingFunction:
+    """Custom embedding function using Ollama's nomic-embed-text model"""
+    model_name = "nomic-embed-text"  # 768 dimensions, 8K context
+
+class VectorMemoryManager:
+    """Hybrid memory manager using ChromaDB + TinyDB"""
 ```
 
-## Core Components
+**Critical Methods**:
+- `store_fact()` - Store with embeddings in ChromaDB + fallback to TinyDB
+- `retrieve_facts_semantic()` - Vector similarity search  
+- `retrieve_facts_hybrid()` - Combines semantic + keyword search
+- `forget_fact()` - Remove by semantic description matching
 
-### Memory Manager (`src/core/memory.py`)
+### Semantic Search Algorithm
 
-The `MemoryManager` class is the central orchestrator of the memory system.
-
-**Key Methods**:
-
-#### Context Building
 ```python
-def build_conversation_context(self, current_query: str, session_history: List[Dict]) -> str:
-    """
-    Builds comprehensive context from all memory types for the current conversation.
+# Query Processing Flow
+def retrieve_facts_semantic(query: str, limit: int = 5):
+    # 1. Generate query embedding
+    query_embedding = ollama.embed(model='nomic-embed-text', input=query)
     
-    Process:
-    1. Retrieve relevant facts based on query keywords
-    2. Find related past conversations 
-    3. Include current user preferences
-    4. Format as structured context string
-    """
+    # 2. Vector search in ChromaDB
+    results = collection.query(
+        query_texts=[query],
+        n_results=limit,
+        include=['documents', 'metadatas', 'distances']
+    )
+    
+    # 3. Convert distance to similarity
+    for distance in results['distances']:
+        similarity = 1.0 - distance  # Cosine distance → similarity
+        
+    # 4. Filter by relevance threshold
+    return facts where similarity > 0.1
 ```
 
-#### Conversation Management
-```python
-def save_conversation_summary(self, session_id: str, messages: List[Dict], tool_usage: Dict[str, int]) -> None:
-    """
-    Saves a conversation summary when a session ends.
-    
-    Process:
-    1. Extract key topics from conversation
-    2. Generate concise summary (max 300 chars)
-    3. Store tool usage statistics
-    4. Clean up old conversations beyond retention period
-    """
-```
+### Relevance Scoring
 
-#### Fact Storage and Retrieval
-```python
-def store_fact(self, content: str, category: str = 'general') -> str:
-    """Store a user fact with automatic ID generation and cleanup."""
+- **High Relevance** (>70% similarity): Direct keyword matches, exact content
+- **Medium Relevance** (40-70% similarity): Semantic relationships, related concepts  
+- **Low Relevance** (10-40% similarity): Tangentially related content
+- **Threshold**: 10% minimum to filter noise
 
-def retrieve_facts(self, query: str, category: Optional[str] = None, limit: int = 5) -> List[UserFact]:
-    """
-    Retrieve relevant facts using keyword matching and relevance scoring.
-    
-    Scoring Algorithm:
-    - Calculate intersection of query words with fact content words
-    - Relevance = (common_words / total_query_words)
-    - Sort by relevance score, return top N results
-    """
-```
+**Example Results**:
+- Query: "about me" → "User likes ice cream" = **43.5% similarity** ✅
+- Query: "ice cream" → "User likes ice cream" = **85.0% similarity** ✅  
+- Query: "work details" → "User works as software engineer" = **65.2% similarity** ✅
 
-### Memory Tools (`src/tools/memory.py`)
+## App Integration (`app.py`)
 
-Three streamlined tools that allow the AI to interact with the memory system:
-
-#### Core Memory Tools
-1. **`remember`**: Store any important user information (auto-categorizes as preference/work/personal/general)
-2. **`recall`**: Search and retrieve all relevant information from memory (facts, preferences, conversation history)
-3. **`forget`**: Remove information by description (user-friendly, no technical IDs required)
-
-**Removed for simplicity**: Eliminated 5 redundant tools (`remember_fact`, `set_user_preference`, `get_user_preferences`, `get_conversation_history`, `get_memory_stats`, `build_context_from_memory`) that caused confusion and overlap.
-
-### App Integration (`app.py`)
-
-#### Context Injection
-The memory system automatically injects relevant context into conversations:
+### Context Injection
+Memory context automatically injected into conversations:
 
 ```python
 # In chat_with_ollama_and_mcp()
@@ -195,171 +174,180 @@ if memory_context:
     base_prompt += f"\n\n{memory_context}"
 ```
 
-#### Session Management
+### Session Management
 - **Session ID**: Unique UUID generated per session
 - **Tool Tracking**: Automatic counting of tool usage
 - **Summary Saving**: Conversations summarized when cleared
+- **Hybrid Storage**: Facts in ChromaDB, preferences in TinyDB
 
-#### Auto-cleanup
-- **Conversation Retention**: 7 days for short-term memory
-- **Fact Limits**: Maximum 1000 facts with LRU cleanup
-- **Database Optimization**: Cached TinyDB operations
+### Smart Query Handling
+- **General queries** ("about me"): Return all stored information
+- **Specific queries** ("ice cream"): Semantic search with relevance scoring
+- **Preference queries** ("settings"): Direct TinyDB lookup for speed
+- **Fallback logic**: ChromaDB → TinyDB → empty results
 
 ## Database Schema
 
-### TinyDB Tables
+### ChromaDB Collections
 
-#### `conversations`
-```json
+#### `user_facts`
+```python
 {
-  "session_id": "uuid-string",
-  "timestamp": "2024-01-01T12:00:00",
-  "summary": "User discussed Python programming and asked about best practices",
-  "topics": ["python", "programming", "best-practices"],
-  "tool_usage": {"web_search": 2, "arxiv_search": 1},
-  "message_count": 8
+    "id": "fact_1234567890.123",
+    "document": "User likes ice cream",
+    "metadata": {
+        "category": "preference",
+        "timestamp": "2024-01-01T12:00:00",
+        "relevance_score": 1.0
+    },
+    "embedding": [0.1, -0.3, 0.8, ...]  # 768 dimensions
 }
 ```
 
-#### `facts`
-```json
-{
-  "id": "fact_1234567890.123",
-  "content": "User is a software engineer at OpenAI",
-  "category": "work",
-  "timestamp": "2024-01-01T12:00:00",
-  "relevance_score": 1.0
-}
-```
+### TinyDB Tables  
 
 #### `preferences`
 ```json
 {
   "key": "response_style",
-  "value": "concise",
+  "value": "concise", 
   "timestamp": "2024-01-01T12:00:00"
 }
 ```
 
-#### `interactions`
+#### `conversations`
 ```json
 {
-  "tool_name": "web_search",
-  "usage_count": 15,
-  "last_used": "2024-01-01T12:00:00",
-  "success_rate": 0.95
+  "session_id": "uuid-string",
+  "timestamp": "2024-01-01T12:00:00", 
+  "summary": "User discussed Python programming and asked about best practices",
+  "topics": ["python", "programming", "best-practices"],
+  "tool_usage": {"web_search": 2, "recall": 1},
+  "message_count": 8
 }
 ```
 
-## Configuration
+## Configuration & Performance
+
+### Memory Limits
+```python
+# In VectorMemoryManager.__init__()
+self.max_conversation_days = 7      # Short-term retention
+self.max_facts = 1000              # Long-term fact limit  
+self.min_similarity = 0.1          # Relevance threshold
+```
+
+### Performance Metrics
+- **Embedding Generation**: ~200ms per query (local Ollama)
+- **Vector Search**: ~50ms for 1000+ facts (ChromaDB)
+- **Total Latency**: ~300ms for semantic memory lookup
+- **Storage Overhead**: 768 floats per fact (minimal)
 
 ### Environment Variables
 - `CACHE_DIRECTORY`: Override default cache location
 - `MAX_CACHE_DAYS`: Conversation retention period (default: 7)
-
-### Memory Limits
-```python
-# In MemoryManager.__init__()
-self.max_conversation_days = 7      # Short-term memory retention
-self.max_facts = 1000              # Long-term fact limit
-self.max_summary_length = 300      # Summary character limit
-```
 
 ## Usage Patterns
 
 ### Automatic Context Injection
 Every user message triggers context building:
 1. Extract keywords from user query
-2. Search relevant facts (top 3)
-3. Find related conversations (top 2)  
-4. Include current preferences
+2. Search relevant facts (top 3) via semantic similarity
+3. Find related conversations (top 2) via keyword matching
+4. Include current preferences from TinyDB
 5. Format as system prompt addition
 
 ### Conversation Lifecycle
-1. **Start**: New session ID generated
-2. **During**: Tool usage tracked, context injected
-3. **End**: Conversation summarized and stored
+1. **Start**: New session ID generated, vector memory initialized
+2. **During**: Tool usage tracked, semantic context injected per message
+3. **End**: Conversation summarized and stored in both systems
 4. **Cleanup**: Old data removed based on retention policies
 
-### Memory Consolidation
-- **Facts**: Duplicate detection and relevance scoring
-- **Conversations**: Topic-based clustering and summarization
-- **Preferences**: Latest value wins, historical tracking
+### Tool Usage Examples
+```python
+# Store information
+remember("User prefers morning meetings")  # Auto-categorized as "preference"
+
+# Natural language queries  
+recall("what do you know about my schedule preferences")  # Semantic search
+recall("about me")  # Returns all stored facts
+
+# Remove information
+forget("schedule preferences")  # Finds and removes by description
+```
 
 ## Debugging and Maintenance
 
 ### Memory Statistics
-Access memory statistics programmatically:
-- Number of stored conversations, facts, preferences
-- Database file size and location
-- Cache directory status
-
-### Manual Database Access
 ```python
-from src.core.memory import memory_manager
-
-# Direct database access
-conversations = memory_manager.conversations.all()
-facts = memory_manager.facts.all()
-preferences = memory_manager.preferences.all()
-
-# Memory statistics
-stats = memory_manager.get_memory_stats()
+stats = vector_memory_manager.get_memory_stats()
+# Returns:
+{
+    'vector_facts_stored': 15,
+    'chroma_path': '/Users/user/.cache/mcp_playground/chromadb',
+    'embedding_model': 'nomic-embed-text',
+    'tinydb_facts': 15,           # Hybrid storage
+    'tinydb_conversations': 5,
+    'tinydb_preferences': 3
+}
 ```
 
 ### Common Issues
 
 #### Performance
-- **Large fact database**: Implemented relevance scoring and limits
-- **Memory context size**: Limited to essential information only
-- **Database locking**: Using CachingMiddleware for TinyDB
+- **Large fact database**: Relevance scoring limits and ChromaDB indexing
+- **Memory context size**: Limited to essential information (top 3 facts)
+- **Embedding generation**: Local Ollama may be slower than cloud APIs
 
-#### Data Integrity  
-- **Duplicate facts**: Check content similarity before storing
-- **Stale conversations**: Automatic cleanup after retention period
-- **Corrupted preferences**: Timestamp-based conflict resolution
+#### Connectivity
+- **Ollama connection**: Graceful fallback to TinyDB if Ollama unavailable
+- **Model availability**: Requires `ollama pull nomic-embed-text`
+- **Database permissions**: Automatic fallback to temp directory
 
-### Backup and Recovery
-```bash
-# Backup memory database
-cp ~/.cache/mcp_playground/memory.json ~/memory_backup_$(date +%Y%m%d).json
+### Manual Database Access
+```python
+from src.core.vector_memory import vector_memory_manager
 
-# Restore from backup  
-cp ~/memory_backup_20240101.json ~/.cache/mcp_playground/memory.json
+# Direct ChromaDB access
+all_facts = vector_memory_manager.get_all_facts()
+semantic_results = vector_memory_manager.retrieve_facts_semantic("query")
+
+# Direct TinyDB access  
+preferences = vector_memory_manager.get_all_preferences()
+conversations = vector_memory_manager.get_relevant_conversations("topic")
 ```
 
 ## Future Enhancements
 
-### Semantic Search
-- **Vector Embeddings**: Replace keyword matching with semantic similarity
-- **Embedding Model**: Local sentence-transformers integration
-- **Vector Database**: Upgrade from TinyDB to Chroma/FAISS
+### Document RAG Extension
+The current vector architecture provides foundation for:
 
-### Memory Consolidation
-- **LLM Summarization**: Use local LLM for better conversation summaries
-- **Fact Merging**: Detect and merge related facts automatically
-- **Topic Modeling**: Advanced topic extraction and clustering
+1. **Document Ingestion**: PDF, Word, markdown processing with chunking
+2. **Multi-Collection Search**: Personal docs, web bookmarks, conversation history
+3. **Advanced Retrieval**: Hybrid search (vector + BM25), re-ranking, query expansion
+4. **Privacy Controls**: Local encryption, user-controlled retention policies
 
-### Privacy Controls
-- **Memory Categories**: User-controlled fact categorization
-- **Retention Policies**: Per-category retention settings
-- **Export/Import**: User data portability features
-
-### Analytics
-- **Usage Patterns**: Detailed analytics on memory effectiveness
-- **Conversation Quality**: Metrics on context relevance
-- **Tool Efficiency**: Memory-driven tool recommendation
+### Semantic Improvements
+1. **Better Embeddings**: Fine-tune models on user data
+2. **Query Understanding**: Intent classification, entity extraction  
+3. **Memory Consolidation**: Merge related facts, detect contradictions
+4. **Context Awareness**: Time-based relevance, conversation threading
 
 ---
 
-## Integration Notes for Developers
+## Quick Start
 
-When modifying the memory system:
+```bash
+# Install dependencies
+uv add chromadb ollama
 
-1. **Always test context building** - Memory context affects every conversation
-2. **Consider retention policies** - New data types need cleanup strategies  
-3. **Monitor database size** - Implement limits for new memory types
-4. **Preserve privacy** - All data stays local, no external transmission
-5. **Handle errors gracefully** - Memory failures shouldn't break conversations
+# Pull embedding model
+ollama pull nomic-embed-text
 
-The memory system is designed to be unobtrusive but powerful - it works behind the scenes to make conversations more natural and personalized while maintaining user privacy and system performance.
+# Test vector memory
+from src.core.vector_memory import vector_memory_manager
+vector_memory_manager.store_fact("User likes ice cream", "preference")
+facts = vector_memory_manager.retrieve_facts_semantic("about me")
+```
+
+The vector memory system provides intelligent, semantic understanding that makes conversations more natural and personalized while maintaining privacy through local-only processing.

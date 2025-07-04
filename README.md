@@ -83,7 +83,7 @@ uv run python mcp_server.py http 8000
 - **📈 Financial Data**: Get stock prices, crypto rates, and market summaries without API keys
 - **🎥 YouTube Analysis**: Analyze and summarize video content from YouTube links (includes beginning + ending for longer videos)
 - **🌤️ Weather**: Get current weather and 7-day forecasts by IP location, city name, or coordinates (prefers Canada, no API keys needed)
-- **🧠 Memory System**: Persistent memory across conversations with fact storage, preferences, and conversation history
+- **🧠 Vector Memory System**: Semantic memory using ChromaDB + Ollama embeddings for intelligent fact storage and retrieval
 - **🎛️ Function Toggle**: Enable/disable AI tool usage per conversation
 
 ## 🎯 Example Prompts
@@ -127,117 +127,77 @@ uv run python mcp_server.py http 8000
 
 ## 🏗️ Architecture
 
-### Core Files
+### Core Components
 ```
-app.py          # Main Streamlit application with in-memory MCP integration
-app_subprocess.py # Alternative version using subprocess MCP transport
-mcp_server.py   # MCP server with all tools using @mcp.tool decorators
-ui_config.py    # UI styling and system prompts
+app.py                    # Main Streamlit application
+mcp_server.py            # FastMCP server with all tools
+src/core/vector_memory.py # Vector memory with ChromaDB + Ollama
+src/tools/               # Organized tool modules
 ```
 
-### Key Benefits of Modern MCP Architecture
+### Key Benefits
+- **Standards-Compliant**: Uses Model Context Protocol (MCP)
+- **Automatic Schema Generation**: From Python type hints
+- **Vector Memory**: Semantic search with local embeddings
+- **Modular Design**: Clean tool organization
 
-- **🏗️ Standards-Compliant**: Uses the official Model Context Protocol (MCP) standard
-- **🎯 Automatic Schema Generation**: Automatically generates tool schemas from Python type hints
-- **🔧 Simplified Tool Definition**: Clean `@mcp.tool` decorators replace manual schema definitions
-- **📡 Multiple Transport Support**: Supports stdio, HTTP, and SSE transports
-- **🔌 Better Integration**: Can be used as standalone server or embedded in applications
-- **🚀 Scalable**: Built for production use with proper error handling and logging
+## 🔧 MCP Server Usage
 
-## 🔧 Using the MCP Server
-
-### As a Standalone Server
-
-The MCP server can run independently and be used by any MCP-compatible client:
-
+### Standalone Server
 ```bash
-# Run in stdio mode (for local development)
+# Run as MCP server
 uv run python mcp_server.py stdio
 
-# Run as HTTP server (for web applications)
+# Run as HTTP server
 uv run python mcp_server.py http 8000
-
-# Run as HTTP server with custom host
-uv run python mcp_server.py http 8000 localhost
 ```
 
-### Integration with Other Applications
+### Available Tools
+- **Memory**: `remember`, `recall`, `forget` - Vector-based semantic memory
+- **Web**: `web_search`, `analyze_url` - Web search and content analysis
+- **Media**: `summarize_youtube_video`, `query_youtube_transcript` - YouTube analysis
+- **Finance**: `get_stock_price`, `get_crypto_price`, `get_market_summary` - Financial data
+- **Research**: `arxiv_search` - Academic paper analysis
+- **Weather**: `get_weather` - Location-based weather forecasts
 
-The server provides all the same tools available in the Streamlit app:
-
-- **web_search**: Real-time web search using DuckDuckGo
-- **analyze_url**: Analyze and extract information from web pages
-- **arxiv_search**: Search and analyze academic papers with deep PDF analysis
-- **get_stock_price**: Current stock prices and information
-- **get_stock_history**: Historical stock data and trends
-- **get_crypto_price**: Cryptocurrency prices
-- **get_market_summary**: Market indices overview
-- **summarize_youtube_video**: AI-powered YouTube video summaries
-- **query_youtube_transcript**: Answer questions about YouTube video content
-- **get_weather**: Current weather and 7-day forecast by IP, city name, or coordinates
-- **remember**: Store important facts about the user (auto-categorizes)
-- **recall**: Retrieve all relevant information from memory  
-- **forget**: Remove specific information by description
-
-### MCP Client Usage
-
-#### Option 1: In-Memory Transport (Recommended for embedded use)
+### Client Integration
 ```python
 from fastmcp import Client
 from mcp_server import mcp
-import asyncio
 
-async def use_mcp_tools():
-    # Direct server instance - fastest, embedded approach
+async def use_tools():
     async with Client(mcp) as client:
-        # List available tools
-        tools = await client.list_tools()
-        print(f"Available tools: {[t.name for t in tools]}")
-        
-        # Call a tool
         result = await client.call_tool("web_search", {"query": "MCP framework"})
         print(result.content[0].text)
-
-# Run the example
-asyncio.run(use_mcp_tools())
 ```
 
-#### Option 2: Subprocess Transport (For client-server separation)
-```python
-from fastmcp import Client
-import asyncio
+## 🧠 Vector Memory System
 
-async def use_mcp_tools():
-    # Auto-inferred subprocess transport - handles process management
-    async with Client("mcp_server.py") as client:
-        # List available tools
-        tools = await client.list_tools()
-        print(f"Available tools: {[t.name for t in tools]}")
-        
-        # Call a tool
-        result = await client.call_tool("web_search", {"query": "MCP framework"})
-        print(result.content[0].text)
+**Semantic memory that understands meaning, not just keywords.**
 
-# Run the example
-asyncio.run(use_mcp_tools())
-```
+### Architecture
+- **ChromaDB + Ollama**: `nomic-embed-text` embeddings (768d, 8K context)
+- **Semantic Search**: "about me" finds "User likes ice cream" via meaning
+- **Hybrid Storage**: Vector facts + TinyDB preferences
+- **Local & Private**: All data at `~/.cache/mcp_playground/`
 
-## 🧠 Memory System
+### Memory Tools
+- `remember`: Store user information (auto-categorizes)
+- `recall`: Semantic search across all memories
+- `forget`: Remove by description, not IDs
 
-The app includes a sophisticated memory system that enables persistent conversations and personalized interactions:
+### Key Benefits
+- **Solves "about me" problem**: Natural language queries work perfectly
+- **Auto-context injection**: Relevant memories added to conversations
+- **Future-ready**: Foundation for personal document RAG
 
-- **Working Memory**: Session-based conversation context and tool usage tracking
-- **Short-Term Memory**: Cross-session conversation summaries (7-day retention)  
-- **Long-Term Memory**: Persistent user facts, preferences, and interaction patterns
-- **Storage**: Local TinyDB database at `~/.cache/mcp_playground/memory.json`
-- **Privacy**: All memory data stays on your local machine
+**Example**: "what do you recall about me" → finds "User likes ice cream" (43.5% similarity)
 
-### Memory Tools  
-- `remember`: Store any important user information (auto-categorizes)
-- `recall`: Search and retrieve all relevant information from memory
-- `forget`: Remove specific information by description
+## 📚 Documentation
 
-The system automatically injects relevant context from memory into conversations and saves conversation summaries when you clear the chat.
+- **[Memory System](docs/MEMORY_SYSTEM.md)** - Vector memory architecture and usage
+- **[RAG Architecture](docs/RAG_ARCHITECTURE.md)** - Technical details of semantic search
+- **[FastMCP Usage](docs/FASTMCP_USAGE.md)** - FastMCP framework documentation
 
 ## 🔧 Troubleshooting
 
@@ -245,6 +205,7 @@ The system automatically injects relevant context from memory into conversations
 ```bash
 ollama serve
 ollama pull llama3.2
+ollama pull nomic-embed-text
 ```
 
 **Function calling not working?**
@@ -252,17 +213,13 @@ ollama pull llama3.2
 - Ensure "Tools" checkbox is enabled  
 - Use a recent model (llama3.2, llama3.1)
 
+**Memory not working?**
+- Ensure Ollama is running: `ollama serve`
+- Check model availability: `ollama list`
+- Memory falls back to TinyDB if ChromaDB/Ollama unavailable
+
 **App won't start?**
 ```bash
 uv sync
 python --version  # Requires Python 3.12+
 ```
-
-**Windsurf MCP integration issues?**
-- Ensure you're using the full absolute path to the virtual environment Python
-- Check that the path in `mcp_config.json` matches your actual project location
-- Restart Windsurf after adding the configuration
-- Test the server manually: `uv run python mcp_server.py stdio`
-- Tools will appear in Cascade panel → Plugins after restart
-
----
