@@ -33,7 +33,7 @@ async def get_mcp_tools():
     """Get available tools from the FastMCP server using in-memory transport"""
     try:
         # Import the FastMCP server instance
-        from mcp_server import mcp
+        from src import mcp
         from fastmcp import Client
         
         # Create a client with in-memory transport (FastMCPTransport auto-inferred)
@@ -58,7 +58,7 @@ async def call_mcp_tool(tool_name: str, arguments: dict):
     """Call a tool using the FastMCP client with in-memory transport"""
     try:
         # Import the FastMCP server instance
-        from mcp_server import mcp
+        from src import mcp
         from fastmcp import Client
         
         # Create a client with in-memory transport
