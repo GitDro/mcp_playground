@@ -1,8 +1,8 @@
 """
 Memory tools for the MCP server
 
-These tools allow the AI to store and retrieve information about the user
-and previous conversations, enabling persistent memory across sessions.
+Streamlined memory tools that allow the AI to store and retrieve information 
+about the user and previous conversations. Reduced from 8 tools to 3 for clarity.
 """
 
 import logging
@@ -12,221 +12,164 @@ from ..core.memory import memory_manager
 logger = logging.getLogger(__name__)
 
 def register_memory_tools(mcp):
-    """Register memory tools with the FastMCP server"""
+    """Register streamlined memory tools with the FastMCP server"""
     
     @mcp.tool
-    def remember_fact(content: str, category: str = "general") -> str:
+    def remember(content: str) -> str:
         """
-        Store an important fact about the user for future reference.
+        Store important information about the user for future conversations.
         
         Use this tool when the user shares personal information, preferences,
-        or other details that should be remembered for future conversations.
+        work details, or anything else that should be remembered. The system
+        will automatically categorize the information appropriately.
+        
+        Examples:
+        - "User prefers concise responses" (preference)
+        - "User works as a software engineer at OpenAI" (work)
+        - "User lives in Toronto" (personal)
+        - "User's favorite programming language is Python" (preference)
         
         Args:
-            content: The fact to remember (e.g., "User prefers concise answers")
-            category: Category for the fact (e.g., "preference", "personal", "work")
+            content: The information to remember about the user
         
         Returns:
-            Success message with fact ID
+            Success message confirming what was stored
         """
         try:
+            # Auto-categorize based on content keywords
+            content_lower = content.lower()
+            if any(word in content_lower for word in ['prefer', 'like', 'favorite', 'style', 'want']):
+                category = 'preference'
+            elif any(word in content_lower for word in ['work', 'job', 'company', 'career', 'profession']):
+                category = 'work'
+            elif any(word in content_lower for word in ['live', 'location', 'address', 'home', 'family']):
+                category = 'personal'
+            elif any(word in content_lower for word in ['model', 'tool', 'setting', 'config']):
+                category = 'preference'
+            else:
+                category = 'general'
+            
             fact_id = memory_manager.store_fact(content, category)
             if fact_id:
                 return f"✓ Remembered: {content}"
             else:
-                return "✗ Failed to store the fact"
+                return "✗ Failed to store the information"
+                
         except Exception as e:
-            logger.error(f"Error in remember_fact: {e}")
-            return f"✗ Error storing fact: {str(e)}"
+            logger.error(f"Error in remember: {e}")
+            return f"✗ Error storing information: {str(e)}"
     
     @mcp.tool
-    def recall_information(query: str, category: Optional[str] = None) -> str:
+    def recall(query: str) -> str:
         """
-        Retrieve relevant information from memory about the user.
+        Retrieve relevant information from memory about the user and past conversations.
         
-        Use this tool to recall facts, preferences, or other stored information
-        that might be relevant to the current conversation.
+        This tool searches across all stored information including user facts,
+        preferences, and conversation history to find anything relevant to your query.
+        
+        Use this tool when you need to check what you know about the user or
+        reference previous conversations.
+        
+        Examples:
+        - "user preferences" - Get user's stored preferences
+        - "work details" - Find work-related information
+        - "machine learning" - Find facts and conversations about ML
+        - "what do I know about this user?" - Get general user profile
         
         Args:
-            query: What to search for (e.g., "user preferences", "work details")
-            category: Optional category to filter by
+            query: What to search for in memory
         
         Returns:
-            Relevant information from memory
+            All relevant information found in memory
         """
         try:
-            facts = memory_manager.retrieve_facts(query, category, limit=5)
+            # Search facts
+            facts = memory_manager.retrieve_facts(query, limit=5)
             
-            if not facts:
+            # Search conversation history  
+            conversations = memory_manager.get_relevant_conversations(query, limit=3)
+            
+            # Get all preferences if query is about preferences
+            preferences = {}
+            if any(word in query.lower() for word in ['preference', 'setting', 'config', 'like', 'prefer']):
+                preferences = memory_manager.get_all_preferences()
+            
+            # Build comprehensive response
+            result_parts = []
+            
+            if facts:
+                facts_text = "Stored information:\n"
+                for fact in facts:
+                    facts_text += f"• {fact.content}\n"
+                result_parts.append(facts_text.strip())
+            
+            if preferences:
+                prefs_text = "User preferences:\n"
+                for key, value in preferences.items():
+                    prefs_text += f"• {key}: {value}\n"
+                result_parts.append(prefs_text.strip())
+            
+            if conversations:
+                conv_text = "Related past conversations:\n"
+                for conv in conversations:
+                    conv_text += f"• {conv.timestamp.strftime('%Y-%m-%d')}: {conv.summary}\n"
+                result_parts.append(conv_text.strip())
+            
+            if not result_parts:
                 return "No relevant information found in memory."
             
-            result = "Relevant information from memory:\n"
-            for fact in facts:
-                result += f"• {fact.content} (category: {fact.category})\n"
-            
-            return result.strip()
+            return "\n\n".join(result_parts)
             
         except Exception as e:
-            logger.error(f"Error in recall_information: {e}")
+            logger.error(f"Error in recall: {e}")
             return f"✗ Error retrieving information: {str(e)}"
     
     @mcp.tool
-    def forget_information(fact_id: str) -> str:
+    def forget(description: str) -> str:
         """
-        Remove specific information from memory.
+        Remove information from memory based on a description.
         
-        Use this tool when the user asks to forget something or when
-        information becomes outdated.
+        Use this tool only when the user explicitly asks to forget specific
+        information. Provide a description of what to forget rather than
+        technical IDs.
+        
+        Examples:
+        - "forget my work details"
+        - "remove information about my location"
+        - "delete my preference for concise responses"
         
         Args:
-            fact_id: ID of the fact to forget
+            description: Description of what information to remove
         
         Returns:
-            Success or failure message
+            Success message indicating what was removed
         """
         try:
-            success = memory_manager.forget_fact(fact_id)
-            if success:
-                return f"✓ Forgotten information with ID: {fact_id}"
+            # Search for matching facts to remove
+            facts = memory_manager.retrieve_facts(description, limit=10)
+            
+            if not facts:
+                return f"No information found matching: {description}"
+            
+            removed_count = 0
+            removed_items = []
+            
+            for fact in facts:
+                # Check if the fact content is similar to what user wants to forget
+                if any(word in fact.content.lower() for word in description.lower().split()):
+                    success = memory_manager.forget_fact(fact.id)
+                    if success:
+                        removed_count += 1
+                        removed_items.append(fact.content[:50] + "..." if len(fact.content) > 50 else fact.content)
+            
+            if removed_count > 0:
+                result = f"✓ Removed {removed_count} item(s) from memory:\n"
+                for item in removed_items:
+                    result += f"• {item}\n"
+                return result.strip()
             else:
-                return f"✗ Could not find information with ID: {fact_id}"
+                return f"No matching information was removed for: {description}"
+                
         except Exception as e:
-            logger.error(f"Error in forget_information: {e}")
+            logger.error(f"Error in forget: {e}")
             return f"✗ Error removing information: {str(e)}"
-    
-    @mcp.tool
-    def set_user_preference(key: str, value: str) -> str:
-        """
-        Set a user preference for future conversations.
-        
-        Use this tool to store user preferences about how they like to interact,
-        what tools they prefer, response styles, etc.
-        
-        Args:
-            key: Preference name (e.g., "response_style", "preferred_model")
-            value: Preference value (e.g., "concise", "llama3.2")
-        
-        Returns:
-            Success message
-        """
-        try:
-            memory_manager.set_preference(key, value)
-            return f"✓ Set preference: {key} = {value}"
-        except Exception as e:
-            logger.error(f"Error in set_user_preference: {e}")
-            return f"✗ Error setting preference: {str(e)}"
-    
-    @mcp.tool
-    def get_user_preferences() -> str:
-        """
-        Get all stored user preferences.
-        
-        Use this tool to check what preferences are currently stored
-        and apply them to the conversation.
-        
-        Returns:
-            List of all user preferences
-        """
-        try:
-            preferences = memory_manager.get_all_preferences()
-            
-            if not preferences:
-                return "No user preferences stored."
-            
-            result = "User preferences:\n"
-            for key, value in preferences.items():
-                result += f"• {key}: {value}\n"
-            
-            return result.strip()
-            
-        except Exception as e:
-            logger.error(f"Error in get_user_preferences: {e}")
-            return f"✗ Error retrieving preferences: {str(e)}"
-    
-    @mcp.tool
-    def get_conversation_history(query: str) -> str:
-        """
-        Get summaries of relevant past conversations.
-        
-        Use this tool to recall what was discussed in previous sessions
-        that might be relevant to the current conversation.
-        
-        Args:
-            query: What to search for in past conversations
-        
-        Returns:
-            Summaries of relevant past conversations
-        """
-        try:
-            conversations = memory_manager.get_relevant_conversations(query, limit=3)
-            
-            if not conversations:
-                return "No relevant past conversations found."
-            
-            result = "Relevant past conversations:\n"
-            for conv in conversations:
-                result += f"• {conv.timestamp.strftime('%Y-%m-%d')}: {conv.summary}\n"
-                if conv.topics:
-                    result += f"  Topics: {', '.join(conv.topics)}\n"
-            
-            return result.strip()
-            
-        except Exception as e:
-            logger.error(f"Error in get_conversation_history: {e}")
-            return f"✗ Error retrieving conversation history: {str(e)}"
-    
-    @mcp.tool
-    def get_memory_stats() -> str:
-        """
-        Get statistics about the memory system.
-        
-        Use this tool to check how much information is stored
-        and the status of the memory system.
-        
-        Returns:
-            Memory system statistics
-        """
-        try:
-            stats = memory_manager.get_memory_stats()
-            
-            result = "Memory system statistics:\n"
-            result += f"• Conversations stored: {stats.get('conversations_stored', 0)}\n"
-            result += f"• Facts stored: {stats.get('facts_stored', 0)}\n"
-            result += f"• Preferences stored: {stats.get('preferences_stored', 0)}\n"
-            result += f"• Database size: {stats.get('database_size', 0)} bytes\n"
-            result += f"• Cache directory: {stats.get('cache_directory', 'unknown')}\n"
-            
-            return result.strip()
-            
-        except Exception as e:
-            logger.error(f"Error in get_memory_stats: {e}")
-            return f"✗ Error retrieving memory stats: {str(e)}"
-    
-    @mcp.tool
-    def build_context_from_memory(current_query: str) -> str:
-        """
-        Build conversation context from stored memories.
-        
-        This tool automatically retrieves relevant facts, preferences,
-        and conversation history to provide context for the current query.
-        
-        Args:
-            current_query: The user's current question or request
-        
-        Returns:
-            Contextual information from memory
-        """
-        try:
-            context = memory_manager.build_conversation_context(
-                current_query, 
-                []  # Session history will be provided by the app
-            )
-            
-            if not context:
-                return "No relevant context found in memory."
-            
-            return f"Relevant context from memory:\n{context}"
-            
-        except Exception as e:
-            logger.error(f"Error in build_context_from_memory: {e}")
-            return f"✗ Error building context: {str(e)}"

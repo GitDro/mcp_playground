@@ -175,10 +175,9 @@ The server provides all the same tools available in the Streamlit app:
 - **summarize_youtube_video**: AI-powered YouTube video summaries
 - **query_youtube_transcript**: Answer questions about YouTube video content
 - **get_weather**: Current weather and 7-day forecast by IP, city name, or coordinates
-- **remember_fact**: Store important facts about the user
-- **recall_information**: Retrieve relevant stored information
-- **set_user_preference**: Set user preferences for conversations
-- **get_conversation_history**: Access summaries of past conversations
+- **remember**: Store important facts about the user (auto-categorizes)
+- **recall**: Retrieve all relevant information from memory  
+- **forget**: Remove specific information by description
 
 ### MCP Client Usage
 
@@ -233,12 +232,10 @@ The app includes a sophisticated memory system that enables persistent conversat
 - **Storage**: Local TinyDB database at `~/.cache/mcp_playground/memory.json`
 - **Privacy**: All memory data stays on your local machine
 
-### Memory Tools
-- `remember_fact`: Store important user information with categories
-- `recall_information`: Search and retrieve relevant stored facts
-- `set_user_preference`: Save user preferences (response style, models, etc.)
-- `get_conversation_history`: Access summaries of relevant past conversations
-- `get_memory_stats`: View memory system statistics
+### Memory Tools  
+- `remember`: Store any important user information (auto-categorizes)
+- `recall`: Search and retrieve all relevant information from memory
+- `forget`: Remove specific information by description
 
 The system automatically injects relevant context from memory into conversations and saves conversation summaries when you clear the chat.
 

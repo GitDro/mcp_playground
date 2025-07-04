@@ -45,15 +45,12 @@ The MCP Playground memory system provides persistent, intelligent memory capabil
 ├─────────────────────────────────────────────────────────────┤
 │                    Tool Integration                         │
 │                                                             │
-│ Memory Tools (8):           App Integration:                │
-│ • remember_fact            • Auto context injection        │
-│ • recall_information       • Session persistence          │
-│ • forget_information       • Tool usage tracking          │
-│ • set_user_preference      • Conversation summarization   │
-│ • get_user_preferences     • Memory-aware prompts         │
-│ • get_conversation_history                                │
-│ • get_memory_stats                                        │
-│ • build_context_from_memory                               │
+│ Memory Tools (3):           App Integration:                │
+│ • remember                 • Auto context injection        │
+│ • recall                   • Session persistence          │
+│ • forget                   • Tool usage tracking          │
+│                            • Conversation summarization   │
+│                            • Memory-aware prompts         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -177,23 +174,14 @@ def retrieve_facts(self, query: str, category: Optional[str] = None, limit: int 
 
 ### Memory Tools (`src/tools/memory.py`)
 
-Eight specialized tools that allow the AI to interact with the memory system:
+Three streamlined tools that allow the AI to interact with the memory system:
 
 #### Core Memory Tools
-1. **`remember_fact`**: Store important user information
-2. **`recall_information`**: Search and retrieve stored facts
-3. **`forget_information`**: Remove outdated information
+1. **`remember`**: Store any important user information (auto-categorizes as preference/work/personal/general)
+2. **`recall`**: Search and retrieve all relevant information from memory (facts, preferences, conversation history)
+3. **`forget`**: Remove information by description (user-friendly, no technical IDs required)
 
-#### Preference Management
-4. **`set_user_preference`**: Store user preferences
-5. **`get_user_preferences`**: Retrieve all preferences
-
-#### Conversation History
-6. **`get_conversation_history`**: Access past conversation summaries
-7. **`build_context_from_memory`**: Auto-build context for queries
-
-#### System Management
-8. **`get_memory_stats`**: View memory system statistics
+**Removed for simplicity**: Eliminated 5 redundant tools (`remember_fact`, `set_user_preference`, `get_user_preferences`, `get_conversation_history`, `get_memory_stats`, `build_context_from_memory`) that caused confusion and overlap.
 
 ### App Integration (`app.py`)
 
@@ -301,7 +289,7 @@ Every user message triggers context building:
 ## Debugging and Maintenance
 
 ### Memory Statistics
-Use `get_memory_stats` tool to check:
+Access memory statistics programmatically:
 - Number of stored conversations, facts, preferences
 - Database file size and location
 - Cache directory status

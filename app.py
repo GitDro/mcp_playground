@@ -453,22 +453,12 @@ with col2:
                         purpose = "YouTube Q&A"
                     elif 'get_weather' in tool_name:
                         purpose = "weather forecast"
-                    elif 'remember_fact' in tool_name:
-                        purpose = "store memories"
-                    elif 'recall_information' in tool_name:
-                        purpose = "recall memories"
-                    elif 'forget_information' in tool_name:
-                        purpose = "forget memories"
-                    elif 'set_user_preference' in tool_name:
-                        purpose = "set preferences"
-                    elif 'get_user_preferences' in tool_name:
-                        purpose = "get preferences"
-                    elif 'get_conversation_history' in tool_name:
-                        purpose = "past conversations"
-                    elif 'get_memory_stats' in tool_name:
-                        purpose = "memory statistics"
-                    elif 'build_context_from_memory' in tool_name:
-                        purpose = "memory context"
+                    elif 'remember' in tool_name:
+                        purpose = "store user info"
+                    elif 'recall' in tool_name:
+                        purpose = "retrieve memories"
+                    elif 'forget' in tool_name:
+                        purpose = "remove memories"
                     else:
                         purpose = "tool"
                     

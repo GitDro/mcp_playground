@@ -78,9 +78,11 @@ class UserPreference:
 - Conversation summary saving on session clear
 
 ### Tool Integration (`../tools/memory.py`)  
-- 8 memory tools for AI interaction with memory system
-- Direct access to MemoryManager instance
-- Error handling and user-friendly responses
+- **3 streamlined memory tools** for AI interaction with memory system (reduced from 8)
+- **Clear purposes**: `remember` (store), `recall` (retrieve), `forget` (remove)
+- **Auto-categorization**: `remember` tool automatically categorizes user information
+- **Unified retrieval**: `recall` searches facts, preferences, and conversation history in one call
+- **User-friendly**: `forget` uses descriptions instead of technical IDs
 
 ## Memory Algorithms
 
