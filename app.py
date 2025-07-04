@@ -387,6 +387,8 @@ with col2:
                         purpose = "YouTube summaries"
                     elif 'query_youtube' in tool_name:
                         purpose = "YouTube Q&A"
+                    elif 'get_weather' in tool_name:
+                        purpose = "weather forecast"
                     else:
                         purpose = "tool"
                     
@@ -441,7 +443,7 @@ with col2:
             st.session_state.use_functions = st.checkbox(
                 "Tools", 
                 value=st.session_state.use_functions,
-                help="Enable tools for web search, URL analysis, arXiv papers, finance, and YouTube"
+                help="Enable tools for web search, URL analysis, arXiv papers, finance, YouTube, and weather"
             )
         
     else:

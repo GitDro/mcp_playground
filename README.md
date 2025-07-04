@@ -63,6 +63,7 @@ You can use these tools directly in Windsurf IDE through MCP integration:
 - `get_market_summary` - Market indices overview
 - `summarize_youtube_video` - AI-powered YouTube video summaries
 - `query_youtube_transcript` - Answer questions about YouTube videos
+- `get_weather` - Current weather and forecasts by city name or coordinates
 
 #### Standalone MCP Server
 ```bash
@@ -81,6 +82,7 @@ uv run python mcp_server.py http 8000
 - **📚 arXiv Search**: Find and deeply analyze academic papers with structured insights
 - **📈 Financial Data**: Get stock prices, crypto rates, and market summaries without API keys
 - **🎥 YouTube Analysis**: Analyze and summarize video content from YouTube links (includes beginning + ending for longer videos)
+- **🌤️ Weather**: Get current weather and 7-day forecasts by IP location, city name, or coordinates (prefers Canada, no API keys needed)
 - **🎛️ Function Toggle**: Enable/disable AI tool usage per conversation
 
 ## 🎯 Example Prompts
@@ -107,6 +109,13 @@ uv run python mcp_server.py http 8000
 - "Summarize this YouTube video: [paste URL]"
 - "What are the main points discussed in this video?"
 - "What does the video say about [specific topic]?"
+
+**Weather:**
+- "What's the weather like?"
+- "Show me the weather forecast"
+- "Get weather for Niagara Falls"
+- "Weather in Toronto"
+- "Show weather for Berlin" (coordinates: 52.52,13.41)
 
 ## 🏗️ Architecture
 
@@ -157,6 +166,7 @@ The server provides all the same tools available in the Streamlit app:
 - **get_market_summary**: Market indices overview
 - **summarize_youtube_video**: AI-powered YouTube video summaries
 - **query_youtube_transcript**: Answer questions about YouTube video content
+- **get_weather**: Current weather and 7-day forecast by IP, city name, or coordinates
 
 ### MCP Client Usage
 
