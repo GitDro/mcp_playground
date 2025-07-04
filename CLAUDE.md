@@ -77,6 +77,67 @@ uv run streamlit run app.py              # Main app (in-memory transport)
 uv run streamlit run app_subprocess.py  # Subprocess transport version
 ```
 
+## Modular Code Organization
+
+### Directory Structure
+```
+src/
+├── core/
+│   ├── cache.py      # Financial data caching utilities
+│   ├── models.py     # Pydantic models (PaperAnalysis, SectionAnalysis)
+│   └── utils.py      # General utilities and formatting helpers
+├── tools/
+│   ├── web.py        # web_search, analyze_url
+│   ├── arxiv.py      # arxiv_search + paper analysis logic
+│   ├── financial.py  # stock/crypto/market tools + caching
+│   ├── youtube.py    # YouTube analysis tools + transcript handling
+│   └── weather.py    # weather tools + location utilities
+└── server.py         # FastMCP server setup and tool registration
+```
+
+### Adding New Tools
+- **Web-related tools**: Add to `src/tools/web.py`
+- **Data analysis tools**: Add to `src/tools/arxiv.py` 
+- **Financial tools**: Add to `src/tools/financial.py`
+- **Media tools**: Add to `src/tools/youtube.py`
+- **Location tools**: Add to `src/tools/weather.py`
+- **New category**: Create new file in `src/tools/` and register in `src/server.py`
+
+### Tool Module Pattern
+```python
+def register_category_tools(mcp: FastMCP):
+    @mcp.tool
+    def your_tool(param: str) -> str:
+        """Tool description"""
+        # Implementation
+```
+
+### Import Examples
+```python
+# External clients (Windsurf, test scripts)
+from mcp_server import mcp
+
+# Streamlit apps
+from src import mcp
+
+# Internal tool modules
+from ..core.models import PaperAnalysis
+from ..core.utils import clean_markdown_text
+```
+
+### Compatibility
+- `mcp_server.py` remains the main entry point for external clients (Windsurf, etc.)
+- `src/__init__.py` exposes the server instance for internal use
+- All existing functionality preserved, just better organized with proper Python packages
+
+## Recent Fixes
+
+### YouTube Transcript Issue (Fixed)
+- **Issue**: YouTube tools returned "No transcript available" for videos with captions
+- **Root cause**: Using `entry['text']` instead of `entry.text` (API object vs dict)
+- **Fix**: Updated to use newer `YouTubeTranscriptApi` methods with proper attribute access
+- **Result**: Now supports multiple languages and auto-generated captions
+
 ## Architecture Notes
 - **In-memory transport**: `Client(mcp)` - Direct server instance, fastest
 - **Subprocess transport**: `Client("mcp_server.py")` - Auto-inferred, client-server separation
