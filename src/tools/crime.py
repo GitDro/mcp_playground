@@ -291,6 +291,8 @@ def _format_crime_report(area_name: str, crime_type: str, stats: Dict) -> str:
         trend_emoji = "📈" if change_count > 0 else "📉" if change_count < 0 else "➡️"
         
         result += f"**{earliest_year}-{latest_year} Trend:** {trend_emoji}\n"
+        result += f"- {earliest_year}: {earliest_stats['count']} incidents\n"
+        result += f"- {latest_year}: {latest_stats['count']} incidents\n"
         if change_count > 0:
             result += f"- Change: +{change_count} incidents (+{((change_count/earliest_stats['count'])*100):.1f}%)\n"
         elif change_count < 0:
@@ -298,8 +300,8 @@ def _format_crime_report(area_name: str, crime_type: str, stats: Dict) -> str:
         else:
             result += f"- Change: No change in incidents\n"
         
-        result += "\n**Recent Years:**\n"
-        for year in sorted(years)[-5:]:  # Last 5 years
+        result += "\n**Year-by-Year Data:**\n"
+        for year in sorted(years):  # Show all years
             year_stats = stats[year]
             result += f"- {year}: {year_stats['count']} incidents\n"
     
