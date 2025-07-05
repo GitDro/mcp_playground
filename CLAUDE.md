@@ -18,21 +18,32 @@ uv run streamlit run app.py
 
 ### Directory Structure
 ```
-src/
-├── core/
-│   ├── vector_memory.py  # Vector-based memory with ChromaDB + Ollama
-│   ├── memory.py         # TinyDB memory manager (fallback)
-│   ├── cache.py          # Financial data caching
-│   ├── models.py         # Pydantic models
-│   └── utils.py          # General utilities
-├── tools/
-│   ├── memory.py         # 3 streamlined memory tools
-│   ├── web.py            # web_search, analyze_url
-│   ├── arxiv.py          # arxiv_search + paper analysis
-│   ├── financial.py      # stock/crypto/market tools
-│   ├── youtube.py        # YouTube analysis tools
-│   └── weather.py        # weather tools
-└── server.py             # FastMCP server setup
+├── app.py                # Main Streamlit application
+├── mcp_server.py         # FastMCP server entry point
+├── CLAUDE.md             # This development notes file
+├── README.md             # Project documentation
+├── pyproject.toml        # Dependencies and project config
+├── docs/                 # Documentation folder
+│   ├── MEMORY_SYSTEM.md      # Vector memory system guide
+│   ├── RAG_ARCHITECTURE.md   # Technical RAG implementation details
+│   └── FASTMCP_USAGE.md      # FastMCP framework documentation
+├── src/
+│   ├── core/
+│   │   ├── vector_memory.py  # Vector-based memory with ChromaDB + Ollama
+│   │   ├── memory.py         # TinyDB memory manager (fallback)
+│   │   ├── cache.py          # Financial data caching
+│   │   ├── models.py         # Pydantic models
+│   │   └── utils.py          # General utilities
+│   ├── tools/
+│   │   ├── memory.py         # 3 streamlined memory tools
+│   │   ├── web.py            # web_search, analyze_url
+│   │   ├── arxiv.py          # arxiv_search + paper analysis
+│   │   ├── financial.py      # stock/crypto/market tools
+│   │   ├── youtube.py        # YouTube analysis tools
+│   │   ├── weather.py        # weather tools
+│   │   └── tides.py          # Canadian tide information
+│   └── server.py             # FastMCP server setup
+└── cache/                # Runtime cache directory
 ```
 
 ### Adding New Tools
