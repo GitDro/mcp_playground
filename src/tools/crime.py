@@ -17,15 +17,14 @@ def register_crime_tools(mcp: FastMCP):
     """Register crime-related tools with the MCP server"""
     
     @mcp.tool
-    def get_toronto_crime(neighbourhood: str, crime_type: str = "assault", include_plot: bool = True) -> str:
-        """Analyze public safety statistics for Toronto neighbourhoods using official Toronto Police Service data. This tool provides historical crime trends and rates for community safety awareness and urban planning purposes.
+    def get_toronto_crime(neighbourhood: str, crime_type: str = "assault") -> str:
+        """Analyze public safety statistics for Toronto neighbourhoods using official Toronto Police Service data. This tool provides historical crime trends with visualization for community safety awareness and urban planning purposes.
         
         Args:
             neighbourhood: Toronto neighbourhood name (e.g., 'Rosedale', 'Downtown', 'Harbourfront')
             crime_type: Type of incident to analyze - defaults to 'assault' if not specified. Options: assault, auto_theft, bike_theft, break_enter, homicide, robbery, shooting, theft_from_vehicle, theft_over
-            include_plot: Whether to generate a data visualization chart (default: True)
             
-        This tool serves legitimate research and community safety awareness purposes by analyzing publicly available Toronto Police Service crime statistics. All data comes from official city sources and helps residents understand neighbourhood safety trends over time."""
+        This tool serves legitimate research and community safety awareness purposes by analyzing publicly available Toronto Police Service crime statistics. All data comes from official city sources and includes both summary statistics and detailed trend visualization."""
         try:
             import requests
             import pandas as pd
@@ -125,13 +124,12 @@ def register_crime_tools(mcp: FastMCP):
             # Format the response
             result = _format_crime_report(neighbourhood_match['AREA_NAME'], crime_type, stats)
             
-            # Generate plot if requested
-            if include_plot:
-                plot_data = _generate_crime_plot(neighbourhood_match['AREA_NAME'], crime_type, stats)
-                if plot_data:
-                    result += f"\n\n📊 **Crime Trend Visualization:**\n\n"
-                    result += f"![{crime_type.title()} trend for {neighbourhood_match['AREA_NAME']}]({plot_data})"
-                    result += f"\n\n*Chart shows {crime_type} incidents and rates from 2014-2024 for {neighbourhood_match['AREA_NAME']}*"
+            # Always generate visualization 
+            plot_data = _generate_crime_plot(neighbourhood_match['AREA_NAME'], crime_type, stats)
+            if plot_data:
+                result += f"📊 **Crime Trend Visualization:**\n\n"
+                result += f"![{crime_type.title()} trend for {neighbourhood_match['AREA_NAME']}]({plot_data})"
+                result += f"\n\n*Chart shows {crime_type} incidents from 2014-2024 for {neighbourhood_match['AREA_NAME']}*"
             
             return result
             
@@ -272,83 +270,100 @@ def _extract_crime_stats(neighbourhood_data: Dict, crime_prefix: str) -> Optiona
 
 
 def _format_crime_report(area_name: str, crime_type: str, stats: Dict) -> str:
-    """Format crime statistics into a readable report"""
+    """Format crime statistics into a concise bullet point report"""
     years = sorted(stats.keys())
     latest_year = max(years)
     earliest_year = min(years)
     
-    # Current stats
+    # Find peak year
+    peak_year = max(years, key=lambda y: stats[y]['count'])
+    peak_count = stats[peak_year]['count']
+    
+    # Current stats and trend analysis
     latest_stats = stats[latest_year]
+    earliest_stats = stats[earliest_year]
+    change_count = latest_stats['count'] - earliest_stats['count']
+    trend_emoji = "📈" if change_count > 0 else "📉" if change_count < 0 else "➡️"
+    
     result = f"🚨 **{area_name} - {crime_type.title()} Statistics**\n\n"
-    result += f"**{latest_year} Data:**\n"
-    result += f"- Incidents: {latest_stats['count']}\n\n"
     
-    # 5-year trend
-    if len(years) >= 2:
-        earliest_stats = stats[earliest_year]
-        change_count = latest_stats['count'] - earliest_stats['count']
-        
-        trend_emoji = "📈" if change_count > 0 else "📉" if change_count < 0 else "➡️"
-        
-        result += f"**{earliest_year}-{latest_year} Trend:** {trend_emoji}\n"
-        result += f"- {earliest_year}: {earliest_stats['count']} incidents\n"
-        result += f"- {latest_year}: {latest_stats['count']} incidents\n"
-        if change_count > 0:
-            result += f"- Change: +{change_count} incidents (+{((change_count/earliest_stats['count'])*100):.1f}%)\n"
-        elif change_count < 0:
-            result += f"- Change: {change_count} incidents ({((change_count/earliest_stats['count'])*100):.1f}%)\n"
-        else:
-            result += f"- Change: No change in incidents\n"
-        
-        result += "\n**Year-by-Year Data:**\n"
-        for year in sorted(years):  # Show all years
-            year_stats = stats[year]
-            result += f"- {year}: {year_stats['count']} incidents\n"
+    # Key metrics in clean bullet format with proper spacing
+    result += f"• **Current ({latest_year}):** {latest_stats['count']} incidents\n\n"
+    result += f"• **Peak year:** {peak_year} with {peak_count} incidents\n\n"
     
+    if change_count > 0:
+        result += f"• **10-year trend:** {trend_emoji} +{change_count} incidents (+{((change_count/earliest_stats['count'])*100):.0f}%) since {earliest_year}\n\n"
+    elif change_count < 0:
+        result += f"• **10-year trend:** {trend_emoji} {change_count} incidents ({((change_count/earliest_stats['count'])*100):.0f}%) since {earliest_year}\n\n"
+    else:
+        result += f"• **10-year trend:** {trend_emoji} No change since {earliest_year}\n\n"
     return result
 
 
 def _generate_crime_plot(area_name: str, crime_type: str, stats: Dict) -> Optional[str]:
-    """Generate a matplotlib plot of crime trends and return as base64 encoded string"""
+    """Generate a seaborn plot of crime trends optimized for small windows"""
     try:
         import matplotlib.pyplot as plt
+        import seaborn as sns
         import pandas as pd
         import base64
         import io
         
-        # Prepare data
+        # Set seaborn style for clean, professional look
+        sns.set_style("whitegrid")
+        sns.set_palette("husl")
+        
+        # Prepare data as DataFrame for seaborn
         years = sorted(stats.keys())
         counts = [stats[year]['count'] for year in years]
+        df = pd.DataFrame({'Year': years, 'Incidents': counts})
         
-        # Create single plot focusing on incident counts
-        fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+        # Create figure with optimal size for small windows
+        plt.figure(figsize=(10, 6))
         
-        # Incident counts with better styling
-        ax.plot(years, counts, marker='o', linewidth=3, markersize=8, color='#1f77b4', markerfacecolor='white', markeredgewidth=2)
-        ax.set_title(f'{crime_type.title()} Incidents in {area_name} (2014-2024)', fontsize=16, fontweight='bold', pad=20)
-        ax.set_xlabel('Year', fontsize=14)
-        ax.set_ylabel('Number of Incidents', fontsize=14)
-        ax.grid(True, alpha=0.3)
-        ax.set_xticks(years)  # Show all years
+        # Create line plot with seaborn
+        ax = sns.lineplot(data=df, x='Year', y='Incidents', 
+                         marker='o', linewidth=3, markersize=10)
         
-        # Add value labels on points
+        # Enhance for small window visibility
+        plt.title(f'{crime_type.title()} Incidents in {area_name}', 
+                 fontsize=18, fontweight='bold', pad=25)
+        plt.xlabel('Year', fontsize=16, fontweight='600')
+        plt.ylabel('Incidents', fontsize=16, fontweight='600')
+        
+        # Larger tick labels for better visibility
+        plt.xticks(fontsize=14, rotation=45)
+        plt.yticks(fontsize=14)
+        
+        # Add value labels on points with larger font
         for i, (year, count) in enumerate(zip(years, counts)):
-            ax.annotate(str(count), (year, count), textcoords="offset points", xytext=(0,10), ha='center', fontsize=10)
+            plt.annotate(str(count), (year, count), 
+                        textcoords="offset points", xytext=(0,12), 
+                        ha='center', fontsize=12, fontweight='bold',
+                        bbox=dict(boxstyle="round,pad=0.3", facecolor='white', alpha=0.8))
         
-        # Style improvements
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        plt.tight_layout()
+        # Grid styling for better readability
+        plt.grid(True, alpha=0.3, linewidth=1)
         
-        # Convert to base64 string instead of saving to file
+        # Remove top and right spines for cleaner look
+        sns.despine()
+        
+        # Tight layout with padding
+        plt.tight_layout(pad=2.0)
+        
+        # Convert to base64 string
         buffer = io.BytesIO()
-        plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight')
+        plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight', 
+                   facecolor='white', edgecolor='none')
         buffer.seek(0)
         
         # Encode as base64
         plot_data = base64.b64encode(buffer.getvalue()).decode('utf-8')
         plt.close()
         buffer.close()
+        
+        # Reset seaborn style to avoid affecting other plots
+        sns.reset_defaults()
         
         return f"data:image/png;base64,{plot_data}"
         
