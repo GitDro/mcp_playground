@@ -59,7 +59,7 @@ def register_crime_tools(mcp: FastMCP):
             
             crime_prefix = crime_map[crime_type.lower()]
             
-            # Check cache first
+            # Check cache first for full dataset
             cache_key = f"toronto_crime_data"
             cached_data = load_cached_data(cache_key)
             
@@ -105,16 +105,29 @@ def register_crime_tools(mcp: FastMCP):
                 # Cache the result
                 save_cached_data(cache_key, {'crime_data': crime_data})
             
-            # Find the neighbourhood using semantic search
-            neighbourhood_match = _find_neighbourhood_semantic(crime_data, neighbourhood)
-            if not neighbourhood_match:
-                # Show available neighbourhoods that partially match using string search
-                partial_matches = _get_partial_matches(crime_data, neighbourhood)
-                if partial_matches:
-                    matches_str = ", ".join(partial_matches[:5])  # Show first 5 matches
-                    return f"❌ Neighbourhood '{neighbourhood}' not found. Did you mean: {matches_str}?"
-                else:
-                    return f"❌ Neighbourhood '{neighbourhood}' not found. Try names like 'Waterfront', 'Downtown', 'Harbourfront', or check the full neighbourhood names in Toronto's 158 neighbourhood structure."
+            # Check neighbourhood-specific cache first
+            neighbourhood_cache_key = f"toronto_neighbourhood_{neighbourhood.lower().replace(' ', '_')}"
+            neighbourhood_cached = load_cached_data(neighbourhood_cache_key)
+            
+            neighbourhood_match = None
+            if neighbourhood_cached and 'neighbourhood_data' in neighbourhood_cached:
+                neighbourhood_match = neighbourhood_cached['neighbourhood_data']
+                logger.info(f"Using cached neighbourhood data for {neighbourhood}")
+            else:
+                # Find the neighbourhood using semantic search
+                neighbourhood_match = _find_neighbourhood_semantic(crime_data, neighbourhood)
+                if not neighbourhood_match:
+                    # Show available neighbourhoods that partially match using string search
+                    partial_matches = _get_partial_matches(crime_data, neighbourhood)
+                    if partial_matches:
+                        matches_str = ", ".join(partial_matches[:5])  # Show first 5 matches
+                        return f"❌ Neighbourhood '{neighbourhood}' not found. Did you mean: {matches_str}?"
+                    else:
+                        return f"❌ Neighbourhood '{neighbourhood}' not found. Try names like 'Waterfront', 'Downtown', 'Harbourfront', or check the full neighbourhood names in Toronto's 158 neighbourhood structure."
+                
+                # Cache the neighbourhood data for future requests
+                save_cached_data(neighbourhood_cache_key, {'neighbourhood_data': neighbourhood_match})
+                logger.info(f"Cached neighbourhood data for {neighbourhood_match['AREA_NAME']}")
             
             # Extract crime data for the specific neighbourhood and crime type
             stats = _extract_crime_stats(neighbourhood_match, crime_prefix)
@@ -124,12 +137,10 @@ def register_crime_tools(mcp: FastMCP):
             # Format the response
             result = _format_crime_report(neighbourhood_match['AREA_NAME'], crime_type, stats)
             
-            # Always generate visualization 
+            # Always include trend chart (separate from table)
             plot_data = _generate_crime_plot(neighbourhood_match['AREA_NAME'], crime_type, stats)
             if plot_data:
-                result += f"📊 **Crime Trend Visualization:**\n\n"
-                result += f"![{crime_type.title()} trend for {neighbourhood_match['AREA_NAME']}]({plot_data})"
-                result += f"\n\n*Chart shows {crime_type} incidents from 2014-2024 for {neighbourhood_match['AREA_NAME']}*"
+                result += f"\n\n![{crime_type.title()} trend for {neighbourhood_match['AREA_NAME']}]({plot_data})"
             
             return result
             
@@ -270,33 +281,35 @@ def _extract_crime_stats(neighbourhood_data: Dict, crime_prefix: str) -> Optiona
 
 
 def _format_crime_report(area_name: str, crime_type: str, stats: Dict) -> str:
-    """Format crime statistics into a concise bullet point report"""
+    """Format crime statistics into a concise, readable markdown summary"""
     years = sorted(stats.keys())
     latest_year = max(years)
     earliest_year = min(years)
-    
+
     # Find peak year
     peak_year = max(years, key=lambda y: stats[y]['count'])
     peak_count = stats[peak_year]['count']
-    
+
     # Current stats and trend analysis
     latest_stats = stats[latest_year]
     earliest_stats = stats[earliest_year]
     change_count = latest_stats['count'] - earliest_stats['count']
     trend_emoji = "📈" if change_count > 0 else "📉" if change_count < 0 else "➡️"
-    
-    result = f"🚨 **{area_name} - {crime_type.title()} Statistics**\n\n"
-    
-    # Key metrics in clean bullet format with proper spacing
-    result += f"• **Current ({latest_year}):** {latest_stats['count']} incidents\n\n"
-    result += f"• **Peak year:** {peak_year} with {peak_count} incidents\n\n"
-    
+    percent_change = ((change_count/earliest_stats['count'])*100) if earliest_stats['count'] else 0
+
+    # Markdown summary table only
+    result = f"### **{area_name} – {crime_type.title()} Summary**\n\n"
+    result += "| **Metric**     | **Value**                     |\n"
+    result += "|---------------|---------------------------------|\n"
+    result += f"| **Current year**   | **{latest_year}**: {latest_stats['count']} incidents |\n"
+    result += f"| **Peak year**      | **{peak_year}**: {peak_count} incidents |\n"
     if change_count > 0:
-        result += f"• **10-year trend:** {trend_emoji} +{change_count} incidents (+{((change_count/earliest_stats['count'])*100):.0f}%) since {earliest_year}\n\n"
+        trend = f"{trend_emoji} **+{change_count} incidents** (+{percent_change:.0f}%) since {earliest_year}"
     elif change_count < 0:
-        result += f"• **10-year trend:** {trend_emoji} {change_count} incidents ({((change_count/earliest_stats['count'])*100):.0f}%) since {earliest_year}\n\n"
+        trend = f"{trend_emoji} **{change_count} incidents** ({percent_change:.0f}%) since {earliest_year}"
     else:
-        result += f"• **10-year trend:** {trend_emoji} No change since {earliest_year}\n\n"
+        trend = f"{trend_emoji} **No change** since {earliest_year}"
+    result += f"| **10-year trend**  | {trend} |\n"
     return result
 
 
