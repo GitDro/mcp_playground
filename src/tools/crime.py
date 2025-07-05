@@ -18,7 +18,14 @@ def register_crime_tools(mcp: FastMCP):
     
     @mcp.tool
     def get_toronto_crime(neighbourhood: str, crime_type: str = "assault", include_plot: bool = True) -> str:
-        """Get Toronto crime statistics for a specific neighbourhood and crime type. Shows current stats, 5-year trends, and optionally generates a plot. Crime types: assault, auto_theft, bike_theft, break_enter, homicide, robbery, shooting, theft_from_vehicle, theft_over. Neighbourhood can be partial name like 'downtown' or 'harbourfront'."""
+        """Get Toronto crime statistics for a specific neighbourhood. Shows current stats, 5-year trends, and optionally generates a plot. 
+        
+        Args:
+            neighbourhood: Toronto neighbourhood name (e.g., 'Rosedale', 'Downtown', 'Harbourfront')
+            crime_type: Type of crime to analyze - defaults to 'assault' if not specified. Options: assault, auto_theft, bike_theft, break_enter, homicide, robbery, shooting, theft_from_vehicle, theft_over
+            include_plot: Whether to generate a visualization chart (default: True)
+            
+        When users ask general questions like 'What is crime like in [neighbourhood]?', this will default to showing assault statistics as the most common crime type."""
         try:
             import requests
             import pandas as pd
@@ -43,7 +50,10 @@ def register_crime_tools(mcp: FastMCP):
                 'theft_over': 'THEFTOVER'
             }
             
-            # Validate crime type
+            # Validate and normalize crime type
+            if not crime_type or crime_type.strip() == "":
+                crime_type = "assault"  # Default to assault for general crime queries
+                
             if crime_type.lower() not in crime_map:
                 available_types = ', '.join(crime_map.keys())
                 return f"❌ Invalid crime type '{crime_type}'. Available types: {available_types}"
