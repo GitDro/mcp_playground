@@ -31,7 +31,9 @@ src/
 │   ├── arxiv.py          # arxiv_search + paper analysis
 │   ├── financial.py      # stock/crypto/market tools
 │   ├── youtube.py        # YouTube analysis tools
-│   └── weather.py        # weather tools
+│   ├── weather.py        # weather tools
+│   ├── tides.py          # Canadian tide information
+│   └── crime.py          # Toronto crime statistics
 └── server.py             # FastMCP server setup
 ```
 
@@ -54,7 +56,34 @@ src/
 - Local & private (no external API calls)
 - Foundation for future document RAG
 
-## YouTube Enhancement
-- **Adaptive Transcription**: Handles 2-3 hour videos with smart truncation
+## Tool Categories
+
+### Data Analysis & Research
+- **Financial Tools**: Real-time stock/crypto prices with caching
+- **Academic Research**: arXiv search with PDF analysis
+- **Crime Analytics**: Toronto neighbourhood safety statistics with semantic search
+- **Weather Data**: Location-based forecasts (IP/city/coordinates)
+- **Tide Information**: Canadian coastal tide times and heights
+
+### Content Analysis
+- **YouTube Enhancement**: Adaptive transcription for 2-3 hour videos
+- **Web Analysis**: URL content extraction and summarization
 - **Context Scaling**: 24K+ tokens (96K+ characters) by default
-- **Multi-language Support**: Auto-generated captions and multiple languages
+
+### Data Visualization
+- **Plot Generation**: Matplotlib charts returned as base64 images
+- **Crime Trends**: Time series visualization for neighbourhood data
+- **No External Dependencies**: Self-contained plotting system
+
+## Helpful Links
+
+### Documentation
+- [Memory System](docs/MEMORY_SYSTEM.md) - Vector memory architecture
+- [RAG Architecture](docs/RAG_ARCHITECTURE.md) - Technical semantic search details  
+- [FastMCP Usage](docs/FASTMCP_USAGE.md) - MCP framework documentation
+
+### External References
+- [Toronto Open Data](https://open.toronto.ca/) - Crime statistics source
+- [FastMCP Framework](https://github.com/jlowin/fastmcp) - MCP implementation
+- [ChromaDB Documentation](https://docs.trychroma.com/) - Vector database
+- [Ollama Models](https://ollama.ai/library) - Local LLM and embedding models

@@ -16,6 +16,7 @@ from .tools.youtube import register_youtube_tools
 from .tools.weather import register_weather_tools
 from .tools.memory import register_memory_tools
 from .tools.tides import register_tide_tools
+from .tools.crime import register_crime_tools
 
 # Load environment variables
 load_dotenv()
@@ -40,6 +41,7 @@ def setup_server():
     register_weather_tools(mcp)
     register_memory_tools(mcp)
     register_tide_tools(mcp)
+    register_crime_tools(mcp)
     
     logger.info("All tools registered successfully")
     return mcp

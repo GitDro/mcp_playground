@@ -65,6 +65,7 @@ You can use these tools directly in Windsurf IDE through MCP integration:
 - `query_youtube_transcript` - Answer questions about YouTube videos
 - `get_weather` - Current weather and forecasts by city name or coordinates
 - `get_tide_info` - Canadian tide information with high/low times and heights
+- `get_toronto_crime` - Toronto neighbourhood crime statistics with trend analysis and visualization
 
 #### Standalone MCP Server
 ```bash
@@ -85,6 +86,7 @@ uv run python mcp_server.py http 8000
 - **🎥 YouTube Analysis**: Analyze and summarize video content from YouTube links (includes beginning + ending for longer videos)
 - **🌤️ Weather**: Get current weather and 7-day forecasts by IP location, city name, or coordinates (prefers Canada, no API keys needed)
 - **🌊 Tide Information**: Canadian coastal tide times and heights with emoji indicators (Halifax, Vancouver, St. Johns, etc.)
+- **🚨 Crime Analytics**: Toronto neighbourhood safety statistics with semantic neighbourhood search and trend visualization
 - **🧠 Vector Memory System**: Semantic memory using ChromaDB + Ollama embeddings for intelligent fact storage and retrieval
 - **🎛️ Function Toggle**: Enable/disable AI tool usage per conversation
 
@@ -124,6 +126,12 @@ uv run python mcp_server.py http 8000
 - "Show me Halifax tide times for July 20th"
 - "Get tide information for Vancouver tomorrow"
 - "What are the tides like in St. Johns?"
+
+**Crime Analytics:**
+- "What is crime like in Rosedale?"
+- "Show me car theft statistics for downtown Toronto"
+- "How safe is Harbourfront neighbourhood?"
+- "Compare assault rates in different Toronto areas"
 
 **Memory & Preferences:**
 - "Remember that I prefer concise responses"
@@ -167,6 +175,7 @@ uv run python mcp_server.py http 8000
 - **Research**: `arxiv_search` - Academic paper analysis
 - **Weather**: `get_weather` - Location-based weather forecasts
 - **Tides**: `get_tide_info` - Canadian coastal tide times and heights
+- **Crime**: `get_toronto_crime` - Toronto neighbourhood safety statistics with semantic search and visualization
 
 ### Client Integration
 ```python
