@@ -281,36 +281,27 @@ def _format_crime_report(area_name: str, crime_type: str, stats: Dict) -> str:
     latest_stats = stats[latest_year]
     result = f"🚨 **{area_name} - {crime_type.title()} Statistics**\n\n"
     result += f"**{latest_year} Data:**\n"
-    result += f"- Incidents: {latest_stats['count']}\n"
-    result += f"- Rate: {latest_stats['rate']:.1f} per 100,000 population\n\n"
+    result += f"- Incidents: {latest_stats['count']}\n\n"
     
     # 5-year trend
     if len(years) >= 2:
         earliest_stats = stats[earliest_year]
         change_count = latest_stats['count'] - earliest_stats['count']
-        change_rate = latest_stats['rate'] - earliest_stats['rate']
         
         trend_emoji = "📈" if change_count > 0 else "📉" if change_count < 0 else "➡️"
         
         result += f"**{earliest_year}-{latest_year} Trend:** {trend_emoji}\n"
         if change_count > 0:
-            result += f"- Incidents: +{change_count} (+{((change_count/earliest_stats['count'])*100):.1f}%)\n"
+            result += f"- Change: +{change_count} incidents (+{((change_count/earliest_stats['count'])*100):.1f}%)\n"
         elif change_count < 0:
-            result += f"- Incidents: {change_count} ({((change_count/earliest_stats['count'])*100):.1f}%)\n"
+            result += f"- Change: {change_count} incidents ({((change_count/earliest_stats['count'])*100):.1f}%)\n"
         else:
-            result += f"- Incidents: No change\n"
-        
-        if change_rate > 0:
-            result += f"- Rate: +{change_rate:.1f} per 100,000\n"
-        elif change_rate < 0:
-            result += f"- Rate: {change_rate:.1f} per 100,000\n"
-        else:
-            result += f"- Rate: No significant change\n"
+            result += f"- Change: No change in incidents\n"
         
         result += "\n**Recent Years:**\n"
         for year in sorted(years)[-5:]:  # Last 5 years
             year_stats = stats[year]
-            result += f"- {year}: {year_stats['count']} incidents ({year_stats['rate']:.1f} rate)\n"
+            result += f"- {year}: {year_stats['count']} incidents\n"
     
     return result
 
@@ -326,26 +317,25 @@ def _generate_crime_plot(area_name: str, crime_type: str, stats: Dict) -> Option
         # Prepare data
         years = sorted(stats.keys())
         counts = [stats[year]['count'] for year in years]
-        rates = [stats[year]['rate'] for year in years]
         
-        # Create plot
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
+        # Create single plot focusing on incident counts
+        fig, ax = plt.subplots(1, 1, figsize=(12, 6))
         
-        # Incident counts
-        ax1.plot(years, counts, marker='o', linewidth=2, markersize=6, color='#1f77b4')
-        ax1.set_title(f'{crime_type.title()} Incidents in {area_name}', fontsize=14, fontweight='bold')
-        ax1.set_ylabel('Number of Incidents', fontsize=12)
-        ax1.grid(True, alpha=0.3)
-        ax1.set_xticks(years[::2])  # Show every other year
+        # Incident counts with better styling
+        ax.plot(years, counts, marker='o', linewidth=3, markersize=8, color='#1f77b4', markerfacecolor='white', markeredgewidth=2)
+        ax.set_title(f'{crime_type.title()} Incidents in {area_name} (2014-2024)', fontsize=16, fontweight='bold', pad=20)
+        ax.set_xlabel('Year', fontsize=14)
+        ax.set_ylabel('Number of Incidents', fontsize=14)
+        ax.grid(True, alpha=0.3)
+        ax.set_xticks(years)  # Show all years
         
-        # Rates per 100,000
-        ax2.plot(years, rates, marker='s', linewidth=2, markersize=6, color='#ff7f0e')
-        ax2.set_title(f'{crime_type.title()} Rate per 100,000 Population in {area_name}', fontsize=14, fontweight='bold')
-        ax2.set_xlabel('Year', fontsize=12)
-        ax2.set_ylabel('Rate per 100,000', fontsize=12)
-        ax2.grid(True, alpha=0.3)
-        ax2.set_xticks(years[::2])  # Show every other year
+        # Add value labels on points
+        for i, (year, count) in enumerate(zip(years, counts)):
+            ax.annotate(str(count), (year, count), textcoords="offset points", xytext=(0,10), ha='center', fontsize=10)
         
+        # Style improvements
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
         plt.tight_layout()
         
         # Convert to base64 string instead of saving to file
