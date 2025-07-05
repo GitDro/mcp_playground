@@ -483,7 +483,7 @@ with col2:
             if not st.session_state.selected_model:
                 # Look for llama3.2 variants
                 for i, model in enumerate(models):
-                    if 'llama3.2' in model.lower():
+                    if 'llama3.2:latest' in model.lower():
                         default_index = i
                         break
             else:
