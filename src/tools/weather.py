@@ -210,7 +210,17 @@ def register_weather_tools(mcp: FastMCP):
     
     @mcp.tool
     def get_weather(location: Optional[str] = None) -> str:
-        """Get current weather conditions and 7-day forecast. Auto-detects location by IP if not specified. Supports city names (e.g., 'Toronto'), coordinates (e.g., '43.6532,-79.3832'), prefers Canadian cities."""
+        """Get current weather conditions and 7-day forecast.
+        
+        Args:
+            location (str, optional): Location can be a city name (e.g., 'Toronto') or 
+                coordinates as 'latitude,longitude' (e.g., '43.6532,-79.3832'). 
+                If not provided, the function will automatically detect your location using your IP address.
+                Canadian cities are given preference in search results.
+        
+        Returns:
+            str: Formatted weather report with current conditions and 7-day forecast.
+        """
         try:
             if location:
                 location = location.strip()
