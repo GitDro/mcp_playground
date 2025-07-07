@@ -509,6 +509,14 @@ with col2:
                         purpose = "retrieve memories"
                     elif 'forget' in tool_name:
                         purpose = "remove memories"
+                    elif 'get_stock_overview' in tool_name:
+                        purpose = "stock market data"
+                    elif 'analyze_youtube_video' in tool_name:
+                        purpose = "video analysis"
+                    elif 'get_tide_info' in tool_name:
+                        purpose = "tide information"
+                    elif 'get_toronto_crime' in tool_name:
+                        purpose = "crime statistics"
                     else:
                         purpose = "tool"
                     
