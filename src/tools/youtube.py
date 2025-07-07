@@ -167,23 +167,45 @@ def _process_transcript_content(transcript_text: str) -> tuple[str, str]:
 
 def _format_summary_response(title: str, duration_estimate: str, word_count: int, content: str, note: str) -> str:
     """Format response for general video summary"""
-    return f"""Analyze this YouTube video content and provide a focused summary.
+    return f"""## 📺 Video Analysis Request
 
-Video: {title} ({duration_estimate}, {word_count:,} words)
+**{title}** ({duration_estimate}, {word_count:,} words)
 
-Transcript content:
+I'll analyze this video content and provide a focused summary covering the main points, key insights, and conclusions.
+
+---
+
+<details>
+<summary>📄 Video Transcript (Click to expand)</summary>
+
 {content}{note}
 
-Provide a concise summary focusing on the main content, key points, and conclusions. Ignore any sponsor mentions, advertisements, or channel promotion content."""
+</details>
+
+---
+
+**Analysis Instructions:** Provide a concise summary focusing on the main content, key points, and conclusions. Ignore any sponsor mentions, advertisements, or channel promotion content."""
 
 
 def _format_question_response(title: str, duration_estimate: str, word_count: int, content: str, note: str, question: str) -> str:
     """Format response for specific question about video"""
-    return f"""Please answer this specific question about the YouTube video: "{question}"
+    return f"""## 📺 Video Q&A Request
 
-Video: {title} ({duration_estimate}, {word_count:,} words)
+**{title}** ({duration_estimate}, {word_count:,} words)
 
-Transcript content:
+**Your Question:** "{question}"
+
+I'll analyze the video content to answer your specific question.
+
+---
+
+<details>
+<summary>📄 Video Transcript (Click to expand)</summary>
+
 {content}{note}
 
-Focus on answering "{question}" based on the main video content. Ignore any sponsor mentions, advertisements, or channel promotion content."""
+</details>
+
+---
+
+**Analysis Instructions:** Focus on answering "{question}" based on the main video content. Ignore any sponsor mentions, advertisements, or channel promotion content."""
