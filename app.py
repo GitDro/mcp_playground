@@ -283,7 +283,7 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
                     # YouTube functions are meant to be processed by LLM, not shown to user
                     show_function_results = []
                     for i, (func_name, result) in enumerate(zip(function_names, function_results)):
-                        if not func_name.startswith('summarize_youtube') and not func_name.startswith('query_youtube'):
+                        if not func_name.startswith('analyze_youtube_video'):
                             show_function_results.append(result)
                     
                     if show_function_results:

@@ -58,6 +58,7 @@ With **Tools** enabled, I can:
 - **Analyze** content from any URL
 - **Find** academic papers on arXiv
 - **Get** comprehensive financial data for stocks, crypto, and market indices
+- **Analyze** YouTube videos for summaries or specific questions
 
 **Example prompts:**
 - *"Search for Python 3.13 features"*
@@ -68,6 +69,8 @@ With **Tools** enabled, I can:
 - *"Show Tesla's performance"*
 - *"Get Bitcoin price"*
 - *"How is NVDA doing?"*
+- *"Analyze this YouTube video: [URL]"*
+- *"What does this video say about AI?"*
 """
 
 # System prompt for function calling guidance
