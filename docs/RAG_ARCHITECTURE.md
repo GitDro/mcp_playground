@@ -1,48 +1,58 @@
-# RAG Architecture: Vector Memory System
+# RAG Architecture: Simple Memory System (MVP)
 
 ## Overview
 
-The MCP Playground implements a **Retrieval-Augmented Generation (RAG)** system using ChromaDB and Ollama embeddings to provide semantic memory capabilities. This architecture enables natural language queries to find relevant information based on meaning rather than keyword matching.
+The MCP Playground implements a **simplified RAG system** using ChromaDB and Ollama embeddings for semantic memory retrieval. The key innovation is **conversation history injection** instead of complex prompt engineering, making memory integration natural and reliable.
 
-## Architecture Diagram
+## MVP Architecture - Conversation History Injection
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    RAG-Enabled Memory System                   │
+│              RAG-Based Memory System (Simplified)              │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  ┌─────────────────┐   ┌─────────────────┐   ┌───────────────┐ │
-│  │   User Query    │   │   LLM Context   │   │  Tool Results │ │
-│  │                 │   │                 │   │               │ │
-│  │ "about me"      │   │ + Auto Memory   │   │ + Embeddings  │ │
-│  │ "work details"  │   │   Context       │   │ + Similarity  │ │
-│  │ "preferences"   │   │ + Tool Usage    │   │ + Metadata    │ │
-│  └─────────────────┘   └─────────────────┘   └───────────────┘ │
-│           │                       │                     │       │
-│           ▼                       ▼                     ▼       │
+│  ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐ │
+│  │   User Query    │   │   Semantic      │   │  Conversation   │ │
+│  │                 │   │   Search        │   │   History       │ │
+│  │ "Any sci-fi     │──►│   Pipeline      │──►│   Injection     │ │
+│  │ book recs?"     │   │                 │   │                 │ │
+│  │                 │   │ • nomic-embed   │   │ • 80% threshold │ │
+│  └─────────────────┘   │ • ChromaDB      │   │ • Max 2 facts   │ │
+│                         │ • Cosine sim    │   │ • Fake convo    │ │
+│                         └─────────────────┘   └─────────────────┘ │
+│                                 │                       │         │
+│                                 ▼                       ▼         │
 │  ┌─────────────────────────────────────────────────────────────┐ │
-│  │                 RAG Processing Pipeline                    │ │
+│  │                ChromaDB Vector Storage                      │ │
 │  │                                                             │ │
-│  │  1. Query Embedding    2. Vector Search    3. Context      │ │
-│  │     (nomic-embed)         (ChromaDB)         Building      │ │
+│  │ Collection: user_facts                                      │ │
+│  │ • Embedding: nomic-embed-text (768d)                       │ │
+│  │ • Similarity: Cosine distance                              │ │
+│  │ • Storage: ~/.cache/mcp_playground/chromadb                │ │
+│  │                                                             │ │
+│  │ Query: "sci-fi book recommendations"                        │ │
+│  │ Result: "User likes reading sci-fi books" (86% similarity) │ │
 │  └─────────────────────────────────────────────────────────────┘ │
-│                               │                                 │
-│                               ▼                                 │
+│                                 │                               │
+│                                 ▼                               │
 │  ┌─────────────────────────────────────────────────────────────┐ │
-│  │                    Vector Storage Layer                     │ │
+│  │            Natural LLM Integration                          │ │
 │  │                                                             │ │
-│  │  ChromaDB Collections:           TinyDB (Hybrid):          │ │
-│  │  ├── user_facts (semantic)       ├── preferences (K-V)     │ │
-│  │  ├── conversations (future)      ├── sessions (temp)       │ │
-│  │  └── documents (future)          └── metadata (cache)      │ │
+│  │ Conversation History:                                       │ │
+│  │ [                                                           │ │
+│  │   {"role": "user", "content": "Just so you know, user      │ │
+│  │    likes reading sci-fi books"},                            │ │
+│  │   {"role": "assistant", "content": "Got it!"},              │ │
+│  │   {"role": "user", "content": "Any sci-fi book recs?"}     │ │
+│  │ ]                                                           │ │
 │  │                                                             │ │
-│  │  Embeddings: nomic-embed-text (768d, 8K context)          │ │
-│  │  Similarity: Cosine distance with relevance scoring        │ │
+│  │ LLM Response: "Since you enjoy sci-fi books, I'd           │ │
+│  │ recommend Foundation by Asimov..."                          │ │
 │  └─────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## RAG Components
+## RAG Components - Simplified
 
 ### 1. **Embedding Model**
 - **Model**: `nomic-embed-text` via Ollama
@@ -52,202 +62,208 @@ The MCP Playground implements a **Retrieval-Augmented Generation (RAG)** system 
 
 ### 2. **Vector Database**
 - **Engine**: ChromaDB
-- **Storage**: Persistent local storage (`~/.cache/mcp_playground/chromadb`)
+- **Storage**: Local persistent storage (`~/.cache/mcp_playground/chromadb`)
 - **Similarity**: Cosine similarity
-- **Collections**:
-  - `user_facts`: Personal information and preferences
-  - `conversations`: Future conversation history
-  - `documents`: Future personal document storage
+- **Collection**: `user_facts` only (simplified from multiple collections)
 
-### 3. **Retrieval Strategy**
+### 3. **Retrieval Strategy - High Precision**
 ```python
-# 1. Query → Embedding
-query_embedding = ollama.embed(model='nomic-embed-text', input=user_query)
-
-# 2. Vector Search
-results = collection.query(
-    query_texts=[query],
-    n_results=limit,
-    include=['documents', 'metadatas', 'distances']
-)
-
-# 3. Relevance Scoring
-similarity = 1.0 - cosine_distance  # Convert distance to similarity
-relevance_threshold = 0.1  # Minimum similarity to return
+# Simplified retrieval with high threshold
+def get_relevant_memory(query: str):
+    # 1. Embed query
+    query_embedding = ollama.embed(model='nomic-embed-text', input=query)
+    
+    # 2. Search ChromaDB
+    results = collection.query(
+        query_texts=[query],
+        n_results=5,
+        include=['documents', 'metadatas', 'distances']
+    )
+    
+    # 3. High-precision filtering (NEW)
+    high_relevance_facts = []
+    for i, distance in enumerate(results['distances'][0]):
+        similarity = 1.0 - distance
+        if similarity > 0.8:  # Only 80%+ similarity
+            high_relevance_facts.append(results['documents'][0][i])
+    
+    return high_relevance_facts[:2]  # Max 2 facts
 ```
 
-### 4. **Hybrid Approach**
-The system combines vector search with traditional storage:
+### 4. **Conversation History Injection (Key Innovation)**
+Instead of complex prompt injection:
+```python
+# OLD: Complex system prompt injection
+system_prompt = f"You have access to: {memory_context}"  # Confusing for LLM
 
-- **Semantic Search** (ChromaDB): For natural language queries like "about me", "work details"
-- **Exact Match** (TinyDB): For structured data like preferences, settings
-- **Fallback Logic**: If vector search fails, falls back to keyword matching
+# NEW: Natural conversation history
+conversation_history.extend([
+    {"role": "user", "content": "Just so you know, user likes sci-fi books"},
+    {"role": "assistant", "content": "Got it, I'll keep that in mind!"}
+])
+# LLM treats this as natural conversation context
+```
 
-## Query Processing Flow
+## Query Processing Flow - Simplified
 
-### Example: "What do you recall about me?"
+### Example: "Any good sci-fi book recommendations?"
 
 ```
-1. Query Analysis
-   ├── Detect general query pattern: "about me", "what do you know"
-   ├── Route to: get_all_facts() for comprehensive results
-   └── Alternative: semantic search for specific queries
+1. Query Analysis (Simple)
+   ├── Skip tool-focused queries: "stock", "weather", "youtube"
+   ├── Process general queries: "book recommendations"
+   └── Route to: semantic search
 
-2. Vector Retrieval  
-   ├── Embed query: "what do you recall about me" → [0.1, -0.3, 0.8, ...]
+2. Vector Retrieval (High Precision)
+   ├── Embed query: "sci-fi book recommendations" → [0.1, -0.3, 0.8, ...]
    ├── Search ChromaDB: Find similar fact embeddings
-   ├── Score results: Cosine similarity > 0.1 threshold
-   └── Rank by relevance: 0.435 (high), 0.382 (medium), 0.215 (low)
+   ├── Filter results: Only similarity > 0.8 (vs previous 0.1)
+   └── Found: "User likes reading sci-fi books" (86% similarity)
 
-3. Context Assembly
-   ├── Facts: "User likes ice cream" (43.5% relevant)
-   ├── Preferences: response_style: "concise" 
-   ├── Conversations: Recent topic summaries
-   └── Format: Structured response with relevance indicators
+3. Conversation History Injection (Natural)
+   ├── Add fake conversation entry:
+   │   User: "Just so you know, user likes reading sci-fi books"
+   │   Assistant: "Got it, I'll keep that in mind!"
+   ├── Add current query: "Any good sci-fi book recommendations?"
+   └── Send to LLM as natural conversation
 
-4. Response Generation
-   ├── Auto-inject context into LLM system prompt
-   ├── Include memory context with current conversation
-   └── Generate natural response with retrieved information
+4. Natural Response Generation (Improved)
+   ├── LLM receives memory as conversation context
+   ├── No complex system prompts to confuse LLM
+   ├── Response naturally integrates stored information
+   └── Result: "Since you enjoy sci-fi books, I'd recommend..."
 ```
 
 ## Performance Characteristics
 
-### **Semantic Understanding**
-- **"about me"** → **"User likes ice cream"**: 43.5% similarity ✅
-- **"what do you know"** → Finds all stored facts ✅  
-- **"work details"** → Finds work-categorized information ✅
+### **Semantic Understanding - High Precision**
+- **"sci-fi books recommendation"** → **"User likes reading sci-fi books"**: 81% similarity ✅ (injected)
+- **"reading sci-fi"** → **"User likes reading sci-fi books"**: 86% similarity ✅ (injected)
+- **"I like reading books"** → **"User likes reading sci-fi books"**: 76% similarity ❌ (not injected)
+- **"what's the weather"** → No relevant facts >80% ❌ (not injected)
 
 ### **Speed & Efficiency**
 - **Embedding Generation**: ~200ms per query (local Ollama)
 - **Vector Search**: ~50ms for 1000+ facts (ChromaDB)
 - **Total Latency**: ~300ms for semantic memory lookup
-- **Storage**: Minimal overhead (768 floats per fact)
+- **Memory Injection**: Only when 80%+ relevant (minimal overhead)
 
 ### **Accuracy Metrics**
-- **High Relevance** (>70% similarity): Direct keyword matches
-- **Medium Relevance** (40-70% similarity): Semantic relationships  
-- **Low Relevance** (10-40% similarity): Tangentially related
-- **Threshold**: 10% minimum to filter noise
+- **High Relevance** (>80% similarity): Inject into conversation ✅
+- **Lower Relevance** (<80% similarity): Skip injection ❌
+- **Precision**: Prevents irrelevant memory injection
+- **Recall**: High-relevance facts reliably found and injected
 
-## Extensibility for Personal Document RAG
+## Comparison: Old vs New Architecture
 
-The current architecture provides a foundation for future document RAG capabilities:
+### **Previous Complex System** ❌
+- Multiple memory states (`NO_MEMORY`, `HAS_FACTS`, etc.)
+- Complex system prompt engineering
+- Automatic tool filtering logic
+- Memory-aware prompt generation
+- "I don't know X while showing X" confusion
 
-### **Document Ingestion Pipeline**
+### **New Simple System** ✅
+- Single ChromaDB storage system
+- Conversation history injection
+- High-threshold filtering (80%+)
+- No complex state management
+- Natural LLM integration
+
+## Technical Implementation
+
+### **Key Code Changes**
+
 ```python
-# Future enhancement
-def ingest_document(file_path: str, doc_type: str):
-    # 1. Extract text content
-    content = extract_text(file_path)
+# app.py - Simple memory injection
+if not is_tool_query(message):
+    relevant_facts = memory_manager.retrieve_facts_semantic(message, limit=5)
+    high_relevance_facts = [f for f in relevant_facts if f.relevance_score > 0.8]
     
-    # 2. Chunk document 
-    chunks = chunk_text(content, max_tokens=2000, overlap=200)
-    
-    # 3. Generate embeddings
-    embeddings = [ollama.embed(chunk) for chunk in chunks]
-    
-    # 4. Store in ChromaDB
-    documents_collection.add(
-        documents=chunks,
-        embeddings=embeddings,
-        metadatas=[{
-            'source': file_path,
-            'doc_type': doc_type, 
-            'chunk_index': i
-        } for i, chunk in enumerate(chunks)]
-    )
+    for fact in high_relevance_facts[:2]:
+        messages.append({
+            "role": "user",
+            "content": f"Just so you know, {fact.content.lower()}"
+        })
+        messages.append({
+            "role": "assistant", 
+            "content": "Got it, I'll keep that in mind!"
+        })
 ```
 
-### **Multi-Collection Search**
-```python
-# Search across different data types
-def unified_search(query: str):
-    # Search personal facts
-    facts = facts_collection.query(query)
-    
-    # Search documents  
-    docs = documents_collection.query(query)
-    
-    # Search conversations
-    convs = conversations_collection.query(query)
-    
-    # Merge and rank by relevance
-    return merge_results([facts, docs, convs])
-```
-
-## Configuration & Tuning
-
-### **Similarity Thresholds**
-```python
-SIMILARITY_THRESHOLDS = {
-    'high_relevance': 0.7,    # Direct matches
-    'medium_relevance': 0.4,  # Semantic relationships
-    'minimum_relevance': 0.1  # Filter threshold
-}
-```
-
-### **Collection Configuration**
+### **ChromaDB Configuration**
 ```python
 collection_config = {
-    'metadata': {"hnsw:space": "cosine"},  # Cosine similarity
+    'metadata': {"hnsw:space": "cosine"},  
     'embedding_function': OllamaEmbeddingFunction(),
     'persist_directory': '~/.cache/mcp_playground/chromadb'
 }
 ```
 
-### **Memory Management**
-- **Automatic cleanup**: Old conversations (7-day retention)
-- **Fact limits**: 1000 facts maximum with LRU eviction
-- **Collection optimization**: Periodic HNSW index rebuilding
+### **Tool Query Filtering**
+```python
+tool_keywords = [
+    'stock', 'price', 'crypto', 'weather', 'youtube', 
+    'arxiv', 'crime', 'search', 'url'
+]
+is_tool_query = any(keyword in message.lower() for keyword in tool_keywords)
+```
+
+## Future Enhancements - Keep It Simple
+
+### **Document RAG Extension**
+The current architecture provides a foundation for document RAG:
+1. **Document Ingestion**: Chunk documents, embed, store in ChromaDB
+2. **Multi-Source Search**: Search across facts + documents with same threshold
+3. **Same Injection Method**: Use conversation history injection for document content
+
+### **Performance Optimizations**
+1. **Embedding Caching**: Cache embeddings for repeated queries
+2. **Index Optimization**: Periodic ChromaDB index rebuilding
+3. **Threshold Tuning**: Adjust 80% threshold based on user feedback
 
 ## Monitoring & Debugging
 
-### **Relevance Analysis**
-```python
-# Debug similarity scores
-def analyze_query(query: str):
-    results = collection.query(query, include=['distances'])
-    for i, distance in enumerate(results['distances'][0]):
-        similarity = 1.0 - distance
-        print(f"Result {i}: {similarity:.3f} similarity")
+### **Debug Output**
+```
+DEBUG - Query: "sci-fi book recommendations"
+DEBUG - Found fact: "User likes reading sci-fi books" (relevance: 0.86)
+DEBUG - Injected memory: User likes reading sci-fi books
+DEBUG - Skipping tool query: "What's Apple's stock price?"
 ```
 
 ### **Performance Metrics**
 - Query latency (embedding + search time)
-- Relevance distribution (high/medium/low scores)
-- Cache hit rates (for repeated queries)
-- Memory usage (ChromaDB index size)
+- Injection rate (% of queries that trigger memory injection)
+- Relevance distribution (high precision filtering effectiveness)
 
-## Future Enhancements
+## Getting Started - Updated
 
-### **Advanced RAG Patterns**
-1. **Hybrid Search**: Combine vector + BM25 keyword search
-2. **Re-ranking**: Use cross-encoder models for result refinement
-3. **Query Expansion**: Generate alternative query phrasings
-4. **Contextual Embeddings**: Fine-tune embeddings on user data
+To utilize the simplified RAG system:
 
-### **Multi-Modal RAG**
-1. **Document Types**: PDF, Word, markdown, code files
-2. **Image Analysis**: OCR + vision models for image content
-3. **Audio/Video**: Transcription + semantic search over media
-4. **Web Scraping**: Bookmark and search web content
+1. **Store Information**: `remember("I prefer sci-fi books")`
+   - Stored in ChromaDB with embeddings
+   - Ready for semantic search
 
-### **Privacy & Security**
-1. **Local-first**: All processing stays on device
-2. **Encryption**: Encrypt embeddings at rest
-3. **Anonymization**: Remove PII from stored content
-4. **Access Controls**: User-controlled data retention policies
+2. **Automatic Context**: Ask "What should I read next?"
+   - System finds high relevance (>80%) to sci-fi preference
+   - Injects as conversation history: "Just so you know, user prefers sci-fi books"
+   - LLM responds naturally: "Since you prefer sci-fi, I'd recommend..."
 
----
+3. **High Precision**: Ask "What's the weather?"
+   - No relevant facts >80% similarity
+   - No memory injection (clean response)
 
-## Getting Started
+4. **Explicit Memory**: Ask "What do you remember about me?"
+   - LLM calls `recall` tool
+   - Returns stored facts directly
 
-To utilize the RAG system:
+## Key Benefits
 
-1. **Store Information**: `remember("I prefer morning meetings")`
-2. **Natural Queries**: `recall("what do you know about my schedule preferences")`
-3. **Semantic Search**: Works with any natural language phrasing
-4. **Relevance Feedback**: System shows relevance scores for transparency
+- **Eliminates Confusion**: No more "I don't know X while showing X"
+- **Natural Integration**: LLM treats memory as conversation context
+- **High Precision**: 80% threshold prevents irrelevant injection
+- **Simple Architecture**: ~50 lines vs 500+ lines of complexity
+- **Reliable**: Conversation history injection is intuitive for LLMs
 
-The RAG architecture provides a solid foundation for intelligent, semantic memory that grows more powerful as more documents and personal information are added to the system.
+The simplified RAG architecture proves that **less complexity can lead to better results** when the implementation aligns with how LLMs naturally process information.

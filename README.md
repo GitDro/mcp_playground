@@ -84,7 +84,7 @@ uv run python mcp_server.py http 8000
 - **🌤️ Weather**: Get current weather and 7-day forecasts by IP location, city name, or coordinates (prefers Canada, no API keys needed)
 - **🌊 Tide Information**: Canadian coastal tide times and heights with emoji indicators (Halifax, Vancouver, St. Johns, etc.)
 - **🚨 Crime Analytics**: Toronto neighbourhood safety statistics with semantic neighbourhood search and trend visualization
-- **🧠 Vector Memory System**: Semantic memory using ChromaDB + Ollama embeddings for intelligent fact storage and retrieval
+- **🧠 Simple Memory System**: Natural conversation history injection with 80% relevance threshold (MVP - July 2025)
 - **🎛️ Function Toggle**: Enable/disable AI tool usage per conversation
 
 ## 🎯 Example Prompts
@@ -130,12 +130,11 @@ uv run python mcp_server.py http 8000
 - "How safe is Harbourfront neighbourhood?"
 - "Compare assault rates in different Toronto areas"
 
-**Memory & Preferences:**
-- "Remember that I prefer concise responses"
-- "I work as a software engineer at OpenAI"
-- "Set my preferred model to llama3.2"
-- "What do you remember about me?"
-- "Show my conversation history about machine learning"
+**Memory & Preferences (MVP 2025):**
+- "Remember I like reading sci-fi books"
+- Next: "Any book recommendations?" (automatic context: "Since you enjoy sci-fi books...")
+- "What do you remember about me?" (simple direct response)
+- High precision: only 80%+ relevant facts injected
 
 ## 🏗️ Architecture
 
@@ -165,7 +164,7 @@ uv run python mcp_server.py http 8000
 ```
 
 ### Available Tools
-- **Memory**: `remember`, `recall`, `forget` - Vector-based semantic memory
+- **Memory**: `remember`, `recall`, `forget` - Simple ChromaDB storage with conversation history injection
 - **Web**: `web_search`, `analyze_url` - Web search and content analysis
 - **Media**: `analyze_youtube_video` - YouTube analysis (summaries and Q&A)
 - **Finance**: `get_stock_overview` - Comprehensive financial data with visualization
@@ -200,18 +199,30 @@ async def use_tools():
 - `recall`: Semantic search across all memories
 - `forget`: Remove by description, not IDs
 
-### Key Benefits
-- **Solves "about me" problem**: Natural language queries work perfectly
-- **Auto-context injection**: Relevant memories added to conversations
-- **Future-ready**: Foundation for personal document RAG
+### Key Benefits (MVP July 2025)
+- **Simple & Effective**: Conversation history injection instead of complex prompt engineering
+- **High Precision**: 80% similarity threshold prevents irrelevant memory injection
+- **Natural Integration**: LLM treats memory as conversation context, not external data  
+- **No Confusion**: Eliminates "I don't know X while showing X" responses
+- **Minimal Code**: ~50 lines vs 500+ lines of complexity
+- **Reliable**: ChromaDB semantic search with conversation history injection
 
-**Example**: "what do you recall about me" → finds "User likes ice cream" (43.5% similarity)
+**How It Works**:
+1. `remember("User likes reading sci-fi books")` → stored in ChromaDB
+2. "Any good book recommendations?" → 86% similarity found
+3. System injects: "Just so you know, user likes reading sci-fi books"
+4. LLM: "Since you enjoy sci-fi books, I'd recommend..." (natural response)
+
+**Precision Examples**:
+- ✅ "sci-fi book recs" → 86% similarity → memory injected
+- ❌ "what's the weather" → <80% similarity → no injection
+- ✅ Clean separation: tool queries vs memory queries
 
 ## 📚 Documentation
 
 - **[FastMCP Overview](docs/FASTMCP_OVERVIEW.md)** - How the @mcp.tool decorator eliminates boilerplate
-- **[Memory System](docs/MEMORY_SYSTEM.md)** - Vector memory architecture and usage
-- **[RAG Architecture](docs/RAG_ARCHITECTURE.md)** - Technical details of semantic search
+- **[Memory System](docs/MEMORY_SYSTEM.md)** - Simple MVP memory system with conversation history injection
+- **[RAG Architecture](docs/RAG_ARCHITECTURE.md)** - Simplified RAG with high-precision filtering
 - **[FastMCP Usage](docs/FASTMCP_USAGE.md)** - FastMCP framework documentation
 
 ## 🔧 Troubleshooting

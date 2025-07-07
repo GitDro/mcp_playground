@@ -11,11 +11,21 @@ import logging
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
 from dataclasses import dataclass, asdict
+from enum import Enum
 from tinydb import TinyDB, Query
 from tinydb.storages import JSONStorage
 from tinydb.middlewares import CachingMiddleware
 
 logger = logging.getLogger(__name__)
+
+class MemoryState(Enum):
+    """Explicit memory states for prompt generation"""
+    NO_MEMORY = "no_memory"
+    HAS_PERSONAL_FACTS = "has_personal_facts"
+    HAS_PREFERENCES = "has_preferences"
+    HAS_BOTH = "has_both"
+    EXPLICIT_MEMORY_QUERY = "explicit_memory_query"
+    TOOL_FOCUSED_QUERY = "tool_focused_query"
 
 @dataclass
 class ConversationSummary:
@@ -307,42 +317,193 @@ class MemoryManager:
             logger.error(f"Failed to get all preferences: {e}")
             return {}
     
-    # Memory Building for Conversations
-    def build_conversation_context(self, current_query: str, 
-                                  session_history: List[Dict]) -> str:
-        """Build context from memories for conversation"""
+    # Memory Building for Conversations - NEW MEMORY-FIRST ARCHITECTURE
+    def build_memory_aware_prompt(self, current_query: str, 
+                                 session_history: List[Dict]) -> Tuple[str, MemoryState, bool]:
+        """Build memory-aware prompt with explicit state management
+        
+        Returns:
+            Tuple of (system_prompt, memory_state, should_disable_memory_tools)
+        """
         try:
-            context_parts = []
+            # Determine memory state and content
+            memory_state = self._determine_memory_state(current_query)
+            memory_content = self._get_memory_content(current_query, memory_state)
             
-            # Add relevant facts
-            relevant_facts = self.retrieve_facts(current_query, limit=3)
-            if relevant_facts:
-                facts_text = "Relevant information about the user:\n"
-                for fact in relevant_facts:
-                    facts_text += f"- {fact.content}\n"
-                context_parts.append(facts_text)
+            # Generate state-specific system prompt
+            system_prompt = self._generate_state_prompt(memory_state, memory_content)
             
-            # Add relevant past conversations
-            relevant_conversations = self.get_relevant_conversations(current_query, limit=2)
-            if relevant_conversations:
-                conv_text = "Related past conversations:\n"
-                for conv in relevant_conversations:
-                    conv_text += f"- {conv.summary}\n"
-                context_parts.append(conv_text)
+            # Determine if memory tools should be disabled
+            should_disable_memory_tools = self._should_disable_memory_tools(memory_state)
             
-            # Add user preferences
-            preferences = self.get_all_preferences()
-            if preferences:
-                pref_text = "User preferences:\n"
-                for key, value in preferences.items():
-                    pref_text += f"- {key}: {value}\n"
-                context_parts.append(pref_text)
-            
-            return "\n".join(context_parts)
+            return system_prompt, memory_state, should_disable_memory_tools
             
         except Exception as e:
-            logger.error(f"Failed to build conversation context: {e}")
+            logger.error(f"Failed to build memory-aware prompt: {e}")
+            return "", MemoryState.NO_MEMORY, False
+    
+    def _determine_memory_state(self, query: str) -> MemoryState:
+        """Determine the appropriate memory state for the query"""
+        query_lower = query.lower()
+        
+        # Check for tool-focused queries (skip memory injection)
+        tool_keywords = [
+            'youtube', 'video', 'analyze', 'summarize', 'transcript',
+            'stock', 'price', 'crypto', 'market', 'finance', 'ticker',
+            'weather', 'forecast', 'temperature', 'climate',
+            'crime', 'safety', 'toronto', 'neighbourhood',
+            'tide', 'tides', 'water', 'ocean',
+            'arxiv', 'paper', 'research', 'academic', 'study',
+            'search', 'web search', 'find', 'google',
+            'url', 'website', 'link', 'analyze url'
+        ]
+        
+        if any(keyword in query_lower for keyword in tool_keywords):
+            return MemoryState.TOOL_FOCUSED_QUERY
+        
+        # Check for explicit memory requests
+        memory_triggers = [
+            'remember', 'recall', 'about me', 'my preferences', 
+            'what do you know', 'stored information', 'my details',
+            'personal info', 'user info', 'what do you remember',
+            'what have you learned', 'tell me about myself'
+        ]
+        
+        if any(trigger in query_lower for trigger in memory_triggers):
+            return MemoryState.EXPLICIT_MEMORY_QUERY
+        
+        # Check what memory content we have
+        facts = self.retrieve_facts(query, limit=3)
+        preferences = self.get_all_preferences()
+        
+        has_facts = len(facts) > 0
+        has_preferences = len(preferences) > 0
+        
+        if has_facts and has_preferences:
+            return MemoryState.HAS_BOTH
+        elif has_facts:
+            return MemoryState.HAS_PERSONAL_FACTS
+        elif has_preferences:
+            return MemoryState.HAS_PREFERENCES
+        else:
+            return MemoryState.NO_MEMORY
+    
+    def _get_memory_content(self, query: str, memory_state: MemoryState) -> Dict[str, Any]:
+        """Get relevant memory content based on state"""
+        content = {
+            'facts': [],
+            'preferences': {},
+            'conversations': []
+        }
+        
+        if memory_state == MemoryState.TOOL_FOCUSED_QUERY:
+            return content  # No memory content for tool queries
+        
+        # Get facts
+        if memory_state == MemoryState.EXPLICIT_MEMORY_QUERY:
+            # For explicit queries, get all facts
+            content['facts'] = self.retrieve_facts("", limit=10)  # Empty query gets all facts
+        else:
+            # For general queries, get relevant facts
+            content['facts'] = self.retrieve_facts(query, limit=3)
+        
+        # Get preferences
+        if memory_state in [MemoryState.HAS_PREFERENCES, MemoryState.HAS_BOTH, MemoryState.EXPLICIT_MEMORY_QUERY]:
+            content['preferences'] = self.get_all_preferences()
+        
+        # Get conversations for explicit memory queries
+        if memory_state == MemoryState.EXPLICIT_MEMORY_QUERY:
+            content['conversations'] = self.get_relevant_conversations(query, limit=2)
+        
+        return content
+    
+    def _generate_state_prompt(self, memory_state: MemoryState, memory_content: Dict[str, Any]) -> str:
+        """Generate system prompt based on memory state"""
+        base_date = datetime.now().strftime("%Y-%m-%d")
+        
+        if memory_state == MemoryState.NO_MEMORY:
+            return f"""You are a helpful AI assistant. Today's date is {base_date}. You don't have any stored information about this user yet."""
+        
+        elif memory_state == MemoryState.TOOL_FOCUSED_QUERY:
+            return f"""You are a helpful AI assistant. Today's date is {base_date}. This appears to be a tool-focused query, so I'm not including personal memory context to avoid irrelevant information."""
+        
+        elif memory_state == MemoryState.EXPLICIT_MEMORY_QUERY:
+            memory_sections = []
+            
+            if memory_content['facts']:
+                facts_text = "**Personal Facts:**\n"
+                for fact in memory_content['facts']:
+                    facts_text += f"• {fact.content}\n"
+                memory_sections.append(facts_text)
+            
+            if memory_content['preferences']:
+                prefs_text = "**User Preferences:**\n"
+                for key, value in memory_content['preferences'].items():
+                    prefs_text += f"• {key}: {value}\n"
+                memory_sections.append(prefs_text)
+            
+            if memory_content['conversations']:
+                conv_text = "**Past Conversation Topics:**\n"
+                for conv in memory_content['conversations']:
+                    conv_text += f"• {conv.summary}\n"
+                memory_sections.append(conv_text)
+            
+            if memory_sections:
+                stored_info = "\n\n".join(memory_sections)
+                return f"""You are a helpful AI assistant. Today's date is {base_date}. The user is asking what you remember about them.
+
+STORED INFORMATION ABOUT THE USER:
+{stored_info}
+
+Present this information in a natural, conversational way. This is what you know about them. Do NOT use the memory tools (remember, recall, forget) since you already have the information."""
+            else:
+                return f"""You are a helpful AI assistant. Today's date is {base_date}. The user is asking what you remember about them, but you don't have any stored information about them yet."""
+        
+        else:  # HAS_PERSONAL_FACTS, HAS_PREFERENCES, HAS_BOTH
+            memory_sections = []
+            
+            if memory_content['facts']:
+                facts_text = "**Stored Facts About This User:**\n"
+                for fact in memory_content['facts']:
+                    facts_text += f"• {fact.content}\n"
+                memory_sections.append(facts_text)
+            
+            if memory_content['preferences']:
+                prefs_text = "**User Preferences:**\n"
+                for key, value in memory_content['preferences'].items():
+                    prefs_text += f"• {key}: {value}\n"
+                memory_sections.append(prefs_text)
+            
+            stored_info = "\n\n".join(memory_sections)
+            return f"""You are a helpful AI assistant. Today's date is {base_date}. You have access to stored information about the user.
+
+{stored_info}
+
+Use this information naturally in your responses when relevant, but don't mention the memory system mechanics. You don't need to use memory tools since you already have the relevant information."""
+    
+    def _should_disable_memory_tools(self, memory_state: MemoryState) -> bool:
+        """Determine if memory tools should be disabled"""
+        # Disable memory tools when we're providing memory context
+        # or when it's a tool-focused query
+        return memory_state in [
+            MemoryState.EXPLICIT_MEMORY_QUERY,
+            MemoryState.HAS_PERSONAL_FACTS,
+            MemoryState.HAS_PREFERENCES,
+            MemoryState.HAS_BOTH,
+            MemoryState.TOOL_FOCUSED_QUERY
+        ]
+    
+    # Legacy method for backward compatibility
+    def build_conversation_context(self, current_query: str, 
+                                  session_history: List[Dict]) -> str:
+        """Legacy method - use build_memory_aware_prompt instead"""
+        system_prompt, memory_state, _ = self.build_memory_aware_prompt(current_query, session_history)
+        # Extract just the memory content from the system prompt for backward compatibility
+        if memory_state == MemoryState.NO_MEMORY or memory_state == MemoryState.TOOL_FOCUSED_QUERY:
             return ""
+        
+        # Return empty string - the new system handles this in the prompt
+        return ""
     
     # Helper Methods
     def _create_conversation_summary(self, messages: List[Dict]) -> str:

@@ -17,7 +17,7 @@ from datetime import datetime
 
 # Import our modules
 from ui_config import STREAMLIT_STYLE, TOOLS_HELP_TEXT, get_system_prompt
-from src.core.memory import memory_manager
+from src.core.vector_memory import vector_memory_manager as memory_manager
 import uuid
 
 # Import FastMCP client
@@ -145,30 +145,80 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
         # Format conversation for Ollama with system guidance
         messages = []
         
-        # Add system message for function calling guidance
+        # Add simple system message 
         if use_functions:
             current_date = datetime.now().strftime("%Y-%m-%d")
             base_prompt = get_system_prompt(current_date)
             
-            # Add memory context if available
-            try:
-                memory_context = memory_manager.build_conversation_context(
-                    message, 
-                    conversation_history
-                )
-                if memory_context:
-                    base_prompt += f"\n\n{memory_context}"
-            except Exception as e:
-                print(f"Failed to get memory context: {e}")  # Debug print
-            
             system_message = {
-                "role": "system",
+                "role": "system", 
                 "content": base_prompt
             }
             messages.append(system_message)
         
         for msg in conversation_history:
             messages.append({"role": msg["role"], "content": msg["content"]})
+        
+        # MVP Memory: Inject high-relevance facts as conversation history
+        if use_functions:
+            try:
+                # Detect memory queries to inject ALL stored facts
+                memory_keywords = [
+                    'what do you remember', 'what do you know about me', 'what do you recall',
+                    'tell me about myself', 'about me', 'remember about me'
+                ]
+                
+                # Skip memory injection for tool-focused queries
+                tool_keywords = [
+                    'stock', 'price', 'crypto', 'market', 'finance', 'ticker',
+                    'weather', 'forecast', 'temperature', 'climate',
+                    'youtube', 'video', 'analyze', 'summarize', 
+                    'arxiv', 'paper', 'research', 'academic',
+                    'crime', 'safety', 'toronto', 'neighbourhood',
+                    'tide', 'tides', 'water', 'ocean',
+                    'search', 'web search', 'find', 'google',
+                    'url', 'website', 'link'
+                ]
+                
+                query_lower = message.lower()
+                is_tool_query = any(keyword in query_lower for keyword in tool_keywords)
+                is_memory_query = any(keyword in query_lower for keyword in memory_keywords)
+                
+                if is_memory_query:
+                    # For "what do you remember about me" queries, inject ALL stored facts
+                    all_facts = memory_manager.get_all_facts()
+                    if all_facts:
+                        facts_content = "Here's what I remember about you: " + "; ".join([fact.content for fact in all_facts])
+                        messages.append({
+                            "role": "user",
+                            "content": facts_content
+                        })
+                        messages.append({
+                            "role": "assistant",
+                            "content": "Got it, I have that information."
+                        })
+                        print(f"DEBUG - Injected all stored facts for memory query ({len(all_facts)} facts)")
+                elif not is_tool_query:
+                    # Get high-relevance facts only (80%+ similarity)
+                    relevant_facts = memory_manager.retrieve_facts_semantic(message, limit=5)
+                    high_relevance_facts = [fact for fact in relevant_facts if fact.relevance_score > 0.8]
+                    
+                    # Inject max 2 most relevant facts as conversation history
+                    for fact in high_relevance_facts[:2]:
+                        # Add as fake conversation history
+                        messages.append({
+                            "role": "user",
+                            "content": f"Just so you know, {fact.content.lower()}"
+                        })
+                        messages.append({
+                            "role": "assistant", 
+                            "content": "Got it, I'll keep that in mind!"
+                        })
+                        print(f"DEBUG - Injected memory: {fact.content} (relevance: {fact.relevance_score:.2f})")
+                
+            except Exception as e:
+                print(f"Memory injection failed: {e}")
+        
         messages.append({"role": "user", "content": message})
         
         # Prepare request data
@@ -541,6 +591,10 @@ with col2:
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 content = message["content"]
+                
+                # Debug: Log message content to see where "Stored information about you" comes from
+                if "stored information" in content.lower():
+                    print(f"DEBUG - Found stored information in message: {content}")
                 
                 # Check if this is a response with function call results
                 if "---\n\n" in content:

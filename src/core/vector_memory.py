@@ -361,6 +361,12 @@ class VectorMemoryManager:
     def get_relevant_conversations(self, query: str, limit: int = 3) -> List:
         """Get relevant conversations (uses TinyDB for now, could be enhanced with vector search)"""
         return self.tiny_memory.get_relevant_conversations(query, limit)
+    
+    def build_conversation_context(self, current_query: str, session_history: List[Dict]) -> str:
+        """Build context from memories for conversation with privacy protection"""
+        # Use the enhanced privacy-aware context building from TinyDB memory manager
+        return self.tiny_memory.build_conversation_context(current_query, session_history)
+    
 
 # Global vector memory manager instance
 vector_memory_manager = VectorMemoryManager()
