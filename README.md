@@ -58,7 +58,7 @@ You can use these tools directly in Windsurf IDE through MCP integration:
 - `web_search` - Real-time web search with DuckDuckGo
 - `analyze_url` - Website content analysis and summarization
 - `arxiv_search` - Academic paper search with deep PDF analysis
-- `get_financial_data` - Comprehensive financial data for stocks, crypto, and market indices with trend visualization
+- `get_stock_overview` - Comprehensive financial data for stocks, crypto, and market indices with trend visualization
 - `summarize_youtube_video` - AI-powered YouTube video summaries
 - `query_youtube_transcript` - Answer questions about YouTube videos
 - `get_weather` - Current weather and forecasts by city name or coordinates
@@ -169,7 +169,7 @@ uv run python mcp_server.py http 8000
 - **Memory**: `remember`, `recall`, `forget` - Vector-based semantic memory
 - **Web**: `web_search`, `analyze_url` - Web search and content analysis
 - **Media**: `summarize_youtube_video`, `query_youtube_transcript` - YouTube analysis
-- **Finance**: `get_financial_data` - Comprehensive financial data with visualization
+- **Finance**: `get_stock_overview` - Comprehensive financial data with visualization
 - **Research**: `arxiv_search` - Academic paper analysis
 - **Weather**: `get_weather` - Location-based weather forecasts
 - **Tides**: `get_tide_info` - Canadian coastal tide times and heights
