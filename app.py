@@ -17,7 +17,7 @@ from datetime import datetime
 
 # Import our modules
 from ui_config import STREAMLIT_STYLE, TOOLS_HELP_TEXT, get_system_prompt
-from src.core.memory import memory_manager, MemoryState
+from src.core.vector_memory import vector_memory_manager as memory_manager
 import uuid
 
 # Import FastMCP client
@@ -145,44 +145,59 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
         # Format conversation for Ollama with system guidance
         messages = []
         
-        # Add system message with memory-first prompt architecture
+        # Add simple system message 
         if use_functions:
-            try:
-                # Get memory-aware system prompt
-                memory_prompt, memory_state, should_disable_memory_tools = memory_manager.build_memory_aware_prompt(
-                    message,
-                    conversation_history
-                )
-                
-                # Debug logging
-                print(f"DEBUG - Memory state: {memory_state}")
-                print(f"DEBUG - Should disable memory tools: {should_disable_memory_tools}")
-                
-                # Use memory-first prompt or fallback to standard prompt
-                if memory_prompt:
-                    base_prompt = memory_prompt
-                else:
-                    current_date = datetime.now().strftime("%Y-%m-%d")
-                    base_prompt = get_system_prompt(current_date)
-                
-                print(f"DEBUG - Final system prompt (last 500 chars): {base_prompt[-500:]}")
-                
-            except Exception as e:
-                print(f"Failed to get memory-aware prompt: {e}")
-                # Fallback to standard prompt
-                current_date = datetime.now().strftime("%Y-%m-%d")
-                base_prompt = get_system_prompt(current_date)
-                should_disable_memory_tools = False
-                memory_state = MemoryState.NO_MEMORY
+            current_date = datetime.now().strftime("%Y-%m-%d")
+            base_prompt = get_system_prompt(current_date)
             
             system_message = {
-                "role": "system",
+                "role": "system", 
                 "content": base_prompt
             }
             messages.append(system_message)
         
         for msg in conversation_history:
             messages.append({"role": msg["role"], "content": msg["content"]})
+        
+        # MVP Memory: Inject high-relevance facts as conversation history
+        if use_functions:
+            try:
+                # Skip memory injection for tool-focused queries
+                tool_keywords = [
+                    'stock', 'price', 'crypto', 'market', 'finance', 'ticker',
+                    'weather', 'forecast', 'temperature', 'climate',
+                    'youtube', 'video', 'analyze', 'summarize', 
+                    'arxiv', 'paper', 'research', 'academic',
+                    'crime', 'safety', 'toronto', 'neighbourhood',
+                    'tide', 'tides', 'water', 'ocean',
+                    'search', 'web search', 'find', 'google',
+                    'url', 'website', 'link'
+                ]
+                
+                query_lower = message.lower()
+                is_tool_query = any(keyword in query_lower for keyword in tool_keywords)
+                
+                if not is_tool_query:
+                    # Get high-relevance facts only (80%+ similarity)
+                    relevant_facts = memory_manager.retrieve_facts_semantic(message, limit=5)
+                    high_relevance_facts = [fact for fact in relevant_facts if fact.relevance_score > 0.8]
+                    
+                    # Inject max 2 most relevant facts as conversation history
+                    for fact in high_relevance_facts[:2]:
+                        # Add as fake conversation history
+                        messages.append({
+                            "role": "user",
+                            "content": f"Just so you know, {fact.content.lower()}"
+                        })
+                        messages.append({
+                            "role": "assistant", 
+                            "content": "Got it, I'll keep that in mind!"
+                        })
+                        print(f"DEBUG - Injected memory: {fact.content} (relevance: {fact.relevance_score:.2f})")
+                
+            except Exception as e:
+                print(f"Memory injection failed: {e}")
+        
         messages.append({"role": "user", "content": message})
         
         # Prepare request data
@@ -194,14 +209,7 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
         
         # Add tools if function calling is enabled
         if use_functions and mcp_tools:
-            # Filter out memory tools if they should be disabled
-            filtered_tools = mcp_tools
-            if 'should_disable_memory_tools' in locals() and should_disable_memory_tools:
-                memory_tool_names = ['remember', 'recall', 'forget']
-                filtered_tools = [tool for tool in mcp_tools if tool['name'] not in memory_tool_names]
-                print(f"DEBUG - Filtered out memory tools. Using {len(filtered_tools)} tools instead of {len(mcp_tools)}")
-            
-            request_data["tools"] = create_function_schema_from_mcp_tools(filtered_tools)
+            request_data["tools"] = create_function_schema_from_mcp_tools(mcp_tools)
         
         # First request with or without tools
         try:

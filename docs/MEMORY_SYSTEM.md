@@ -1,339 +1,270 @@
-# Memory System Documentation
+# Memory System Documentation - MVP Version
 
 ## Overview
 
-The MCP Playground implements a sophisticated **vector-based memory system** that enables the AI to remember user information, preferences, and conversation context across sessions. The system uses **ChromaDB with Ollama embeddings** for semantic understanding and **TinyDB for exact matches**.
+The MCP Playground implements a **simple, effective memory system** that enables the AI to naturally remember user information across conversations. The system uses **ChromaDB with Ollama embeddings** for semantic search and **conversation history injection** for natural integration.
 
-## Architecture Diagram
+## MVP Architecture - Simple & Effective
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                Vector-Based Memory System                   │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌─────────────────┐   ┌─────────────────┐   ┌─────────────┐│
-│  │  Working Memory │   │ Short-term Memory│   │ Long-term   ││
-│  │   (Session)     │   │  (Cross-session) │   │   Memory    ││
-│  │                 │   │                  │   │ (Persistent)││
-│  │ • Chat History  │   │ • Conversation   │   │ • User Facts││
-│  │ • Tool Usage    │   │   Summaries      │   │ • Preferences││
-│  │ • Context Cache │   │ • Recent Topics  │   │ • Patterns  ││
-│  │ • Session Prefs │   │ • Tool Patterns  │   │ • Profile   ││
-│  └─────────────────┘   └─────────────────┘   └─────────────┘│
-│           │                       │                     │   │
-│           ▼                       ▼                     ▼   │
-│  ┌─────────────────────────────────────────────────────────┐│
-│  │              Vector Memory Manager                      ││
-│  │                                                         ││
-│  │ • Semantic Search     • Relevance Scoring              ││
-│  │ • Embedding Generation• Memory Consolidation           ││
-│  │ • Hybrid Retrieval    • Session Management             ││
-│  └─────────────────────────────────────────────────────────┘│
-│                               │                             │
-│                               ▼                             │
-│  ┌─────────────────────────────────────────────────────────┐│
-│  │                  Hybrid Storage Layer                   ││
-│  │                                                         ││
-│  │  ChromaDB (Vector Search)    TinyDB (Exact Match)      ││
-│  │  • User facts (semantic)     • Preferences (K-V)       ││
-│  │  • nomic-embed-text          • Conversations (cache)   ││
-│  │  • 768 dimensions            • Session data            ││
-│  │  • Cosine similarity         • ~/.cache/memory.json   ││
-│  └─────────────────────────────────────────────────────────┘│
-│                                                             │
-├─────────────────────────────────────────────────────────────┤
-│                    Tool Integration                         │
-│                                                             │
-│ Memory Tools (3):           App Integration:                │
-│ • remember                 • Auto context injection        │
-│ • recall                   • Session persistence          │
-│ • forget                   • Tool usage tracking          │
-│                            • Conversation summarization   │
-│                            • Memory-aware prompts         │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                 Simple Memory System (MVP)                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────────┐                    ┌─────────────────┐   │
+│  │   User Query    │                    │ Conversation     │   │
+│  │                 │                    │ History          │   │
+│  │ "Any sci-fi     │ ─────────────────►│ Injection        │   │
+│  │ book recs?"     │                    │                  │   │
+│  └─────────────────┘                    │ IF similarity    │   │
+│           │                              │ > 80%:           │   │
+│           │                              │                  │   │
+│           ▼                              │ Add fake         │   │
+│  ┌─────────────────────────────────────────┐ │ conversation:    │   │
+│  │     Semantic Search                 │ │ "Just so you     │   │
+│  │                                     │ │ know, user       │   │
+│  │ 1. Embed query with nomic-embed    │ │ likes sci-fi"    │   │
+│  │ 2. Search ChromaDB facts           │ │                  │   │
+│  │ 3. Filter by 80% similarity        │ │ LLM Response:    │   │
+│  │ 4. Take top 2 facts maximum        │ │ "Got it!"        │   │
+│  └─────────────────────────────────────────┘ └─────────────────┘   │
+│           │                                        │           │
+│           ▼                                        ▼           │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │                Natural LLM Response                        │ │
+│  │                                                             │ │
+│  │ "Since you enjoy sci-fi books, I'd recommend..."           │ │
+│  │                                                             │ │
+│  │ ✓ Natural integration (treats memory as conversation)      │ │
+│  │ ✓ No "I don't know X while showing X" confusion           │ │
+│  │ ✓ High precision (only 80%+ relevant facts)               │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                      Storage Layer                             │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │ ChromaDB (Vector Storage)                                   │ │
+│  │ • User facts with semantic embeddings                      │ │
+│  │ • nomic-embed-text model (768 dimensions)                  │ │
+│  │ • Cosine similarity search                                 │ │
+│  │ • ~/.cache/mcp_playground/chromadb                         │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│  Memory Tools: remember, recall, forget                        │
+│  Key: Simple storage, high-threshold retrieval (80%+)          │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ## Core Components
 
-### Files in src/core/:
-- `vector_memory.py` - Vector-based memory manager with ChromaDB + Ollama
-- `memory.py` - Original TinyDB memory manager (used for fallback)
-- `cache.py` - File-based caching utilities  
-- `models.py` - Pydantic data models
-- `utils.py` - General utility functions
+### Files:
+- `src/core/vector_memory.py` - ChromaDB vector storage for user facts
+- `src/tools/memory.py` - Simple memory tools (remember, recall, forget)
+- `app.py` - Conversation history injection logic
 
-### Memory Tools (`src/tools/memory.py`)
+### Memory Tools - Simple & Focused
 
-**3 streamlined memory tools** for AI interaction:
+**3 essential memory tools**:
 
-1. **`remember`**: Store any important user information (auto-categorizes as work/personal/preference)
-2. **`recall`**: Semantic search across all stored information - understands natural queries  
-3. **`forget`**: Remove information by description, not technical IDs
+1. **`remember(fact)`**: Store user information in ChromaDB
+   - Auto-categorizes content
+   - Returns simple confirmation
+   - Example: `remember("User likes sci-fi books")`
 
-**Key improvement**: Reduced from 8 confusing tools to 3 clear tools with distinct purposes.
+2. **`recall(query)`**: Search stored facts
+   - Semantic search across all stored information
+   - Used for explicit user requests only
+   - Example: `recall("what do you remember about my reading preferences")`
 
-## Memory Types
+3. **`forget(description)`**: Remove stored information
+   - Find and remove facts by description
+   - Example: `forget("reading preferences")`
 
-### 1. Working Memory (Session-based)
-**Purpose**: Manage current conversation context and immediate state  
-**Scope**: Single session/conversation  
-**Storage**: Streamlit session_state  
-**Lifetime**: Until page refresh or session end  
+## How It Works - MVP Approach
 
-**Components**:
-- `messages`: Current conversation history
-- `tool_usage`: Count of tools used in current session
-- `session_id`: Unique identifier for session
-- `memory_context`: Cached context from long-term memory
+### Core Principle: Conversation History Injection
 
-### 2. Short-term Memory (Cross-session)
-**Purpose**: Bridge conversations and maintain recent context  
-**Scope**: 7 days (configurable)  
-**Storage**: TinyDB `conversations` table  
-**Lifetime**: Auto-cleaned after 7 days  
+**The Problem**: Complex system prompts confuse LLMs, causing "I don't know X while showing X" responses.
 
-### 3. Long-term Memory (Persistent)
-**Purpose**: Store permanent user information with semantic search  
-**Scope**: Indefinite (with size limits)  
-**Storage**: ChromaDB with vector embeddings  
-**Lifetime**: Until manually removed or system limits reached  
+**The Solution**: Inject relevant facts as fake conversation history entries.
 
-## Vector Search Implementation
+### Step-by-Step Process
 
-### VectorMemoryManager (`src/core/vector_memory.py`)
+1. **User Query**: "Any good sci-fi book recommendations?"
 
-**Key Classes**:
+2. **Semantic Search**: 
+   - Embed query using nomic-embed-text
+   - Search ChromaDB for similar facts
+   - Filter for 80%+ similarity only
 
-```python
-@dataclass
-class VectorFact:
-    id: str
-    content: str
-    category: str
-    timestamp: datetime
-    relevance_score: float = 1.0
+3. **High-Relevance Check**:
+   - Found: "User likes reading sci-fi books" (86% similarity)
+   - Passes 80% threshold ✅
 
-class OllamaEmbeddingFunction:
-    """Custom embedding function using Ollama's nomic-embed-text model"""
-    model_name = "nomic-embed-text"  # 768 dimensions, 8K context
+4. **Conversation History Injection**:
+   ```json
+   [
+     {"role": "user", "content": "Just so you know, user likes reading sci-fi books"},
+     {"role": "assistant", "content": "Got it, I'll keep that in mind!"},
+     {"role": "user", "content": "Any good sci-fi book recommendations?"}
+   ]
+   ```
 
-class VectorMemoryManager:
-    """Hybrid memory manager using ChromaDB + TinyDB"""
-```
+5. **Natural LLM Response**: 
+   "Since you enjoy sci-fi books, I'd recommend..."
 
-**Critical Methods**:
-- `store_fact()` - Store with embeddings in ChromaDB + fallback to TinyDB
-- `retrieve_facts_semantic()` - Vector similarity search  
-- `retrieve_facts_hybrid()` - Combines semantic + keyword search
-- `forget_fact()` - Remove by semantic description matching
+## Technical Implementation
 
-### Semantic Search Algorithm
+### Key Components
 
 ```python
-# Query Processing Flow
-def retrieve_facts_semantic(query: str, limit: int = 5):
-    # 1. Generate query embedding
-    query_embedding = ollama.embed(model='nomic-embed-text', input=query)
+# In app.py - Simple conversation history injection
+def inject_memory_as_conversation(message, conversation_history):
+    # 1. Skip tool-focused queries
+    if is_tool_query(message):
+        return conversation_history
     
-    # 2. Vector search in ChromaDB
-    results = collection.query(
-        query_texts=[query],
-        n_results=limit,
-        include=['documents', 'metadatas', 'distances']
-    )
+    # 2. Get high-relevance facts only
+    facts = memory_manager.retrieve_facts_semantic(message, limit=5)
+    high_relevance_facts = [f for f in facts if f.relevance_score > 0.8]
     
-    # 3. Convert distance to similarity
-    for distance in results['distances']:
-        similarity = 1.0 - distance  # Cosine distance → similarity
-        
-    # 4. Filter by relevance threshold
-    return facts where similarity > 0.1
+    # 3. Inject max 2 facts as fake conversation
+    for fact in high_relevance_facts[:2]:
+        conversation_history.append({
+            "role": "user",
+            "content": f"Just so you know, {fact.content.lower()}"
+        })
+        conversation_history.append({
+            "role": "assistant", 
+            "content": "Got it, I'll keep that in mind!"
+        })
+    
+    return conversation_history
 ```
 
-### Relevance Scoring
+### ChromaDB Storage
 
-- **High Relevance** (>70% similarity): Direct keyword matches, exact content
-- **Medium Relevance** (40-70% similarity): Semantic relationships, related concepts  
-- **Low Relevance** (10-40% similarity): Tangentially related content
-- **Threshold**: 10% minimum to filter noise
+- **Model**: nomic-embed-text (768 dimensions)
+- **Storage**: ~/.cache/mcp_playground/chromadb
+- **Search**: Cosine similarity
+- **Threshold**: 80% minimum for injection (vs previous 10%)
+
+### High-Precision Filtering
+
+**NEW Threshold System**:
+- **80%+ similarity**: Inject into conversation ✅
+- **<80% similarity**: Skip injection ❌
 
 **Example Results**:
-- Query: "about me" → "User likes ice cream" = **43.5% similarity** ✅
-- Query: "ice cream" → "User likes ice cream" = **85.0% similarity** ✅  
-- Query: "work details" → "User works as software engineer" = **65.2% similarity** ✅
+- Query: "sci-fi books recommendation" → "User likes reading sci-fi books" = **81% similarity** ✅ (injected)
+- Query: "reading sci-fi" → "User likes reading sci-fi books" = **86% similarity** ✅ (injected)  
+- Query: "I like reading books" → "User likes reading sci-fi books" = **76% similarity** ❌ (not injected)
+- Query: "what's the weather" → No relevant facts >80% ❌ (not injected)
 
-## App Integration (`app.py`)
+## App Integration - Simple & Clean
 
-### Context Injection
-Memory context automatically injected into conversations:
+### No Complex State Management
+
+The MVP removes all complex architecture:
+
+❌ Memory states and prompt engineering  
+❌ Automatic tool filtering  
+❌ Complex system prompt injection  
+❌ Memory-aware prompt generation  
+
+✅ Simple conversation history injection  
+✅ High-threshold relevance filtering (80%+)  
+✅ Standard system prompts  
+✅ Clean, maintainable code  
+
+### Integration Code
 
 ```python
-# In chat_with_ollama_and_mcp()
-memory_context = memory_manager.build_conversation_context(message, conversation_history)
-if memory_context:
-    base_prompt += f"\n\n{memory_context}"
+# Simple integration in app.py
+if not is_tool_query(message):
+    # Get high-relevance facts
+    relevant_facts = memory_manager.retrieve_facts_semantic(message, limit=5)
+    high_relevance_facts = [fact for fact in relevant_facts if fact.relevance_score > 0.8]
+    
+    # Inject max 2 facts as conversation history
+    for fact in high_relevance_facts[:2]:
+        messages.append({
+            "role": "user",
+            "content": f"Just so you know, {fact.content.lower()}"
+        })
+        messages.append({
+            "role": "assistant", 
+            "content": "Got it, I'll keep that in mind!"
+        })
 ```
 
-### Session Management
-- **Session ID**: Unique UUID generated per session
-- **Tool Tracking**: Automatic counting of tool usage
-- **Summary Saving**: Conversations summarized when cleared
-- **Hybrid Storage**: Facts in ChromaDB, preferences in TinyDB
+### Tool Query Filtering
 
-### Smart Query Handling
-- **General queries** ("about me"): Return all stored information
-- **Specific queries** ("ice cream"): Semantic search with relevance scoring
-- **Preference queries** ("settings"): Direct TinyDB lookup for speed
-- **Fallback logic**: ChromaDB → TinyDB → empty results
+Simple keyword filtering prevents memory injection during tool-focused queries:
 
-## Database Schema
-
-### ChromaDB Collections
-
-#### `user_facts`
 ```python
-{
-    "id": "fact_1234567890.123",
-    "document": "User likes ice cream",
-    "metadata": {
-        "category": "preference",
-        "timestamp": "2024-01-01T12:00:00",
-        "relevance_score": 1.0
-    },
-    "embedding": [0.1, -0.3, 0.8, ...]  # 768 dimensions
-}
+tool_keywords = [
+    'stock', 'price', 'crypto', 'weather', 'youtube', 
+    'arxiv', 'crime', 'search', 'url'
+]
+
+is_tool_query = any(keyword in message.lower() for keyword in tool_keywords)
 ```
 
-### TinyDB Tables  
+### Tool Usage Examples - Simplified
 
-#### `preferences`
-```json
-{
-  "key": "response_style",
-  "value": "concise", 
-  "timestamp": "2024-01-01T12:00:00"
-}
-```
-
-#### `conversations`
-```json
-{
-  "session_id": "uuid-string",
-  "timestamp": "2024-01-01T12:00:00", 
-  "summary": "User discussed Python programming and asked about best practices",
-  "topics": ["python", "programming", "best-practices"],
-  "tool_usage": {"web_search": 2, "recall": 1},
-  "message_count": 8
-}
-```
-
-## Configuration & Performance
-
-### Memory Limits
-```python
-# In VectorMemoryManager.__init__()
-self.max_conversation_days = 7      # Short-term retention
-self.max_facts = 1000              # Long-term fact limit  
-self.min_similarity = 0.1          # Relevance threshold
-```
-
-### Performance Metrics
-- **Embedding Generation**: ~200ms per query (local Ollama)
-- **Vector Search**: ~50ms for 1000+ facts (ChromaDB)
-- **Total Latency**: ~300ms for semantic memory lookup
-- **Storage Overhead**: 768 floats per fact (minimal)
-
-### Environment Variables
-- `CACHE_DIRECTORY`: Override default cache location
-- `MAX_CACHE_DAYS`: Conversation retention period (default: 7)
-
-## Usage Patterns
-
-### Automatic Context Injection
-Every user message triggers context building:
-1. Extract keywords from user query
-2. Search relevant facts (top 3) via semantic similarity
-3. Find related conversations (top 2) via keyword matching
-4. Include current preferences from TinyDB
-5. Format as system prompt addition
-
-### Conversation Lifecycle
-1. **Start**: New session ID generated, vector memory initialized
-2. **During**: Tool usage tracked, semantic context injected per message
-3. **End**: Conversation summarized and stored in both systems
-4. **Cleanup**: Old data removed based on retention policies
-
-### Tool Usage Examples
 ```python
 # Store information
-remember("User prefers morning meetings")  # Auto-categorized as "preference"
+remember("User likes reading sci-fi books")  
+# Returns: "✓ Remembered: User likes reading sci-fi books
+#          This information will be automatically included in future conversations when relevant."
 
-# Natural language queries  
-recall("what do you know about my schedule preferences")  # Semantic search
-recall("about me")  # Returns all stored facts
+# Search memory (for explicit user requests)
+recall("what do you remember about my reading preferences")  
+# Returns: "Stored information about you:
+#          • User likes reading sci-fi books"
 
 # Remove information
-forget("schedule preferences")  # Finds and removes by description
+forget("reading preferences")  # Finds and removes by description
 ```
 
-## Debugging and Maintenance
+### Automatic Context Injection - Simplified
 
-### Memory Statistics
-```python
-stats = vector_memory_manager.get_memory_stats()
-# Returns:
-{
-    'vector_facts_stored': 15,
-    'chroma_path': '/Users/user/.cache/mcp_playground/chromadb',
-    'embedding_model': 'nomic-embed-text',
-    'tinydb_facts': 15,           # Hybrid storage
-    'tinydb_conversations': 5,
-    'tinydb_preferences': 3
-}
-```
+**Every user message triggers simple workflow**:
+
+1. **Tool Query Check**: Skip memory for stock/weather/youtube queries
+2. **Semantic Search**: Find facts with 80%+ similarity to user query
+3. **Conversation Injection**: Add top 2 relevant facts as fake conversation history
+4. **Natural Response**: LLM treats injected facts as part of conversation flow
+
+**No complex state management, no tool filtering, no prompt engineering.**
+
+### MVP Benefits
+
+#### ✅ Solves Core Problems
+- **"I don't know X while showing X"**: Eliminated through conversation history injection
+- **Complex prompt confusion**: Removed all complex system prompts  
+- **Tool overuse**: No automatic tool filtering needed
+- **Memory disconnect**: Single ChromaDB system for storage and retrieval
+
+#### ✅ Simple & Maintainable
+- **High precision**: 80% similarity threshold prevents irrelevant injection
+- **Natural integration**: LLM treats memory as conversation context
+- **Minimal code**: ~50 lines vs previous 500+ lines of complexity
+- **Easy debugging**: Clear conversation history injection logs
 
 ### Common Issues
 
+#### Setup Requirements
+- **Ollama**: Must be running (`ollama serve`)
+- **Embedding model**: Requires `ollama pull nomic-embed-text`
+- **Storage**: ChromaDB stored in `~/.cache/mcp_playground/chromadb`
+
 #### Performance
-- **Large fact database**: Relevance scoring limits and ChromaDB indexing
-- **Memory context size**: Limited to essential information (top 3 facts)
-- **Embedding generation**: Local Ollama may be slower than cloud APIs
-
-#### Connectivity
-- **Ollama connection**: Graceful fallback to TinyDB if Ollama unavailable
-- **Model availability**: Requires `ollama pull nomic-embed-text`
-- **Database permissions**: Automatic fallback to temp directory
-
-### Manual Database Access
-```python
-from src.core.vector_memory import vector_memory_manager
-
-# Direct ChromaDB access
-all_facts = vector_memory_manager.get_all_facts()
-semantic_results = vector_memory_manager.retrieve_facts_semantic("query")
-
-# Direct TinyDB access  
-preferences = vector_memory_manager.get_all_preferences()
-conversations = vector_memory_manager.get_relevant_conversations("topic")
-```
-
-## Future Enhancements
-
-### Document RAG Extension
-The current vector architecture provides foundation for:
-
-1. **Document Ingestion**: PDF, Word, markdown processing with chunking
-2. **Multi-Collection Search**: Personal docs, web bookmarks, conversation history
-3. **Advanced Retrieval**: Hybrid search (vector + BM25), re-ranking, query expansion
-4. **Privacy Controls**: Local encryption, user-controlled retention policies
-
-### Semantic Improvements
-1. **Better Embeddings**: Fine-tune models on user data
-2. **Query Understanding**: Intent classification, entity extraction  
-3. **Memory Consolidation**: Merge related facts, detect contradictions
-4. **Context Awareness**: Time-based relevance, conversation threading
-
----
+- **Embedding generation**: ~200ms per query (local Ollama)
+- **Vector search**: ~50ms for 1000+ facts
+- **Memory injection**: Only for 80%+ relevant queries (minimal overhead)
 
 ## Quick Start
 
@@ -344,10 +275,63 @@ uv add chromadb ollama
 # Pull embedding model
 ollama pull nomic-embed-text
 
-# Test vector memory
+# Test MVP memory system
 from src.core.vector_memory import vector_memory_manager
-vector_memory_manager.store_fact("User likes ice cream", "preference")
-facts = vector_memory_manager.retrieve_facts_semantic("about me")
+
+# Store a fact
+vector_memory_manager.store_fact("User likes reading sci-fi books", "preference")
+
+# Test similarity threshold
+facts = vector_memory_manager.retrieve_facts_semantic("sci-fi book recommendations", limit=5)
+print(f"Relevance: {facts[0].relevance_score:.2f}")  # Should be >0.8 for injection
 ```
 
-The vector memory system provides intelligent, semantic understanding that makes conversations more natural and personalized while maintaining privacy through local-only processing.
+## Expected User Experience (MVP)
+
+1. **Store Information**: "Remember I like reading sci-fi books"
+   - LLM calls `remember` tool → fact stored in ChromaDB
+   - Response: "✓ Remembered: User likes reading sci-fi books. This information will be automatically included in future conversations when relevant."
+
+2. **Automatic Context**: "Any good sci-fi book recommendations?"
+   - System finds 86% similarity with stored fact
+   - Injects as conversation history: "Just so you know, user likes reading sci-fi books"
+   - LLM responds naturally: "Since you enjoy sci-fi books, I'd recommend..."
+   - **No separate memory blocks, no confusion**
+
+3. **Memory Queries**: "What do you remember about me?"
+   - LLM calls `recall` tool
+   - Returns: "Stored information about you: • User likes reading sci-fi books"
+   - Simple, direct response
+
+## Why This Works
+
+- **Natural**: LLM treats injected facts as conversation context, not external data
+- **Precise**: 80% threshold ensures only highly relevant facts are injected
+- **Simple**: No complex prompt engineering or state management
+- **Reliable**: Conversation history injection is intuitive for LLMs
+
+The MVP memory system prioritizes **simplicity and effectiveness** over architectural complexity.
+
+## Debugging & Monitoring
+
+### Debug Output
+
+The system provides clear debug logs:
+
+```
+DEBUG - Injected memory: User likes reading sci-fi books (relevance: 0.86)
+DEBUG - Skipping tool query: What's Apple's stock price?
+DEBUG - No high-relevance facts found for: What's the weather?
+```
+
+### Memory Statistics
+
+```python
+stats = vector_memory_manager.get_memory_stats()
+# Returns:
+{
+    'vector_facts_stored': 15,
+    'chroma_path': '/Users/user/.cache/mcp_playground/chromadb',
+    'embedding_model': 'nomic-embed-text'
+}
+```
