@@ -144,7 +144,7 @@ def register_financial_tools(mcp: FastMCP):
             trend_emoji = "📈" if change >= 0 else "📉"
             result_text = f"### **{asset_name} - Financial Overview**\n\n"
             result_text += "| **Metric** | **Value** |\n"
-            result_text += "|------------|-----------||\n"
+            result_text += "|------------|-----------|\n"
             
             # Current price with change
             if change >= 0:
@@ -157,7 +157,7 @@ def register_financial_tools(mcp: FastMCP):
             if quote_data.get('high') and quote_data.get('low'):
                 high = float(quote_data.get('high', 0))
                 low = float(quote_data.get('low', 0))
-                result_text += f"| **Day Range** | ${low:.2f} - ${high:.2f} |\n"
+                result_text += f"| **Day Range** | ${low:,.2f} - ${high:,.2f} |\n"
             
             # Volume
             if quote_data.get('volume') and asset_type != "crypto":
