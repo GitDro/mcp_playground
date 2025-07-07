@@ -15,7 +15,7 @@ from ..core.utils import extract_video_id, filter_sponsor_content
 def register_youtube_tools(mcp: FastMCP):
     """Register YouTube-related tools with the MCP server"""
     
-    @mcp.tool
+    @mcp.tool(description="video analysis")
     def analyze_youtube_video(url: str, question: str = "") -> str:
         """Analyze YouTube video content. Provide just a URL for a comprehensive summary, or include a specific question to get targeted answers about the video content. Handles videos up to 2-3 hours with adaptive context management."""
         try:

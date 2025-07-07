@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 def register_tide_tools(mcp: FastMCP):
     """Register tide-related tools with the MCP server"""
     
-    @mcp.tool
+    @mcp.tool(description="tide information")
     def get_tide_info(location: str, date: Optional[str] = None) -> str:
         """Get tide information (high/low times and heights) for Canadian coastal locations. Supports major ports like Halifax, Vancouver, St. Johns. Specify date as 'July 20 2024', 'tomorrow', or leave blank for today. Returns formatted table with times and heights."""
         try:
