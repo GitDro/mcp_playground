@@ -162,6 +162,12 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
         # MVP Memory: Inject high-relevance facts as conversation history
         if use_functions:
             try:
+                # Detect memory queries to inject ALL stored facts
+                memory_keywords = [
+                    'what do you remember', 'what do you know about me', 'what do you recall',
+                    'tell me about myself', 'about me', 'remember about me'
+                ]
+                
                 # Skip memory injection for tool-focused queries
                 tool_keywords = [
                     'stock', 'price', 'crypto', 'market', 'finance', 'ticker',
@@ -176,8 +182,23 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
                 
                 query_lower = message.lower()
                 is_tool_query = any(keyword in query_lower for keyword in tool_keywords)
+                is_memory_query = any(keyword in query_lower for keyword in memory_keywords)
                 
-                if not is_tool_query:
+                if is_memory_query:
+                    # For "what do you remember about me" queries, inject ALL stored facts
+                    all_facts = memory_manager.get_all_facts()
+                    if all_facts:
+                        facts_content = "Here's what I remember about you: " + "; ".join([fact.content for fact in all_facts])
+                        messages.append({
+                            "role": "user",
+                            "content": facts_content
+                        })
+                        messages.append({
+                            "role": "assistant",
+                            "content": "Got it, I have that information."
+                        })
+                        print(f"DEBUG - Injected all stored facts for memory query ({len(all_facts)} facts)")
+                elif not is_tool_query:
                     # Get high-relevance facts only (80%+ similarity)
                     relevant_facts = memory_manager.retrieve_facts_semantic(message, limit=5)
                     high_relevance_facts = [fact for fact in relevant_facts if fact.relevance_score > 0.8]

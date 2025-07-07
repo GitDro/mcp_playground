@@ -68,6 +68,10 @@ def register_memory_tools(mcp):
         Use this tool when the user explicitly asks you to search memory
         or when you need to find specific stored information.
         
+        Note: For "What do you remember about me?" queries, the memory system
+        automatically provides stored facts in conversation context, so this
+        tool may not be needed in those cases.
+        
         Examples:
         - When user asks: "What do you remember about my work?"
         - When user asks: "What did we discuss about machine learning?"
