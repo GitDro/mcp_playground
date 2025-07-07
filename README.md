@@ -10,6 +10,7 @@ A **modern** Streamlit chat app with Ollama integration and AI-powered tool call
 1. **Install Ollama**: Visit https://ollama.ai
 2. **Start Ollama**: `ollama serve`
 3. **Pull a model**: `ollama pull llama3.2`
+4. **Pull embedding model**: `ollama pull nomic-embed-text` (required for vector memory)
 
 ### Run the App
 
@@ -212,6 +213,7 @@ async def use_tools():
 
 ## 📚 Documentation
 
+- **[FastMCP Overview](docs/FASTMCP_OVERVIEW.md)** - How the @mcp.tool decorator eliminates boilerplate
 - **[Memory System](docs/MEMORY_SYSTEM.md)** - Vector memory architecture and usage
 - **[RAG Architecture](docs/RAG_ARCHITECTURE.md)** - Technical details of semantic search
 - **[FastMCP Usage](docs/FASTMCP_USAGE.md)** - FastMCP framework documentation
