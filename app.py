@@ -17,7 +17,7 @@ from datetime import datetime
 
 # Import our modules
 from ui_config import STREAMLIT_STYLE, TOOLS_HELP_TEXT, get_system_prompt
-from src.core.memory import memory_manager
+from src.core.memory import memory_manager, MemoryState
 import uuid
 
 # Import FastMCP client
@@ -145,21 +145,35 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
         # Format conversation for Ollama with system guidance
         messages = []
         
-        # Add system message for function calling guidance
+        # Add system message with memory-first prompt architecture
         if use_functions:
-            current_date = datetime.now().strftime("%Y-%m-%d")
-            base_prompt = get_system_prompt(current_date)
-            
-            # Add memory context if available
             try:
-                memory_context = memory_manager.build_conversation_context(
-                    message, 
+                # Get memory-aware system prompt
+                memory_prompt, memory_state, should_disable_memory_tools = memory_manager.build_memory_aware_prompt(
+                    message,
                     conversation_history
                 )
-                if memory_context:
-                    base_prompt += f"\n\n{memory_context}"
+                
+                # Debug logging
+                print(f"DEBUG - Memory state: {memory_state}")
+                print(f"DEBUG - Should disable memory tools: {should_disable_memory_tools}")
+                
+                # Use memory-first prompt or fallback to standard prompt
+                if memory_prompt:
+                    base_prompt = memory_prompt
+                else:
+                    current_date = datetime.now().strftime("%Y-%m-%d")
+                    base_prompt = get_system_prompt(current_date)
+                
+                print(f"DEBUG - Final system prompt (last 500 chars): {base_prompt[-500:]}")
+                
             except Exception as e:
-                print(f"Failed to get memory context: {e}")  # Debug print
+                print(f"Failed to get memory-aware prompt: {e}")
+                # Fallback to standard prompt
+                current_date = datetime.now().strftime("%Y-%m-%d")
+                base_prompt = get_system_prompt(current_date)
+                should_disable_memory_tools = False
+                memory_state = MemoryState.NO_MEMORY
             
             system_message = {
                 "role": "system",
@@ -180,7 +194,14 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
         
         # Add tools if function calling is enabled
         if use_functions and mcp_tools:
-            request_data["tools"] = create_function_schema_from_mcp_tools(mcp_tools)
+            # Filter out memory tools if they should be disabled
+            filtered_tools = mcp_tools
+            if 'should_disable_memory_tools' in locals() and should_disable_memory_tools:
+                memory_tool_names = ['remember', 'recall', 'forget']
+                filtered_tools = [tool for tool in mcp_tools if tool['name'] not in memory_tool_names]
+                print(f"DEBUG - Filtered out memory tools. Using {len(filtered_tools)} tools instead of {len(mcp_tools)}")
+            
+            request_data["tools"] = create_function_schema_from_mcp_tools(filtered_tools)
         
         # First request with or without tools
         try:
@@ -541,6 +562,10 @@ with col2:
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 content = message["content"]
+                
+                # Debug: Log message content to see where "Stored information about you" comes from
+                if "stored information" in content.lower():
+                    print(f"DEBUG - Found stored information in message: {content}")
                 
                 # Check if this is a response with function call results
                 if "---\n\n" in content:
