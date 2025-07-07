@@ -59,8 +59,7 @@ You can use these tools directly in Windsurf IDE through MCP integration:
 - `analyze_url` - Website content analysis and summarization
 - `arxiv_search` - Academic paper search with deep PDF analysis
 - `get_stock_overview` - Comprehensive financial data for stocks, crypto, and market indices with trend visualization
-- `summarize_youtube_video` - AI-powered YouTube video summaries
-- `query_youtube_transcript` - Answer questions about YouTube videos
+- `analyze_youtube_video` - AI-powered YouTube analysis - summaries or targeted Q&A
 - `get_weather` - Current weather and forecasts by city name or coordinates
 - `get_tide_info` - Canadian tide information with high/low times and heights
 - `get_toronto_crime` - Toronto neighbourhood crime statistics with trend analysis and visualization
@@ -109,9 +108,9 @@ uv run python mcp_server.py http 8000
 - "How is NVDA doing?"
 
 **YouTube Videos:**
-- "Summarize this YouTube video: [paste URL]"
-- "What are the main points discussed in this video?"
-- "What does the video say about [specific topic]?"
+- "Analyze this YouTube video: [paste URL]"
+- "What are the main points in this video: [URL]?"
+- "What does this video say about AI: [URL]?"
 
 **Weather:**
 - "What's the weather like?"
@@ -168,7 +167,7 @@ uv run python mcp_server.py http 8000
 ### Available Tools
 - **Memory**: `remember`, `recall`, `forget` - Vector-based semantic memory
 - **Web**: `web_search`, `analyze_url` - Web search and content analysis
-- **Media**: `summarize_youtube_video`, `query_youtube_transcript` - YouTube analysis
+- **Media**: `analyze_youtube_video` - YouTube analysis (summaries and Q&A)
 - **Finance**: `get_stock_overview` - Comprehensive financial data with visualization
 - **Research**: `arxiv_search` - Academic paper analysis
 - **Weather**: `get_weather` - Location-based weather forecasts
