@@ -186,8 +186,8 @@ def register_financial_tools(mcp: FastMCP):
                     return_display = f"{month_return:.2f}% {month_emoji}"
                 
                 result_text += f"| **1-Month Return** | {return_display} |\n"
-                result_text += f"| **Month High** | ${hist_high:.2f} |\n"
-                result_text += f"| **Month Low** | ${hist_low:.2f} |\n"
+                result_text += f"| **Month High** | ${hist_high:,.2f} |\n"
+                result_text += f"| **Month Low** | ${hist_low:,.2f} |\n"
                 
                 # Generate trend chart
                 plot_data = _generate_financial_plot(asset_name, hist_data)
