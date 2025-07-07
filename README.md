@@ -58,10 +58,7 @@ You can use these tools directly in Windsurf IDE through MCP integration:
 - `web_search` - Real-time web search with DuckDuckGo
 - `analyze_url` - Website content analysis and summarization
 - `arxiv_search` - Academic paper search with deep PDF analysis
-- `get_stock_price` - Current stock prices and market data
-- `get_stock_history` - Historical stock performance
-- `get_crypto_price` - Cryptocurrency prices
-- `get_market_summary` - Market indices overview
+- `get_financial_data` - Comprehensive financial data for stocks, crypto, and market indices with trend visualization
 - `summarize_youtube_video` - AI-powered YouTube video summaries
 - `query_youtube_transcript` - Answer questions about YouTube videos
 - `get_weather` - Current weather and forecasts by city name or coordinates
@@ -107,9 +104,9 @@ uv run python mcp_server.py http 8000
 
 **Financial Data:**
 - "What's Apple's stock price?"
-- "Show Tesla's performance this month"  
+- "Show Tesla's performance"  
 - "Get Bitcoin price"
-- "How are the markets doing?"
+- "How is NVDA doing?"
 
 **YouTube Videos:**
 - "Summarize this YouTube video: [paste URL]"
@@ -172,7 +169,7 @@ uv run python mcp_server.py http 8000
 - **Memory**: `remember`, `recall`, `forget` - Vector-based semantic memory
 - **Web**: `web_search`, `analyze_url` - Web search and content analysis
 - **Media**: `summarize_youtube_video`, `query_youtube_transcript` - YouTube analysis
-- **Finance**: `get_stock_price`, `get_crypto_price`, `get_market_summary` - Financial data
+- **Finance**: `get_financial_data` - Comprehensive financial data with visualization
 - **Research**: `arxiv_search` - Academic paper analysis
 - **Weather**: `get_weather` - Location-based weather forecasts
 - **Tides**: `get_tide_info` - Canadian coastal tide times and heights
