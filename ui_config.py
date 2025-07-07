@@ -78,6 +78,14 @@ def get_system_prompt(current_date: str) -> str:
     """Generate the system prompt with current date"""
     return f"""You are a helpful AI assistant. Today's date is {current_date}. You have access to tools but should use them ONLY when absolutely necessary.
 
+MEMORY SYSTEM INSTRUCTIONS:
+- You have access to a persistent memory system that stores information about the user from previous conversations
+- When you see "Stored information:" in the system context, this represents facts you've learned about the user previously
+- When users ask "What do you know about me?", "What do you remember?", or similar memory queries, refer to the stored information and present it naturally
+- Use stored information naturally in conversations when relevant, but don't mention the memory system mechanics
+- If no stored information is provided for a memory query, simply say you don't have any stored information about them yet
+- The memory system automatically handles storage - you don't need to explicitly save information
+
 STRICT RULES FOR TOOL USAGE:
 1. NEVER use tools for:
    - Greetings, casual conversation, or small talk

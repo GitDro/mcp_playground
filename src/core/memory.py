@@ -310,33 +310,82 @@ class MemoryManager:
     # Memory Building for Conversations
     def build_conversation_context(self, current_query: str, 
                                   session_history: List[Dict]) -> str:
-        """Build context from memories for conversation"""
+        """Build context from memories for conversation with privacy protection"""
         try:
+            # Privacy protection: Skip memory injection for tool-focused queries
+            tool_keywords = [
+                'youtube', 'video', 'analyze', 'summarize', 'transcript',
+                'stock', 'price', 'crypto', 'market', 'finance', 'ticker',
+                'weather', 'forecast', 'temperature', 'climate',
+                'crime', 'safety', 'toronto', 'neighbourhood',
+                'tide', 'tides', 'water', 'ocean',
+                'arxiv', 'paper', 'research', 'academic', 'study',
+                'search', 'web search', 'find', 'google',
+                'url', 'website', 'link', 'analyze url'
+            ]
+            
+            query_lower = current_query.lower()
+            if any(keyword in query_lower for keyword in tool_keywords):
+                # This is a tool-focused query, don't inject personal memory
+                return ""
+            
+            # Check for explicit memory requests
+            memory_triggers = [
+                'remember', 'recall', 'about me', 'my preferences', 
+                'what do you know', 'stored information', 'my details',
+                'personal info', 'user info'
+            ]
+            
+            is_explicit_memory_request = any(trigger in query_lower for trigger in memory_triggers)
+            
             context_parts = []
             
-            # Add relevant facts
-            relevant_facts = self.retrieve_facts(current_query, limit=3)
+            # Add relevant facts with higher threshold for non-explicit requests
+            if is_explicit_memory_request:
+                # Lower threshold for explicit memory requests
+                relevant_facts = self.retrieve_facts(current_query, limit=5)
+            else:
+                # Much higher threshold for general conversation to avoid irrelevant memories
+                relevant_facts = []
+                potential_facts = self.retrieve_facts(current_query, limit=3)
+                # Only include facts with very high relevance
+                for fact in potential_facts:
+                    fact_words = set(fact.content.lower().split())
+                    query_words = set(query_lower.split())
+                    overlap_ratio = len(fact_words.intersection(query_words)) / len(query_words)
+                    if overlap_ratio > 0.4:  # Require 40%+ word overlap
+                        relevant_facts.append(fact)
+            
             if relevant_facts:
-                facts_text = "Relevant information about the user:\n"
+                if is_explicit_memory_request:
+                    facts_text = "[MEMORY CONTEXT - Information about this user from previous conversations:]\n"
+                else:
+                    facts_text = "Stored information:\n"
                 for fact in relevant_facts:
-                    facts_text += f"- {fact.content}\n"
+                    facts_text += f"• {fact.content}\n"
                 context_parts.append(facts_text)
             
-            # Add relevant past conversations
-            relevant_conversations = self.get_relevant_conversations(current_query, limit=2)
-            if relevant_conversations:
-                conv_text = "Related past conversations:\n"
-                for conv in relevant_conversations:
-                    conv_text += f"- {conv.summary}\n"
-                context_parts.append(conv_text)
-            
-            # Add user preferences
-            preferences = self.get_all_preferences()
-            if preferences:
-                pref_text = "User preferences:\n"
-                for key, value in preferences.items():
-                    pref_text += f"- {key}: {value}\n"
-                context_parts.append(pref_text)
+            # Skip past conversations and preferences for non-explicit requests to reduce noise
+            if is_explicit_memory_request:
+                # Add relevant past conversations
+                relevant_conversations = self.get_relevant_conversations(current_query, limit=2)
+                if relevant_conversations:
+                    conv_text = "Related past conversations:\n"
+                    for conv in relevant_conversations:
+                        conv_text += f"• {conv.summary}\n"
+                    context_parts.append(conv_text)
+                
+                # Add user preferences
+                preferences = self.get_all_preferences()
+                if preferences:
+                    pref_text = "User preferences:\n"
+                    for key, value in preferences.items():
+                        pref_text += f"• {key}: {value}\n"
+                    context_parts.append(pref_text)
+                
+                # Add specific instruction for explicit memory queries
+                if context_parts:
+                    context_parts.append("\n[INSTRUCTION: The user is asking about stored information. Based on the memory context above, tell them what you know about them in a natural, conversational way.]")
             
             return "\n".join(context_parts)
             
