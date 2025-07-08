@@ -237,7 +237,7 @@ ollama pull nomic-embed-text
 **Function calling not working?**
 - Check internet connection
 - Ensure "Tools" checkbox is enabled  
-- Use a recent model (llama3.2, llama3.1)
+- Use a recent model (llama3.2, devstral)
 
 **Memory not working?**
 - Ensure Ollama is running: `ollama serve`
