@@ -60,7 +60,7 @@ src/
 
 ### Data Analysis & Research
 - **Financial Tools**: Real-time stock/crypto prices with caching
-- **Economic Indicators**: Statistics Canada CPI, GDP, and employment data with trend analysis
+- **Canadian Economy**: Comprehensive economic analysis with Statistics Canada data (CPI, GDP, employment)
 - **Academic Research**: arXiv search with PDF analysis
 - **Crime Analytics**: Toronto neighbourhood safety statistics with semantic search
 - **Weather Data**: Location-based forecasts (IP/city/coordinates)

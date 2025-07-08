@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 import requests
 from dataclasses import dataclass
 import calendar
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 from fastmcp import FastMCP
 from ..core.cache import load_cached_data, save_cached_data, cleanup_old_cache
@@ -115,74 +117,155 @@ class EconomicIndicator:
         return cls(**data)
 
 
+@dataclass
+class CanadianEconomicData:
+    """Consolidated Canadian economic data"""
+    cpi: Optional[EconomicIndicator]
+    gdp: Optional[EconomicIndicator]
+    employment: Optional[EconomicIndicator]
+    last_updated: str
+    
+    def to_dict(self) -> Dict:
+        """Convert to dictionary for JSON serialization"""
+        return {
+            'cpi': self.cpi.to_dict() if self.cpi else None,
+            'gdp': self.gdp.to_dict() if self.gdp else None,
+            'employment': self.employment.to_dict() if self.employment else None,
+            'last_updated': self.last_updated
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'CanadianEconomicData':
+        """Create from dictionary for JSON deserialization"""
+        return cls(
+            cpi=EconomicIndicator.from_dict(data['cpi']) if data.get('cpi') else None,
+            gdp=EconomicIndicator.from_dict(data['gdp']) if data.get('gdp') else None,
+            employment=EconomicIndicator.from_dict(data['employment']) if data.get('employment') else None,
+            last_updated=data['last_updated']
+        )
+
+
 def register_statscan_tools(mcp: FastMCP):
     """Register Statistics Canada tools with the MCP server"""
     
-    @mcp.tool(description="Canadian Consumer Price Index and inflation data")
-    def get_cpi_data(category: str = "all", geography: str = "Canada") -> str:
-        """Get Canadian Consumer Price Index data from Statistics Canada. Shows inflation rates, price changes, and trends for Canada.
+    @mcp.tool(description="Canadian economic analysis and overview")
+    def analyze_canadian_economy(focus: str = "overview") -> str:
+        """Analyze Canada's economic performance with comprehensive data from Statistics Canada. Provides integrated analysis of inflation, growth, and employment.
         
         Args:
-            category: CPI category - "all", "food", "shelter", "transportation", "energy", "core" (excluding food/energy)
-            geography: Geographic area - "Canada", province names, or major cities
+            focus: Analysis focus - "overview" (default), "inflation", "growth", "employment", or "detailed"
         """
         try:
             cleanup_old_cache()
             
-            # Get latest CPI data
-            cpi_data = _get_cpi_data(category, geography)
-            if not cpi_data:
-                return f"❌ Could not retrieve CPI data for {category} in {geography}"
+            # Get all economic indicators concurrently
+            economic_data = _get_all_economic_data()
+            if not economic_data:
+                return "❌ Could not retrieve Canadian economic data"
             
-            return _format_cpi_output(cpi_data, category, geography)
+            return _format_economic_analysis(economic_data, focus)
             
         except Exception as e:
-            logger.error(f"Error getting CPI data: {e}")
-            return f"❌ Error retrieving CPI data: {str(e)}"
+            logger.error(f"Error analyzing Canadian economy: {e}")
+            return f"❌ Error retrieving Canadian economic data: {str(e)}"
+
+
+def _get_all_economic_data() -> Optional[CanadianEconomicData]:
+    """Get all Canadian economic indicators concurrently with caching"""
+    cache_key = "canadian_economy_overview"
+    cached_data = _load_statscan_cache(cache_key, cache_hours=12)  # Cache for 12 hours
     
-    @mcp.tool(description="Canadian GDP and economic growth data")
-    def get_gdp_data(frequency: str = "quarterly", component: str = "total") -> str:
-        """Get Canadian Gross Domestic Product data from Statistics Canada. Shows economic growth, trends, and analysis for Canada.
-        
-        Args:
-            frequency: Data frequency - "quarterly", "monthly", "annual"
-            component: GDP component - "total", "consumption", "investment", "government", "exports", "imports"
-        """
-        try:
-            cleanup_old_cache()
-            
-            # Get latest GDP data
-            gdp_data = _get_gdp_data(frequency, component)
-            if not gdp_data:
-                return f"❌ Could not retrieve GDP data for {component} ({frequency})"
-            
-            return _format_gdp_output(gdp_data, frequency, component)
-            
-        except Exception as e:
-            logger.error(f"Error getting GDP data: {e}")
-            return f"❌ Error retrieving GDP data: {str(e)}"
+    if cached_data and 'economic_data' in cached_data:
+        return CanadianEconomicData.from_dict(cached_data['economic_data'])
     
-    @mcp.tool(description="Canadian employment and unemployment statistics")
-    def get_employment_data(metric: str = "unemployment_rate", geography: str = "Canada") -> str:
-        """Get Canadian employment and labour market data from Statistics Canada. Shows unemployment rates, employment trends, and labour force statistics for Canada.
+    try:
+        # Fetch all indicators concurrently using ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            # Submit all three API calls
+            cpi_future = executor.submit(_get_cpi_data, "all", "Canada")
+            gdp_future = executor.submit(_get_gdp_data, "quarterly", "total")
+            employment_future = executor.submit(_get_employment_data, "unemployment_rate", "Canada")
+            
+            # Collect results
+            cpi_data = cpi_future.result()
+            gdp_data = gdp_future.result()
+            employment_data = employment_future.result()
         
-        Args:
-            metric: Employment metric - "unemployment_rate", "employment_rate", "labour_force", "participation_rate"
-            geography: Geographic area - "Canada", province names, or major cities
-        """
-        try:
-            cleanup_old_cache()
-            
-            # Get latest employment data
-            employment_data = _get_employment_data(metric, geography)
-            if not employment_data:
-                return f"❌ Could not retrieve employment data for {metric} in {geography}"
-            
-            return _format_employment_output(employment_data, metric, geography)
-            
-        except Exception as e:
-            logger.error(f"Error getting employment data: {e}")
-            return f"❌ Error retrieving employment data: {str(e)}"
+        # Create consolidated data object
+        economic_data = CanadianEconomicData(
+            cpi=cpi_data,
+            gdp=gdp_data,
+            employment=employment_data,
+            last_updated=datetime.now().isoformat()
+        )
+        
+        # Cache the consolidated data
+        _save_statscan_cache(cache_key, {'economic_data': economic_data.to_dict()})
+        
+        return economic_data
+        
+    except Exception as e:
+        logger.error(f"Error fetching all economic data: {e}")
+        return None
+
+
+def _format_economic_analysis(data: CanadianEconomicData, focus: str) -> str:
+    """Format comprehensive economic analysis"""
+    if not data:
+        return "❌ No economic data available"
+    
+    # Determine which sections to include based on focus
+    if focus == "inflation" and data.cpi:
+        return _format_cpi_output(data.cpi, "all", "Canada")
+    elif focus == "growth" and data.gdp:
+        return _format_gdp_output(data.gdp, "quarterly", "total")
+    elif focus == "employment" and data.employment:
+        return _format_employment_output(data.employment, "unemployment_rate", "Canada")
+    
+    # Default: comprehensive overview
+    result = "# 🇨🇦 **Canadian Economic Overview**\n\n"
+    
+    # Economic Health Summary
+    health_status = _assess_economic_health(data)
+    result += f"**Overall Economic Health:** {health_status}\n\n"
+    
+    # Key Indicators Summary
+    result += "## **Key Economic Indicators**\n\n"
+    
+    # GDP Section
+    if data.gdp:
+        gdp_billions = data.gdp.value / 1000
+        trend_emoji = "📈" if data.gdp.year_change_pct > 0 else "📉"
+        result += f"### **Economic Growth (GDP)**\n"
+        result += f"- **Current GDP:** ${gdp_billions:.1f} billion\n"
+        result += f"- **Annual Growth:** {data.gdp.year_change_pct:+.1f}% {trend_emoji}\n"
+        result += f"- **Status:** {_get_gdp_status(data.gdp.year_change_pct)}\n\n"
+    
+    # Inflation Section
+    if data.cpi:
+        trend_emoji = "📈" if data.cpi.year_change_pct > 0 else "📉"
+        result += f"### **Inflation (CPI)**\n"
+        result += f"- **Current Rate:** {data.cpi.year_change_pct:+.1f}% (annual) {trend_emoji}\n"
+        result += f"- **Monthly Change:** {data.cpi.period_change_pct:+.1f}%\n"
+        result += f"- **Status:** {_get_inflation_status_text(data.cpi.year_change_pct)}\n\n"
+    
+    # Employment Section
+    if data.employment:
+        # For unemployment, lower is better
+        trend_emoji = "📈" if data.employment.year_change < 0 else "📉"
+        result += f"### **Labour Market**\n"
+        result += f"- **Unemployment Rate:** {data.employment.value:.1f}%\n"
+        result += f"- **12-Month Change:** {data.employment.year_change:+.1f} percentage points {trend_emoji}\n"
+        result += f"- **Status:** {_get_employment_status_text(data.employment.value)}\n\n"
+    
+    # Economic Context and Analysis
+    result += "## **Economic Analysis**\n\n"
+    result += _generate_economic_insights(data)
+    
+    # Data freshness
+    result += f"\n---\n*Last updated: {data.last_updated[:10]} | Source: Statistics Canada*"
+    
+    return result
 
 
 def _get_cpi_data(category: str, geography: str) -> Optional[EconomicIndicator]:
@@ -466,6 +549,118 @@ def _get_next_employment_release() -> Tuple[str, int]:
     release_date_str = estimated_release.strftime("%B %d, %Y")
     
     return release_date_str, max(0, days_until)
+
+
+def _assess_economic_health(data: CanadianEconomicData) -> str:
+    """Assess overall economic health based on all indicators"""
+    health_score = 0
+    
+    # GDP Health (0-3 points)
+    if data.gdp:
+        if data.gdp.year_change_pct > 3.0:
+            health_score += 3
+        elif data.gdp.year_change_pct > 1.0:
+            health_score += 2
+        elif data.gdp.year_change_pct > 0:
+            health_score += 1
+    
+    # Inflation Health (0-3 points) - target around 2%
+    if data.cpi:
+        if 1.5 <= data.cpi.year_change_pct <= 2.5:
+            health_score += 3  # Ideal range
+        elif 1.0 <= data.cpi.year_change_pct < 4.0:
+            health_score += 2  # Acceptable range
+        elif data.cpi.year_change_pct < 5.0:
+            health_score += 1  # Concerning but manageable
+    
+    # Employment Health (0-3 points) - lower unemployment is better
+    if data.employment:
+        if data.employment.value < 5.0:
+            health_score += 3  # Very low unemployment
+        elif data.employment.value < 7.0:
+            health_score += 2  # Moderate unemployment
+        elif data.employment.value < 9.0:
+            health_score += 1  # Higher unemployment
+    
+    # Determine overall health
+    if health_score >= 7:
+        return "Strong 💪"
+    elif health_score >= 5:
+        return "Moderate 📊"
+    elif health_score >= 3:
+        return "Mixed ⚠️"
+    else:
+        return "Concerning 📉"
+
+
+def _get_gdp_status(growth_rate: float) -> str:
+    """Get GDP growth status description"""
+    if growth_rate > 3.0:
+        return "Strong growth above long-term average"
+    elif growth_rate > 1.0:
+        return "Steady economic expansion"
+    elif growth_rate > 0:
+        return "Slow growth, monitoring required"
+    else:
+        return "Economic contraction"
+
+
+def _get_inflation_status_text(inflation_rate: float) -> str:
+    """Get inflation status description"""
+    if inflation_rate > 3.0:
+        return "Above Bank of Canada's 2% target"
+    elif inflation_rate > 1.0:
+        return "Within acceptable range"
+    elif inflation_rate > 0:
+        return "Below target range"
+    else:
+        return "Deflationary pressures"
+
+
+def _get_employment_status_text(unemployment_rate: float) -> str:
+    """Get employment status description"""
+    if unemployment_rate > 7.0:
+        return "Elevated unemployment above historical norms"
+    elif unemployment_rate > 5.0:
+        return "Moderate unemployment levels"
+    else:
+        return "Low unemployment, tight labour market"
+
+
+def _generate_economic_insights(data: CanadianEconomicData) -> str:
+    """Generate cross-indicator economic insights"""
+    insights = []
+    
+    # GDP and Employment correlation
+    if data.gdp and data.employment:
+        if data.gdp.year_change_pct > 2.0 and data.employment.value < 6.0:
+            insights.append("- Strong GDP growth paired with low unemployment suggests a robust economy")
+        elif data.gdp.year_change_pct < 1.0 and data.employment.value > 7.0:
+            insights.append("- Slow growth and higher unemployment indicate economic challenges")
+    
+    # Inflation and Growth balance
+    if data.cpi and data.gdp:
+        if data.cpi.year_change_pct > 3.0 and data.gdp.year_change_pct > 3.0:
+            insights.append("- High growth with elevated inflation may prompt monetary policy tightening")
+        elif data.cpi.year_change_pct < 2.0 and data.gdp.year_change_pct > 2.0:
+            insights.append("- Healthy growth with controlled inflation is ideal for sustained expansion")
+    
+    # Employment trends
+    if data.employment:
+        next_release_date, days_until = _get_next_employment_release()
+        if days_until > 0:
+            insights.append(f"- Next employment data release: {next_release_date} (in {days_until} days)")
+    
+    # Overall economic narrative
+    if data.gdp and data.cpi and data.employment:
+        if (data.gdp.year_change_pct > 1.5 and 
+            1.0 <= data.cpi.year_change_pct <= 3.0 and 
+            data.employment.value < 7.0):
+            insights.append("- Canada's economy shows balanced growth with stable inflation and employment")
+        elif data.gdp.year_change_pct < 1.0:
+            insights.append("- Economic growth remains subdued, requiring continued monitoring")
+    
+    return "\n".join(insights) if insights else "- Economic indicators suggest continued monitoring of key trends"
 
 
 def _load_statscan_cache(cache_key: str, cache_hours: int = 24) -> Optional[Dict]:

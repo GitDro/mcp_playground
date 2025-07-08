@@ -170,6 +170,7 @@ uv run python mcp_server.py http 8000
 - **Finance**: `get_stock_overview` - Comprehensive financial data with visualization
 - **Research**: `arxiv_search` - Academic paper analysis
 - **Weather**: `get_weather` - Location-based weather forecasts
+- **Canadian Economy**: `analyze_canadian_economy` - Comprehensive economic analysis with Statistics Canada data (CPI, GDP, employment)
 - **Tides**: `get_tide_info` - Canadian coastal tide times and heights
 - **Crime**: `get_toronto_crime` - Toronto neighbourhood safety statistics with semantic search and visualization
 
