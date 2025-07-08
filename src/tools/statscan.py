@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 import requests
 from dataclasses import dataclass
+import calendar
 
 from fastmcp import FastMCP
 from ..core.cache import load_cached_data, save_cached_data, cleanup_old_cache
@@ -117,9 +118,9 @@ class EconomicIndicator:
 def register_statscan_tools(mcp: FastMCP):
     """Register Statistics Canada tools with the MCP server"""
     
-    @mcp.tool(description="Consumer Price Index data")
+    @mcp.tool(description="Canadian Consumer Price Index and inflation data")
     def get_cpi_data(category: str = "all", geography: str = "Canada") -> str:
-        """Get Consumer Price Index data from Statistics Canada. Shows inflation rates, price changes, and trends.
+        """Get Canadian Consumer Price Index data from Statistics Canada. Shows inflation rates, price changes, and trends for Canada.
         
         Args:
             category: CPI category - "all", "food", "shelter", "transportation", "energy", "core" (excluding food/energy)
@@ -139,9 +140,9 @@ def register_statscan_tools(mcp: FastMCP):
             logger.error(f"Error getting CPI data: {e}")
             return f"❌ Error retrieving CPI data: {str(e)}"
     
-    @mcp.tool(description="GDP economic data")
+    @mcp.tool(description="Canadian GDP and economic growth data")
     def get_gdp_data(frequency: str = "quarterly", component: str = "total") -> str:
-        """Get Gross Domestic Product data from Statistics Canada. Shows economic growth, trends, and analysis.
+        """Get Canadian Gross Domestic Product data from Statistics Canada. Shows economic growth, trends, and analysis for Canada.
         
         Args:
             frequency: Data frequency - "quarterly", "monthly", "annual"
@@ -161,9 +162,9 @@ def register_statscan_tools(mcp: FastMCP):
             logger.error(f"Error getting GDP data: {e}")
             return f"❌ Error retrieving GDP data: {str(e)}"
     
-    @mcp.tool(description="Employment and labour statistics")
+    @mcp.tool(description="Canadian employment and unemployment statistics")
     def get_employment_data(metric: str = "unemployment_rate", geography: str = "Canada") -> str:
-        """Get employment and labour market data from Statistics Canada. Shows unemployment rates, employment trends, and labour force statistics.
+        """Get Canadian employment and labour market data from Statistics Canada. Shows unemployment rates, employment trends, and labour force statistics for Canada.
         
         Args:
             metric: Employment metric - "unemployment_rate", "employment_rate", "labour_force", "participation_rate"
@@ -187,7 +188,7 @@ def register_statscan_tools(mcp: FastMCP):
 def _get_cpi_data(category: str, geography: str) -> Optional[EconomicIndicator]:
     """Get CPI data from Statistics Canada API"""
     cache_key = f"cpi_{category}_{geography}"
-    cached_data = load_cached_data(cache_key)
+    cached_data = _load_statscan_cache(cache_key, cache_hours=24)  # Cache CPI for 24 hours
     
     if cached_data and 'indicator' in cached_data:
         return EconomicIndicator.from_dict(cached_data['indicator'])
@@ -207,7 +208,7 @@ def _get_cpi_data(category: str, geography: str) -> Optional[EconomicIndicator]:
         indicator = _process_cpi_data(api_data, category)
         
         # Cache the data
-        save_cached_data(cache_key, {'indicator': indicator.to_dict()})
+        _save_statscan_cache(cache_key, {'indicator': indicator.to_dict()})
         return indicator
         
     except Exception as e:
@@ -219,7 +220,9 @@ def _get_cpi_data(category: str, geography: str) -> Optional[EconomicIndicator]:
 def _get_gdp_data(frequency: str, component: str) -> Optional[EconomicIndicator]:
     """Get GDP data from Statistics Canada API"""
     cache_key = f"gdp_{frequency}_{component}"
-    cached_data = load_cached_data(cache_key)
+    # GDP data changes quarterly, so cache longer
+    cache_hours = 168 if frequency == "quarterly" else 48  # 1 week for quarterly, 2 days for monthly
+    cached_data = _load_statscan_cache(cache_key, cache_hours)
     
     if cached_data and 'indicator' in cached_data:
         return EconomicIndicator.from_dict(cached_data['indicator'])
@@ -240,7 +243,7 @@ def _get_gdp_data(frequency: str, component: str) -> Optional[EconomicIndicator]
         indicator = _process_gdp_data(api_data, frequency, component)
         
         # Cache the data
-        save_cached_data(cache_key, {'indicator': indicator.to_dict()})
+        _save_statscan_cache(cache_key, {'indicator': indicator.to_dict()})
         return indicator
         
     except Exception as e:
@@ -252,7 +255,8 @@ def _get_gdp_data(frequency: str, component: str) -> Optional[EconomicIndicator]
 def _get_employment_data(metric: str, geography: str) -> Optional[EconomicIndicator]:
     """Get employment data from Statistics Canada API"""
     cache_key = f"employment_{metric}_{geography}"
-    cached_data = load_cached_data(cache_key)
+    # Employment data is monthly, cache for shorter duration since it's more dynamic
+    cached_data = _load_statscan_cache(cache_key, cache_hours=12)  # 12 hours
     
     if cached_data and 'indicator' in cached_data:
         return EconomicIndicator.from_dict(cached_data['indicator'])
@@ -272,7 +276,7 @@ def _get_employment_data(metric: str, geography: str) -> Optional[EconomicIndica
         indicator = _process_employment_data(api_data, metric)
         
         # Cache the data
-        save_cached_data(cache_key, {'indicator': indicator.to_dict()})
+        _save_statscan_cache(cache_key, {'indicator': indicator.to_dict()})
         return indicator
         
     except Exception as e:
@@ -284,13 +288,12 @@ def _get_employment_data(metric: str, geography: str) -> Optional[EconomicIndica
 def _format_cpi_output(indicator: EconomicIndicator, category: str, geography: str) -> str:
     """Format CPI data output"""
     trend_emoji = "📈" if indicator.year_change_pct > 0 else "📉"
-    inflation_status = _get_inflation_status(indicator.year_change_pct)
     
-    result = f"### **{indicator.name} - {geography}**\n\n"
+    result = f"### **{indicator.name} ({geography})**\n\n"
     
     # Current value and trend
-    result += f"- **Current Index:** {indicator.value:.1f} {trend_emoji}\n"
-    result += f"- **Inflation Rate:** {indicator.year_change_pct:+.1f}% (12-month) {inflation_status}\n"
+    result += f"- **Current Index:** {indicator.value:.1f}\n"
+    result += f"- **Inflation Rate:** {indicator.year_change_pct:+.1f}% (12-month) {trend_emoji}\n"
     
     # Monthly change
     if indicator.period_change_pct >= 0:
@@ -300,24 +303,26 @@ def _format_cpi_output(indicator: EconomicIndicator, category: str, geography: s
     
     # Context and analysis
     result += f"- **Last Updated:** {indicator.date}\n"
-    result += f"- **Base Year:** 2002 = 100\n\n"
+    result += f"- **Update Frequency:** Monthly (Statistics Canada)\n\n"
     
     # Add economic context
     result += "**Economic Context:**\n"
     if indicator.year_change_pct > 3.0:
-        result += "- 🔥 Elevated inflation above Bank of Canada's 2% target\n"
+        result += "- Elevated inflation above Bank of Canada's 2% target\n"
     elif indicator.year_change_pct > 1.0:
-        result += "- ✅ Moderate inflation within acceptable range\n"
+        result += "- Moderate inflation within acceptable range\n"
     else:
-        result += "- ❄️ Low inflation, potential deflation concerns\n"
+        result += "- Low inflation, potential deflation concerns\n"
     
     # Category-specific insights
     if category.lower() == "food":
-        result += "- Food price pressures impacting household budgets\n"
+        result += "- Food prices are a key driver of household budget pressures\n"
     elif category.lower() == "energy":
-        result += "- Energy costs affecting transportation and heating\n"
+        result += "- Energy costs directly impact transportation and heating expenses\n"
     elif category.lower() == "shelter":
-        result += "- Housing costs major component of inflation\n"
+        result += "- Housing costs are the largest component of Canadian inflation\n"
+    elif category.lower() == "all":
+        result += "- Overall price trends reflect broad economic conditions\n"
     
     return result
 
@@ -325,14 +330,13 @@ def _format_cpi_output(indicator: EconomicIndicator, category: str, geography: s
 def _format_gdp_output(indicator: EconomicIndicator, frequency: str, component: str) -> str:
     """Format GDP data output"""
     trend_emoji = "📈" if indicator.year_change_pct > 0 else "📉"
-    growth_status = _get_growth_status(indicator.year_change_pct)
     
-    result = f"### **{indicator.name} - Canada**\n\n"
+    result = f"### **{indicator.name} (Canada)**\n\n"
     
     # Current value and trend (API returns values in millions)
     gdp_billions = indicator.value / 1000
-    result += f"- **Current GDP:** ${gdp_billions:.1f} billion {trend_emoji}\n"
-    result += f"- **Annual Growth:** {indicator.year_change_pct:+.1f}% {growth_status}\n"
+    result += f"- **Current GDP:** ${gdp_billions:.1f} billion\n"
+    result += f"- **Annual Growth:** {indicator.year_change_pct:+.1f}% {trend_emoji}\n"
     
     # Period change
     period_label = "Quarterly" if frequency == "quarterly" else "Monthly"
@@ -343,39 +347,47 @@ def _format_gdp_output(indicator: EconomicIndicator, frequency: str, component: 
     
     # Context and analysis
     result += f"- **Last Updated:** {indicator.date}\n"
-    result += f"- **Currency:** {indicator.units}\n\n"
+    frequency_text = "Quarterly" if frequency == "quarterly" else "Monthly"
+    result += f"- **Update Frequency:** {frequency_text} (Statistics Canada)\n\n"
     
     # Add economic context
     result += "**Economic Analysis:**\n"
     if indicator.year_change_pct > 3.0:
-        result += "- 🚀 Strong economic growth above long-term average\n"
+        result += "- Strong economic growth above long-term average\n"
     elif indicator.year_change_pct > 1.0:
-        result += "- ✅ Steady economic expansion\n"
+        result += "- Steady economic expansion\n"
     elif indicator.year_change_pct > -1.0:
-        result += "- ⚠️ Slow growth, monitoring required\n"
+        result += "- Slow growth, monitoring required\n"
     else:
-        result += "- 📉 Economic contraction, recessionary concerns\n"
+        result += "- Economic contraction, recessionary concerns\n"
     
     # Add comparative context
-    result += f"- Economic output {'above' if indicator.year_change_pct > 2.0 else 'below'} historical trends\n"
+    if indicator.year_change_pct > 2.0:
+        result += "- Economic output performing above historical averages\n"
+    else:
+        result += "- Economic growth below long-term trends\n"
     
     return result
 
 
 def _format_employment_output(indicator: EconomicIndicator, metric: str, geography: str) -> str:
     """Format employment data output"""
-    trend_emoji = "📈" if indicator.year_change < 0 and metric == "unemployment_rate" else "📉" if indicator.year_change > 0 and metric == "unemployment_rate" else "📊"
+    # For unemployment rate, lower is better (so year_change < 0 is good trend)
+    if metric == "unemployment_rate":
+        trend_emoji = "📈" if indicator.year_change < 0 else "📉"
+    else:
+        trend_emoji = "📈" if indicator.year_change > 0 else "📉"
     
-    result = f"### **{indicator.name} - {geography}**\n\n"
+    result = f"### **{indicator.name} ({geography})**\n\n"
     
     # Current value and trend
-    result += f"- **Current Rate:** {indicator.value:.1f}% {trend_emoji}\n"
+    result += f"- **Current Rate:** {indicator.value:.1f}%\n"
     
     # Year-over-year change
     if indicator.year_change >= 0:
-        result += f"- **12-Month Change:** +{indicator.year_change:.1f} percentage points\n"
+        result += f"- **12-Month Change:** +{indicator.year_change:.1f} percentage points {trend_emoji}\n"
     else:
-        result += f"- **12-Month Change:** {indicator.year_change:.1f} percentage points\n"
+        result += f"- **12-Month Change:** {indicator.year_change:.1f} percentage points {trend_emoji}\n"
     
     # Monthly change
     if indicator.period_change >= 0:
@@ -384,50 +396,106 @@ def _format_employment_output(indicator: EconomicIndicator, metric: str, geograp
         result += f"- **Monthly Change:** {indicator.period_change:.1f} percentage points\n"
     
     # Context and analysis
-    result += f"- **Last Updated:** {indicator.date}\n\n"
+    result += f"- **Last Updated:** {indicator.date}\n"
     
-    # Add labour market context
-    result += "**Labour Market Analysis:**\n"
+    # Add next release information
+    result += f"- **Update Frequency:** Monthly (Labour Force Survey)\n"
+    next_release_date, days_until = _get_next_employment_release()
+    if days_until > 0:
+        result += f"- **Next Update:** {next_release_date} (in {days_until} days)\n"
+    else:
+        result += f"- **Next Update:** {next_release_date} (expected soon)\n"
+    
+    result += "\n**Labour Market Analysis:**\n"
     if metric == "unemployment_rate":
         if indicator.value > 7.0:
-            result += "- 🔴 Elevated unemployment above historical norms\n"
+            result += "- Elevated unemployment above historical norms\n"
         elif indicator.value > 5.0:
-            result += "- 🟡 Moderate unemployment levels\n"
+            result += "- Moderate unemployment levels\n"
         else:
-            result += "- 🟢 Low unemployment, tight labour market\n"
+            result += "- Low unemployment, tight labour market\n"
     elif metric == "employment_rate":
         if indicator.value > 62.0:
-            result += "- 🟢 Strong employment participation\n"
+            result += "- Strong employment participation\n"
         elif indicator.value > 58.0:
-            result += "- 🟡 Moderate employment levels\n"
+            result += "- Moderate employment levels\n"
         else:
-            result += "- 🔴 Weak employment participation\n"
+            result += "- Weak employment participation\n"
     
     return result
 
 
-def _get_inflation_status(inflation_rate: float) -> str:
-    """Get inflation status emoji"""
-    if inflation_rate > 3.0:
-        return "🔥"
-    elif inflation_rate > 1.0:
-        return "✅"
-    elif inflation_rate > 0:
-        return "📊"
-    else:
-        return "❄️"
 
 
-def _get_growth_status(growth_rate: float) -> str:
-    """Get growth status emoji"""
-    if growth_rate > 3.0:
-        return "🚀"
-    elif growth_rate > 1.0:
-        return "✅"
-    elif growth_rate > 0:
-        return "📊"
-    else:
-        return "📉"
+def _get_next_employment_release() -> Tuple[str, int]:
+    """Calculate next Labour Force Survey release date and days until"""
+    today = datetime.now()
+    
+    # Labour Force Survey reference week is typically the week containing the 15th of the month
+    # Data is released approximately 10 working days after the reference week ends
+    
+    # Find the next month to process
+    if today.day <= 25:  # If we're early in the month, next release is for current month
+        target_month = today.month
+        target_year = today.year
+    else:  # Otherwise, next release is for next month
+        if today.month == 12:
+            target_month = 1
+            target_year = today.year + 1
+        else:
+            target_month = today.month + 1
+            target_year = today.year
+    
+    # Find the reference week (week containing the 15th)
+    # The survey week is Monday to Sunday containing the 15th
+    fifteenth = datetime(target_year, target_month, 15)
+    
+    # Find the Monday of the week containing the 15th
+    days_to_monday = fifteenth.weekday()  # 0 = Monday, 6 = Sunday
+    reference_week_start = fifteenth - timedelta(days=days_to_monday)
+    reference_week_end = reference_week_start + timedelta(days=6)  # Sunday
+    
+    # Release is approximately 10 working days after reference week ends
+    # Add 14 calendar days to account for weekends (conservative estimate)
+    estimated_release = reference_week_end + timedelta(days=14)
+    
+    # Calculate days until release
+    days_until = (estimated_release - today).days
+    
+    # Format the date nicely
+    release_date_str = estimated_release.strftime("%B %d, %Y")
+    
+    return release_date_str, max(0, days_until)
+
+
+def _load_statscan_cache(cache_key: str, cache_hours: int = 24) -> Optional[Dict]:
+    """Load cached Statistics Canada data if still valid"""
+    try:
+        # Use existing cache but with custom TTL logic
+        cached_data = load_cached_data(cache_key)
+        if not cached_data:
+            return None
+            
+        # Check if cache is still valid based on custom hours
+        cached_at = cached_data.get('cached_at')
+        if cached_at:
+            cached_time = datetime.fromisoformat(cached_at)
+            if datetime.now() - cached_time < timedelta(hours=cache_hours):
+                return cached_data
+        
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to load cache for {cache_key}: {e}")
+        return None
+
+
+def _save_statscan_cache(cache_key: str, data: Dict) -> None:
+    """Save Statistics Canada data to cache with timestamp"""
+    try:
+        data['cached_at'] = datetime.now().isoformat()
+        save_cached_data(cache_key, data)
+    except Exception as e:
+        logger.warning(f"Failed to cache data for {cache_key}: {e}")
 
 
 def _get_cpi_vectors(category: str, geography: str) -> Optional[str]:
@@ -644,7 +712,7 @@ def _process_gdp_data(api_data: Dict, frequency: str, component: str) -> Economi
             period_change_pct=period_change_pct,
             year_change=year_change,
             year_change_pct=year_change_pct,
-            units="Billions of chained (2017) dollars"
+            units="Billions of dollars"
         )
         
         return indicator
@@ -719,7 +787,7 @@ def _get_mock_gdp_data(frequency: str, component: str) -> EconomicIndicator:
             period_change_pct=0.5,
             year_change=56.3,
             year_change_pct=2.4,
-            units="Billions of chained (2017) dollars"
+            units="Billions of dollars"
         )
     else:
         return EconomicIndicator(
@@ -730,7 +798,7 @@ def _get_mock_gdp_data(frequency: str, component: str) -> EconomicIndicator:
             period_change_pct=0.4,
             year_change=45.8,
             year_change_pct=2.3,
-            units="Billions of chained (2017) dollars"
+            units="Billions of dollars"
         )
 
 
