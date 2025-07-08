@@ -60,6 +60,7 @@ src/
 
 ### Data Analysis & Research
 - **Financial Tools**: Real-time stock/crypto prices with caching
+- **Economic Indicators**: Statistics Canada CPI, GDP, and employment data with trend analysis
 - **Academic Research**: arXiv search with PDF analysis
 - **Crime Analytics**: Toronto neighbourhood safety statistics with semantic search
 - **Weather Data**: Location-based forecasts (IP/city/coordinates)
@@ -83,6 +84,7 @@ src/
 - [FastMCP Usage](docs/FASTMCP_USAGE.md) - MCP framework documentation
 
 ### External References
+- [Statistics Canada Open Data](https://www.statcan.gc.ca/en/developers) - Economic indicators API
 - [Toronto Open Data](https://open.toronto.ca/) - Crime statistics source
 - [FastMCP Framework](https://github.com/jlowin/fastmcp) - MCP implementation
 - [ChromaDB Documentation](https://docs.trychroma.com/) - Vector database
