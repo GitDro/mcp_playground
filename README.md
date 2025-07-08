@@ -1,8 +1,7 @@
 # MCP Playground
 
-A **modern** Streamlit chat app with Ollama integration and AI-powered tool calling capabilities.
-
-> **🚀 Built with Modern Standards!** This project uses the Model Context Protocol (MCP) for scalable, standards-compliant tool execution.
+* A **modern** Streamlit chat app with Ollama integration and AI-powered tool calling capabilities.
+* This project uses the **Model Context Protocol (MCP)** for scalable, standards-compliant tool execution.
 
 ## 🚀 Quick Start
 
