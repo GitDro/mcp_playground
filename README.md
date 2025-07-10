@@ -58,7 +58,7 @@ You can use these tools directly in Windsurf IDE through MCP integration:
 - `analyze_url` - Website content analysis and summarization
 - `arxiv_search` - Academic paper search with deep PDF analysis
 - `get_stock_overview` - Comprehensive financial data for stocks, crypto, and market indices with trend visualization
-- `analyze_youtube_video` - AI-powered YouTube analysis - summaries or targeted Q&A
+- `analyze_youtube_url` - AI-powered YouTube analysis - summaries or targeted Q&A
 - `get_weather` - Current weather and forecasts by city name or coordinates
 - `get_tide_info` - Canadian tide information with high/low times and heights
 - `get_toronto_crime` - Toronto neighbourhood crime statistics with trend analysis and visualization
@@ -165,7 +165,7 @@ uv run python mcp_server.py http 8000
 ### Available Tools
 - **Memory**: `remember`, `recall`, `forget` - Simple ChromaDB storage with conversation history injection
 - **Web**: `web_search`, `analyze_url` - Web search and content analysis
-- **Media**: `analyze_youtube_video` - YouTube analysis (summaries and Q&A)
+- **Media**: `analyze_youtube_url` - YouTube analysis (summaries and Q&A)
 - **Finance**: `get_stock_overview` - Comprehensive financial data with visualization
 - **Research**: `arxiv_search` - Academic paper analysis
 - **Weather**: `get_weather` - Location-based weather forecasts
