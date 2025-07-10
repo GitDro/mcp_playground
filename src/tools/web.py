@@ -42,9 +42,9 @@ def register_web_tools(mcp: FastMCP):
         except Exception as e:
             return f"Error performing search: {str(e)}"
     
-    @mcp.tool
+    @mcp.tool(description="Analyze general web URLs (not YouTube - use analyze_youtube_url for YouTube)")
     def analyze_url(url: str) -> str:
-        """Fetch and analyze a URL to extract content type, size, and preview text. Best for HTML pages and basic content inspection."""
+        """Fetch and analyze non-YouTube URLs to extract content type, size, and preview text. Best for HTML pages and basic content inspection. For YouTube URLs, use analyze_youtube_url instead."""
         try:
             import httpx
             

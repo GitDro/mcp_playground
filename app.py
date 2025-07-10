@@ -333,7 +333,7 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
                     # YouTube functions are meant to be processed by LLM, not shown to user
                     show_function_results = []
                     for i, (func_name, result) in enumerate(zip(function_names, function_results)):
-                        if not func_name.startswith('analyze_youtube_video'):
+                        if not func_name.startswith('analyze_youtube_url'):
                             show_function_results.append(result)
                     
                     if show_function_results:
@@ -511,7 +511,7 @@ with col2:
                         purpose = "remove memories"
                     elif 'get_stock_overview' in tool_name:
                         purpose = "stock market data"
-                    elif 'analyze_youtube_video' in tool_name:
+                    elif 'analyze_youtube_url' in tool_name:
                         purpose = "video analysis"
                     elif 'get_tide_info' in tool_name:
                         purpose = "tide information"
