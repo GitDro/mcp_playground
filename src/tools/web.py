@@ -8,11 +8,12 @@ from fastmcp import FastMCP
 def register_web_tools(mcp: FastMCP):
     """Register web-related tools with the MCP server"""
     
-    @mcp.tool
+    @mcp.tool(description="Search the web using DuckDuckGo with rate limiting protection")
     def web_search(query: str, max_results: int = 5) -> str:
-        """Search the web using DuckDuckGo and return current information with titles, URLs, and summaries. Returns up to 10 results (default: 5)."""
+        """Search the web using DuckDuckGo and return current information with titles, URLs, and summaries. Returns up to 10 results (default: 5). Uses browser headers to prevent rate limiting."""
         try:
             from duckduckgo_search import DDGS
+            from duckduckgo_search.exceptions import RatelimitException, TimeoutException
             
             # Ensure max_results is an integer and within bounds
             max_results = max(1, min(max_results or 5, 10))
@@ -23,7 +24,12 @@ def register_web_tools(mcp: FastMCP):
             
             query = query.strip()
             
-            with DDGS() as ddgs:
+            # Add browser headers to prevent rate limiting
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0"
+            }
+            
+            with DDGS(headers=headers) as ddgs:
                 results = list(ddgs.text(query, max_results=max_results))
             
             if not results:
@@ -39,6 +45,10 @@ def register_web_tools(mcp: FastMCP):
             
             return formatted_results
             
+        except RatelimitException:
+            return "Error: DuckDuckGo rate limit exceeded. Please try again in a few moments."
+        except TimeoutException:
+            return "Error: Search request timed out. Please try again."
         except Exception as e:
             return f"Error performing search: {str(e)}"
     
