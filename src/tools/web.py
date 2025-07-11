@@ -10,10 +10,10 @@ def register_web_tools(mcp: FastMCP):
     
     @mcp.tool(description="Search the web using DuckDuckGo with rate limiting protection")
     def web_search(query: str, max_results: int = 5) -> str:
-        """Search the web using DuckDuckGo and return current information with titles, URLs, and summaries. Returns up to 10 results (default: 5). Uses browser headers to prevent rate limiting."""
+        """Search the web using DuckDuckGo and return current information with titles, URLs, and summaries. Returns up to 10 results (default: 5). Uses timeout configuration for reliability."""
         try:
-            from duckduckgo_search import DDGS
-            from duckduckgo_search.exceptions import RatelimitException, TimeoutException
+            from ddgs import DDGS
+            from ddgs.exceptions import RatelimitException, TimeoutException
             
             # Ensure max_results is an integer and within bounds
             max_results = max(1, min(max_results or 5, 10))
@@ -24,13 +24,9 @@ def register_web_tools(mcp: FastMCP):
             
             query = query.strip()
             
-            # Add browser headers to prevent rate limiting
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0"
-            }
-            
-            with DDGS(headers=headers) as ddgs:
-                results = list(ddgs.text(query, max_results=max_results))
+            # Initialize DDGS with timeout (headers no longer supported in ddgs package)
+            ddgs = DDGS(timeout=20)
+            results = list(ddgs.text(query, max_results=max_results))
             
             if not results:
                 return f"No search results found for: {query}"
