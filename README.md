@@ -55,7 +55,7 @@ You can use these tools directly in Windsurf IDE through MCP integration:
 
 **Available Tools in Windsurf:**
 - `web_search` - Real-time web search with DuckDuckGo
-- `analyze_url` - Website content analysis and summarization
+- `summarize_url` - Website content summarization and analysis
 - `arxiv_search` - Academic paper search with deep PDF analysis
 - `get_stock_overview` - Comprehensive financial data for stocks, crypto, and market indices with trend visualization
 - `analyze_youtube_url` - AI-powered YouTube analysis - summaries or targeted Q&A
@@ -164,7 +164,7 @@ uv run python mcp_server.py http 8000
 
 ### Available Tools
 - **Memory**: `remember`, `recall`, `forget` - Simple ChromaDB storage with conversation history injection
-- **Web**: `web_search`, `analyze_url` - Web search and content analysis
+- **Web**: `web_search`, `summarize_url` - Web search and content analysis
 - **Media**: `analyze_youtube_url` - YouTube analysis (summaries and Q&A)
 - **Finance**: `get_stock_overview` - Comprehensive financial data with visualization
 - **Research**: `arxiv_search` - Academic paper analysis

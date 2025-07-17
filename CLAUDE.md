@@ -27,7 +27,7 @@ src/
 │   └── utils.py          # General utilities
 ├── tools/
 │   ├── memory.py         # 3 streamlined memory tools
-│   ├── web.py            # web_search, analyze_url
+│   ├── web.py            # web_search, summarize_url
 │   ├── arxiv.py          # arxiv_search + paper analysis
 │   ├── financial.py      # stock/crypto/market tools
 │   ├── youtube.py        # YouTube analysis tools
