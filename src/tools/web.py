@@ -5,6 +5,7 @@ Web search and URL analysis tools
 from fastmcp import FastMCP
 import os
 from datetime import datetime
+from typing import Union
 
 def _save_web_content(url: str, html_content: str) -> str:
     """Save web content as a markdown document"""
@@ -132,7 +133,7 @@ def register_web_tools(mcp: FastMCP):
             return f"Error performing search: {str(e)}"
     
     @mcp.tool(description="Summarize webpage content from any URL with optional offline saving")
-    def summarize_url(url: str, save_content: bool = False) -> str:
+    def summarize_url(url: str, save_content: Union[bool, str] = False) -> str:
         """
         Summarize and analyze webpage content from any URL with optional offline saving.
         
