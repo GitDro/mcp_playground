@@ -71,6 +71,12 @@ def _save_web_content(url: str, html_content: str) -> str:
         filename = f"{timestamp}_{safe_title}.md"
         file_path = os.path.join(cache_dir, filename)
         
+        # Check if URL already exists (simple check before vector storage)
+        existing_docs = vector_memory_manager.get_all_documents()
+        for existing_doc in existing_docs:
+            if existing_doc.get('source_url') == url:
+                return f"URL already saved!\nTitle: {existing_doc['title']}\nID: {existing_doc['id']}\nUse find_saved or list_saved to access your saved content."
+        
         # Store the document
         doc_id = vector_memory_manager.store_document(
             title=page_title,

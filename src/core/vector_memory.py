@@ -386,9 +386,47 @@ class VectorMemoryManager:
         try:
             from .models import Document
             
-            # Generate unique document ID
-            content_hash = hashlib.md5(f"{title}{content}".encode()).hexdigest()[:8]
-            doc_id = f"doc_{datetime.now().timestamp()}_{content_hash}"
+            # Generate meaningful document ID
+            def create_document_id(title: str, doc_type: str, source_url: str = None) -> str:
+                # Create a slug from title
+                title_slug = "".join(c.lower() if c.isalnum() else "_" for c in title)[:30]
+                title_slug = title_slug.strip("_")
+                
+                # Add type prefix
+                if source_url:
+                    # For URLs, use domain
+                    from urllib.parse import urlparse
+                    try:
+                        domain = urlparse(source_url).netloc.replace("www.", "").replace(".", "_")[:15]
+                        prefix = f"url_{domain}"
+                    except:
+                        prefix = "url"
+                elif doc_type == "note":
+                    prefix = "note"
+                elif doc_type == "capture":
+                    prefix = "capture"
+                else:
+                    prefix = doc_type
+                
+                # Add date
+                date_str = datetime.now().strftime("%m%d")
+                
+                # Combine
+                base_id = f"{prefix}_{title_slug}_{date_str}"
+                
+                # Ensure uniqueness with short hash if needed
+                content_hash = hashlib.md5(f"{title}{content}".encode()).hexdigest()[:4]
+                return f"{base_id}_{content_hash}"
+            
+            # Check for URL deduplication
+            if source_url:
+                existing_docs = self.get_all_documents()
+                for existing_doc in existing_docs:
+                    if existing_doc.get('source_url') == source_url:
+                        logger.info(f"Document with URL {source_url} already exists: {existing_doc['id']}")
+                        return existing_doc['id']  # Return existing document ID
+            
+            doc_id = create_document_id(title, doc_type, source_url)
             
             # Create document model
             document = Document(

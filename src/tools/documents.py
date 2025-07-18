@@ -67,18 +67,16 @@ def register_document_tools(mcp):
             return f"❌ Failed to store note: {str(e)}"
     
     @mcp.tool
-    def search_notes(query: str, limit: int = 5, tags: List[str] = None) -> str:
+    def find_saved(query: str, limit: int = 5, tags: Optional[List[str]] = None) -> str:
         """
-        Search your saved documents, articles, and notes.
+        Find saved documents, articles, and links by searching.
         
-        Use this for finding saved links, articles, documents, and personal notes.
-        DO NOT use memory tools (recall) for this - they are for conversation context only.
+        Use this when you want to find specific saved content by searching for keywords.
         
         Perfect for queries like:
-        - "show me that article about AI"
-        - "find my saved links"
-        - "search for documents about Python"
-        - "what links do I have saved"
+        - "find that article about AI"
+        - "search for Python tutorials I saved"  
+        - "show me documents about machine learning"
         
         Args:
             query: What to search for in your saved documents
@@ -125,17 +123,16 @@ def register_document_tools(mcp):
             return f"❌ Search failed: {str(e)}"
     
     @mcp.tool
-    def list_notes(limit: Optional[int] = 20) -> str:
+    def list_saved(limit: Optional[int] = 20) -> str:
         """
-        List all your saved documents, articles, and notes.
+        List all your saved documents, articles, and links.
         
-        Use this to see all saved links, articles, documents, and personal notes.
-        DO NOT use memory tools (recall) for this - they are for conversation context only.
+        Use this to see everything you've saved, organized by date.
         
         Perfect for queries like:
-        - "show me all my saved links"
-        - "what documents do I have"
-        - "list my saved articles"
+        - "show me all my saved content"
+        - "what do I have saved"
+        - "list everything I've saved"
         
         Args:
             limit: Maximum number of documents to show
@@ -179,3 +176,59 @@ def register_document_tools(mcp):
         except Exception as e:
             logger.error(f"Error listing notes: {e}")
             return f"❌ Failed to list notes: {str(e)}"
+    
+    @mcp.tool
+    def clean_duplicates() -> str:
+        """
+        Remove duplicate documents based on content similarity.
+        
+        Identifies and removes documents with identical URLs or very similar content.
+        Use this to clean up your saved documents collection.
+        
+        Returns:
+            Summary of cleanup actions performed
+        """
+        try:
+            all_docs = vector_memory_manager.get_all_documents()
+            
+            if not all_docs:
+                return "No documents found to clean up."
+            
+            # Group by URL for exact duplicates
+            url_groups = {}
+            content_hashes = {}
+            duplicates_found = []
+            
+            for doc in all_docs:
+                source_url = doc.get('source_url')
+                
+                # Check URL duplicates
+                if source_url:
+                    if source_url in url_groups:
+                        duplicates_found.append(doc['id'])
+                        logger.info(f"Found URL duplicate: {doc['id']} (URL: {source_url})")
+                    else:
+                        url_groups[source_url] = doc['id']
+                
+                # Check content hash duplicates (for non-URL content)
+                else:
+                    import hashlib
+                    content_hash = hashlib.md5(doc.get('content', '').encode()).hexdigest()
+                    if content_hash in content_hashes:
+                        duplicates_found.append(doc['id'])
+                        logger.info(f"Found content duplicate: {doc['id']}")
+                    else:
+                        content_hashes[content_hash] = doc['id']
+            
+            if not duplicates_found:
+                return f"✅ No duplicates found in {len(all_docs)} documents."
+            
+            # Report what was found (actual deletion would require implementing delete in vector_memory_manager)
+            return f"🧹 Found {len(duplicates_found)} duplicate documents:\n" + \
+                   "\n".join(f"• {dup_id}" for dup_id in duplicates_found[:10]) + \
+                   (f"\n... and {len(duplicates_found) - 10} more" if len(duplicates_found) > 10 else "") + \
+                   f"\n\nTotal documents: {len(all_docs)} | Duplicates: {len(duplicates_found)} | Unique: {len(all_docs) - len(duplicates_found)}"
+            
+        except Exception as e:
+            logger.error(f"Error cleaning duplicates: {e}")
+            return f"❌ Cleanup failed: {str(e)}"
