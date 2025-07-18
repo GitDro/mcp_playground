@@ -27,7 +27,7 @@ src/
 │   └── utils.py          # General utilities
 ├── tools/
 │   ├── memory.py         # remember, recall, forget (conversation context)
-│   ├── documents.py      # store_note, find_saved, list_saved (automatic deduplication)
+│   ├── documents.py      # store_note, search_documents, show_all_documents (automatic deduplication)
 │   ├── web.py            # web_search, summarize_url, save_link
 │   ├── arxiv.py          # arxiv_search + paper analysis
 │   ├── financial.py      # stock/crypto/market tools
@@ -62,8 +62,8 @@ src/
 
 ### Knowledge Base Building
 1. **Save Content**: `save_link(url)` - Saves full webpage content with clean formatting
-2. **Find Content**: `find_saved("topic")` - Semantic search across saved content
-3. **Browse All**: `list_saved()` - See everything you've saved, organized by date
+2. **Search Content**: `search_documents("topic")` - Semantic search across saved content
+3. **Browse All**: `show_all_documents()` - See everything you've saved, organized by date
 
 ### URL Management
 - **`save_link`** - Direct URL saving with full content extraction
@@ -72,7 +72,7 @@ src/
 
 ### Memory vs Documents
 - **Memory tools** (`remember`, `recall`, `forget`) - Conversation context only
-- **Document tools** (`find_saved`, `list_saved`, `store_note`) - Permanent knowledge base
+- **Document tools** (`search_documents`, `show_all_documents`, `store_note`) - Permanent knowledge base
 - **Clear boundaries** - No more tool selection confusion
 
 ## Tool Categories
@@ -86,7 +86,7 @@ src/
 - **Tide Information**: Canadian coastal tide times and heights
 
 ### Content Analysis & Document Management
-- **Document Storage**: `store_note`, `find_saved`, `list_saved` with semantic search
+- **Document Storage**: `store_note`, `search_documents`, `show_all_documents` with semantic search
 - **Web Content**: URL saving (`save_link`) and analysis (`summarize_url`)
 - **YouTube Enhancement**: Adaptive transcription for 2-3 hour videos
 - **Automatic Deduplication**: Prevents duplicate URLs and identical content without user intervention

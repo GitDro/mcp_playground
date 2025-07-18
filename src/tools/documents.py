@@ -57,13 +57,14 @@ def register_document_tools(mcp):
             logger.error(f"Error storing note: {e}")
             return f"❌ Failed to store note: {str(e)}"
     
-    @mcp.tool(description="Search and retrieve full content of saved documents")
-    def find_saved(query: str, limit: int = 5, tags: Optional[List[str]] = None) -> str:
+    @mcp.tool(description="Search saved documents by topic/keyword and show full content")
+    def search_documents(query: str, limit: int = 5, tags: Optional[List[str]] = None) -> str:
         """
-        Search saved documents and return their full content. Use to find and read specific saved content.
+        Search saved documents by topic/keyword and return their full content. 
+        Use when looking for specific documents (e.g., "find my ChatGPT note").
         
         Args:
-            query: What to search for
+            query: What to search for (topic, keyword, title)
             limit: Maximum results (default: 5)
             tags: Filter by tags
         """
@@ -107,13 +108,14 @@ def register_document_tools(mcp):
             logger.error(f"Error searching notes: {e}")
             return f"❌ Search failed: {str(e)}"
     
-    @mcp.tool(description="List all saved documents, articles, and links")
-    def list_saved(limit: Optional[int] = 20) -> str:
+    @mcp.tool(description="Show ALL saved documents with full content (chronological)")
+    def show_all_documents(limit: Optional[int] = 20) -> str:
         """
-        List all saved documents, organized by date.
+        List ALL saved documents with full content, organized by date (newest first).
+        Use when user asks to "show all notes", "list all documents", "see everything saved", etc.
         
         Args:
-            limit: Maximum documents to show
+            limit: Maximum documents to show (default: 20)
         """
         try:
             # Handle None limit
@@ -129,22 +131,23 @@ def register_document_tools(mcp):
             documents.sort(key=lambda x: x.get('created_at', ''), reverse=True)
             documents = documents[:limit]
             
-            response = f"📚 Your Notes ({len(documents)} shown):\n\n"
+            response = f"📚 Your Saved Documents ({len(documents)} shown):\n\n"
             
             for doc in documents:
                 response += f"📝 **{doc['title']}**\n"
-                response += f"   📅 {doc['created_at'][:10] if doc['created_at'] else 'Unknown date'}"
+                response += f"📅 {doc['created_at'][:10] if doc['created_at'] else 'Unknown date'}"
                 
                 if doc['tags']:
                     response += f" | 🏷️ {', '.join(doc['tags'])}"
                 
-                response += f"\n   🆔 {doc['id']}\n"
+                if doc.get('source_url'):
+                    response += f" | 🔗 {doc['source_url']}"
                 
-                # Show preview
-                preview = doc['content'][:100]
-                if len(doc['content']) > 100:
-                    preview += "..."
-                response += f"   📖 {preview}\n\n"
+                response += f"\n🆔 {doc['id']}\n\n"
+                
+                # Show full content instead of useless preview
+                response += f"**Full Content:**\n{doc['content']}\n\n"
+                response += "---\n\n"
             
             return response
             
