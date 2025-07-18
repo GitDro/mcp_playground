@@ -55,7 +55,7 @@ You can use these tools directly in Windsurf IDE through MCP integration:
 
 **Available Tools in Windsurf:**
 - `web_search` - Real-time web search with DuckDuckGo
-- `summarize_url` - Website content summarization and analysis
+- `analyze_url` - Website content summarization and analysis
 - `arxiv_search` - Academic paper search with deep PDF analysis
 - `get_stock_overview` - Comprehensive financial data for stocks, crypto, and market indices with trend visualization
 - `analyze_youtube_url` - AI-powered YouTube analysis - summaries or targeted Q&A
@@ -164,8 +164,8 @@ uv run python mcp_server.py http 8000
 
 ### Available Tools
 - **Memory**: `remember`, `recall`, `forget` - Conversation context and preferences
-- **Documents**: `store_note`, `find_saved`, `list_saved`, `clean_duplicates` - Knowledge base management
-- **Web**: `web_search`, `summarize_url`, `save_link` - Web search, analysis, and content saving
+- **Documents**: `store_note`, `search_documents`, `show_all_documents` - Knowledge base management
+- **Web**: `web_search`, `analyze_url`, `save_link` - Web search, analysis, and content saving
 - **Media**: `analyze_youtube_url` - YouTube analysis (summaries and Q&A)
 - **Finance**: `get_stock_overview` - Comprehensive financial data with visualization
 - **Research**: `arxiv_search` - Academic paper analysis
@@ -197,8 +197,8 @@ async def use_tools():
 
 ### Memory vs Documents
 - **Memory Tools** (`remember`, `recall`, `forget`): Conversation context only
-- **Document Tools** (`store_note`, `find_saved`, `list_saved`): Permanent knowledge base
-- **Web Tools** (`save_link`, `summarize_url`): Content saving and analysis
+- **Document Tools** (`store_note`, `search_documents`, `show_all_documents`): Permanent knowledge base
+- **Web Tools** (`save_link`, `analyze_url`): Content saving and analysis
 
 ### Key Benefits (MVP July 2025)
 - **Simple & Effective**: Conversation history injection instead of complex prompt engineering

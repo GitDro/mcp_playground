@@ -535,7 +535,7 @@ with col2:
                     # Extract concise inline descriptions
                     if 'web_search' in tool_name:
                         purpose = "web search"
-                    elif 'summarize_url' in tool_name:
+                    elif 'analyze_url' in tool_name:
                         purpose = "webpage summary"
                     elif 'analyze_url' in tool_name:  # Legacy fallback
                         purpose = "URL analysis"
@@ -580,7 +580,7 @@ with col2:
                     elif 'save_link' in tool_name:
                         purpose = "save webpage content"
                     else:
-                        purpose = "tool"
+                        purpose = "specialized tool"
                     
                     # Add tree-like formatting with inline descriptions
                     if i == len(mcp_tools) - 1:

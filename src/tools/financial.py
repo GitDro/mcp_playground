@@ -22,7 +22,11 @@ def register_financial_tools(mcp: FastMCP):
     
     @mcp.tool(description="stock market data")
     def get_stock_overview(symbol: str) -> str:
-        """Get comprehensive stock market data for any asset - stocks (AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA), crypto (BTC, ETH), or market indices (SPY, QQQ). Shows current price, daily change, volume, 1-month performance, and trend visualization."""
+        """Get comprehensive stock market data for any asset - stocks (AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA), crypto (BTC, ETH), or market indices (SPY, QQQ). Shows current price, daily change, volume, 1-month performance, and trend visualization.
+        
+        Args:
+            symbol: Stock symbol, crypto symbol, or market index (e.g., "AAPL", "BTC", "SPY")
+        """
         try:
             cleanup_old_cache()
             

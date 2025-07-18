@@ -196,7 +196,12 @@ Paper text:
     
     @mcp.tool
     def arxiv_search(query: str, max_results: Optional[int] = 3) -> str:
-        """Search arXiv database for academic papers and extract key insights including abstract, methodology, and conclusions. Returns detailed analysis of up to 10 papers (default: 3)."""
+        """Search arXiv database for academic papers and extract key insights including abstract, methodology, and conclusions. Returns detailed analysis of up to 10 papers (default: 3).
+        
+        Args:
+            query: Search terms for academic papers (e.g., "machine learning", "quantum computing")
+            max_results: Maximum number of papers to analyze (default: 3, max: 10)
+        """
         try:
             import arxiv
             

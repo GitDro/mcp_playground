@@ -16,7 +16,12 @@ def register_tide_tools(mcp: FastMCP):
     
     @mcp.tool(description="tide information")
     def get_tide_info(location: str, date: Optional[str] = None) -> str:
-        """Get tide information (high/low times and heights) for Canadian coastal locations. Supports major ports like Halifax, Vancouver, St. Johns. Specify date as 'July 20 2024', 'tomorrow', or leave blank for today. Returns formatted table with times and heights."""
+        """Get tide information (high/low times and heights) for Canadian coastal locations. Supports major ports like Halifax, Vancouver, St. Johns. Specify date as 'July 20 2024', 'tomorrow', or leave blank for today. Returns formatted table with times and heights.
+        
+        Args:
+            location: Canadian coastal location (e.g., "Halifax", "Vancouver", "St. Johns")
+            date: Optional date as 'July 20 2024', 'tomorrow', or leave blank for today
+        """
         try:
             import requests
             from dateutil import parser as date_parser

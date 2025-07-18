@@ -99,7 +99,7 @@ STRICT RULES FOR TOOL USAGE:
    - Real-time information with keywords like "today", "now", "current"
    - Specific searches with phrases like "search for", "find", "look up"
 
-3. ONLY use summarize_url when user provides a specific URL/link
+3. ONLY use analyze_url when user provides a specific URL/link
 
 4. ONLY use arxiv_search when user explicitly asks for academic papers or research with keywords like "papers", "research", "arxiv", "academic", "study"
 
@@ -119,7 +119,7 @@ Examples - DO NOT use tools:
 Examples - USE tools:
 - "Search for Python 3.13 news" → Use web_search
 - "What's the latest on OpenAI?" → Use web_search  
-- "Analyze https://example.com" → Use summarize_url
+- "Analyze https://example.com" → Use analyze_url
 - "What's Apple's stock price?" → Use get_stock_overview
 - "Show Tesla's performance" → Use get_stock_overview
 - "Get Bitcoin price" → Use get_stock_overview

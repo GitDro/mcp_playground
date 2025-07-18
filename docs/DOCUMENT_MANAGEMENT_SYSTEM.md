@@ -9,7 +9,7 @@ The MCP Playground now includes a streamlined document management system that pr
 ### **Core Document Storage**
 - **Local markdown/text files** with semantic search using existing ChromaDB + Ollama embeddings
 - **Personal notes storage** (house measurements, medications, sensitive info)
-- **Web page captures** via enhanced `summarize_url` tool  
+- **Web page captures** via enhanced `analyze_url` tool  
 - **File watching** - automatically re-indexes when you manually edit files
 - **Local-first privacy** - everything stored locally, no cloud dependency
 
@@ -20,7 +20,7 @@ The MCP Playground now includes a streamlined document management system that pr
 3. **`list_notes(limit)`** - List all stored notes
 
 ### **Enhanced Web Analysis**
-- **`summarize_url(url, save_content=False)`** - Now with optional content saving
+- **`analyze_url(url, save_content=False)`** - Now with optional content saving
 - When `save_content=True`, saves cleaned markdown to `documents/captures/`
 - Provides analysis + save confirmation in one tool
 
@@ -32,7 +32,7 @@ The MCP Playground now includes a streamlined document management system that pr
 ├── chromadb/           # Existing vector storage + new documents collection
 ├── documents/          # Document storage
 │   ├── notes/         # Personal markdown notes (store_note + manual)
-│   └── captures/      # Web content saves (summarize_url)
+│   └── captures/      # Web content saves (analyze_url)
 └── [other existing folders]
 ```
 
@@ -72,7 +72,7 @@ search_notes("bedroom size")       # Also finds house measurements
 ### **Save Web Content**
 ```python
 # Analyze and optionally save interesting web content
-summarize_url("https://example.com/article", save_content=True)
+analyze_url("https://example.com/article", save_content=True)
 # → Analysis + saves to captures/20250716_230000_Article_Title.md
 ```
 
