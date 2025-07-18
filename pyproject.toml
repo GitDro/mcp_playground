@@ -22,4 +22,6 @@ dependencies = [
     "pandas>=2.0.0",
     "seaborn>=0.12.0",
     "ddgs>=9.0.1",
+    "beautifulsoup4>=4.12.0",
+    "html2text>=2020.1.16",
 ]

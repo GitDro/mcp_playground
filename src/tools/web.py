@@ -83,8 +83,6 @@ def _save_web_content(url: str, html_content: str) -> str:
         
         return f"✅ Web content saved successfully!\n📝 Title: {page_title}\n🆔 ID: {doc_id}\n📁 File: {file_path}\n\nContent is now searchable and available offline."
         
-    except ImportError:
-        return "❌ Error: Required packages (beautifulsoup4, html2text) not available. Install with: uv add beautifulsoup4 html2text"
     except Exception as e:
         return f"❌ Error saving web content: {str(e)}"
 
@@ -132,34 +130,20 @@ def register_web_tools(mcp: FastMCP):
         except Exception as e:
             return f"Error performing search: {str(e)}"
     
-    @mcp.tool(description="Summarize webpage content from any URL with optional offline saving")
+    @mcp.tool(description="Summarize webpage content from URL, with optional saving for offline access")
     def summarize_url(url: str, save_content: Union[bool, str] = False) -> str:
         """
-        Summarize and analyze webpage content from any URL with optional offline saving.
+        Fetch and analyze webpage content with optional offline saving.
         
-        This tool fetches webpages, extracts clean content, provides a summary preview,
-        and can optionally save the content as markdown for offline access and search.
-        
-        IMPORTANT: Do not use this for YouTube URLs - use analyze_youtube_url instead.
+        When user asks to "save" a URL or wants content "for later", set save_content=True.
+        When user just wants to "read" or "summarize", use save_content=False (default).
         
         Args:
-            url (str): The complete URL to summarize (must include http:// or https://)
-            save_content (bool): If True, saves cleaned markdown content to documents/captures/
-                                If False (default), only shows summary without saving
+            url (str): Complete URL with http:// or https://
+            save_content (bool): True to save content offline, False for summary only
         
         Returns:
-            str: Content summary including title, preview, and optional save confirmation
-            
-        Examples:
-            - summarize_url("https://example.com") → Summary only
-            - summarize_url("https://example.com", True) → Summary + save content
-            - summarize_url("https://example.com", "true") → Also works (string converted)
-        
-        Common Issues:
-            - URL must include protocol (http:// or https://)
-            - Some sites may block automated requests
-            - Large files may timeout (30 second limit)
-            - Non-HTML content cannot be saved as markdown
+            str: Clean content preview with save confirmation if saved
         """
         try:
             import httpx
@@ -216,53 +200,45 @@ def register_web_tools(mcp: FastMCP):
                 content_length = len(response.content)
                 final_url = str(response.url)
                 
-                # Build analysis summary
-                summary = f"# 🌐 URL Analysis Results\n\n"
-                summary += f"**Original URL**: {url}\n"
+                # Build analysis summary with mode indicator
+                mode_indicator = "💾 **SAVING**" if save_content else "📖 **SUMMARY**"
+                summary = f"{mode_indicator} | {final_url}\n"
                 if final_url != url:
-                    summary += f"**Final URL**: {final_url} (redirected)\n"
-                summary += f"**Content Type**: {content_type}\n"
-                summary += f"**Content Size**: {content_length:,} bytes\n"
-                summary += f"**Status**: ✅ Successfully loaded\n\n"
+                    summary += f"↳ Redirected from: {url}\n"
+                summary += f"`{content_type}` • {content_length:,} bytes\n\n"
                 
                 if 'text/html' in content_type:
                     # Extract and show preview for HTML content
-                    try:
-                        from bs4 import BeautifulSoup
-                        soup = BeautifulSoup(response.content, 'html.parser')
-                        
-                        # Get title
-                        title_tag = soup.find('title')
-                        title = title_tag.get_text().strip() if title_tag else "No title found"
-                        summary += f"**Page Title**: {title}\n"
-                        
-                        # Get clean text preview
-                        for element in soup(['script', 'style', 'nav', 'header', 'footer']):
-                            element.decompose()
-                        
-                        text_content = soup.get_text()
-                        clean_lines = [line.strip() for line in text_content.split('\n') if line.strip()]
-                        preview_text = '\n'.join(clean_lines[:10])  # First 10 non-empty lines
-                        
-                        if len(preview_text) > 500:
-                            preview_text = preview_text[:500] + "..."
-                        
-                        summary += f"\n**Content Preview**:\n{preview_text}\n"
-                        
-                    except ImportError:
-                        # Fallback if beautifulsoup not available
-                        text_content = response.text[:800]
-                        summary += f"\n**Raw Content Preview**:\n{text_content}...\n"
+                    from bs4 import BeautifulSoup
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    
+                    # Get title
+                    title_tag = soup.find('title')
+                    title = title_tag.get_text().strip() if title_tag else "No title found"
+                    summary += f"**Page Title**: {title}\n"
+                    
+                    # Get clean text preview
+                    for element in soup(['script', 'style', 'nav', 'header', 'footer']):
+                        element.decompose()
+                    
+                    text_content = soup.get_text()
+                    clean_lines = [line.strip() for line in text_content.split('\n') if line.strip()]
+                    preview_text = '\n'.join(clean_lines[:10])  # First 10 non-empty lines
+                    
+                    if len(preview_text) > 500:
+                        preview_text = preview_text[:500] + "..."
+                    
+                    summary += f"\n**Content Preview**:\n{preview_text}\n"
                     
                     # Handle content saving
                     if save_content:
                         try:
                             saved_result = _save_web_content(final_url, response.text)
-                            summary += f"\n---\n\n📁 **Content Saved**\n{saved_result}"
+                            summary += f"\n\n🎉 **CONTENT SAVED SUCCESSFULLY!**\n{saved_result}"
                         except Exception as e:
-                            summary += f"\n---\n\n❌ **Save Failed**: {str(e)}"
+                            summary += f"\n\n❌ **SAVE FAILED**: {str(e)}"
                     else:
-                        summary += f"\n💡 **Tip**: Add `save_content=True` to save this content for offline access"
+                        summary += f"\n\n💡 To save for offline access, use `save_content=True`"
                         
                 elif 'application/json' in content_type:
                     try:
