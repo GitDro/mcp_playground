@@ -81,7 +81,7 @@ def _save_web_content(url: str, html_content: str) -> str:
             source_url=url
         )
         
-        return f"✅ Web content saved successfully!\n📝 Title: {page_title}\n🆔 ID: {doc_id}\n📁 File: {file_path}\n\nContent is now searchable and available offline."
+        return f"Title: {page_title}\nID: {doc_id}\nFile: {file_path}\nContent is now searchable and available offline."
         
     except Exception as e:
         return f"❌ Error saving web content: {str(e)}"
@@ -135,8 +135,8 @@ def register_web_tools(mcp: FastMCP):
         """
         Fetch and analyze webpage content with optional offline saving.
         
-        When user asks to "save" a URL or wants content "for later", set save_content=True.
-        When user just wants to "read" or "summarize", use save_content=False (default).
+        Set save_content=True when user wants to save, store, keep, or access content later.
+        Common phrases: "save this", "save the article", "save for later", "keep this link", etc.
         
         Args:
             url (str): Complete URL with http:// or https://
@@ -234,11 +234,11 @@ def register_web_tools(mcp: FastMCP):
                     if save_content:
                         try:
                             saved_result = _save_web_content(final_url, response.text)
-                            summary += f"\n\n🎉 **CONTENT SAVED SUCCESSFULLY!**\n{saved_result}"
+                            summary += f"\n\n**SAVED:** {saved_result}"
                         except Exception as e:
-                            summary += f"\n\n❌ **SAVE FAILED**: {str(e)}"
+                            summary += f"\n\n**SAVE FAILED:** {str(e)}"
                     else:
-                        summary += f"\n\n💡 To save for offline access, use `save_content=True`"
+                        summary += f"\n\nTo save for offline access, use `save_content=True`"
                         
                 elif 'application/json' in content_type:
                     try:
