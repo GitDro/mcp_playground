@@ -49,10 +49,15 @@ def register_document_tools(mcp):
                 file_path=file_path
             )
             
-            file_info = f"\nSaved to: {file_path}" if file_path else ""
-            tag_info = f"\nTags: {', '.join(tags)}" if tags else ""
+            file_info = f"\n- **Saved to:** `{file_path}`" if file_path else ""
+            tag_info = f"\n- **Tags:** {', '.join(tags)}" if tags else ""
             
-            return f"Note stored successfully!\nTitle: {title}\nID: {doc_id}{tag_info}{file_info}\n\nYour note is now searchable and will be suggested when relevant."
+            return f"""**Note stored successfully**
+
+- **Title:** {title}
+- **ID:** `{doc_id}`{tag_info}{file_info}
+
+*Your note is now searchable and will be suggested when relevant.*"""
             
         except Exception as e:
             logger.error(f"Error storing note: {e}")
