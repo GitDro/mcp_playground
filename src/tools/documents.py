@@ -57,10 +57,10 @@ def register_document_tools(mcp):
             logger.error(f"Error storing note: {e}")
             return f"❌ Failed to store note: {str(e)}"
     
-    @mcp.tool(description="Find saved documents and links by searching content")
+    @mcp.tool(description="Search and retrieve full content of saved documents")
     def find_saved(query: str, limit: int = 5, tags: Optional[List[str]] = None) -> str:
         """
-        Find saved documents by searching content. Use for finding specific saved content.
+        Search saved documents and return their full content. Use to find and read specific saved content.
         
         Args:
             query: What to search for
@@ -80,23 +80,27 @@ def register_document_tools(mcp):
                 tag_filter = f" with tags {tags}" if tags else ""
                 return f"🔍 No notes found matching '{query}'{tag_filter}.\n\nTry different keywords or check if you've stored relevant notes."
             
-            # Format results
-            response = f"🔍 Found {len(results)} note(s) matching '{query}':\n\n"
+            # Format results with full content
+            response = f"🔍 Found {len(results)} document(s) matching '{query}':\n\n"
             
             for i, doc in enumerate(results, 1):
                 relevance = doc['relevance_score']
                 relevance_emoji = "🎯" if relevance > 0.7 else "📌" if relevance > 0.5 else "📄"
                 
                 response += f"{relevance_emoji} **{doc['title']}** (relevance: {relevance:.0%})\n"
-                response += f"   📅 {doc['created_at'][:10] if doc['created_at'] else 'Unknown date'}"
+                response += f"📅 {doc['created_at'][:10] if doc['created_at'] else 'Unknown date'}"
                 
                 if doc['tags']:
                     response += f" | 🏷️ {', '.join(doc['tags'])}"
                 
-                response += f"\n   {doc['match_snippet']}\n"
-                response += f"   🆔 ID: {doc['id']}\n\n"
-            
-            response += "💡 Use search with more specific terms to narrow results."
+                if doc.get('source_url'):
+                    response += f" | 🔗 {doc['source_url']}"
+                
+                response += f"\n🆔 ID: {doc['id']}\n\n"
+                
+                # Show full content instead of just snippet
+                response += f"**Full Content:**\n{doc['content']}\n\n"
+                response += "---\n\n"
             return response
             
         except Exception as e:

@@ -568,7 +568,7 @@ with col2:
                     elif 'store_note' in tool_name:
                         purpose = "save notes"
                     elif 'find_saved' in tool_name:
-                        purpose = "search saved documents"
+                        purpose = "search & read documents"
                     elif 'list_saved' in tool_name:
                         purpose = "browse all documents"
                     elif 'get_tide_info' in tool_name:
