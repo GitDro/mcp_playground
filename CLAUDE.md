@@ -45,6 +45,23 @@ src/
 - **UI Descriptions**: Update tool display names in `app.py:535-581` (lines with `elif 'tool_name' in tool_name:` logic)
 - **Design Philosophy**: Use emojis extremely sparingly. Aesthetics should come from clean typography and simple yet elegant design, not endless emojis
 
+## Planned Refinements (Future Deep Dives)
+
+### App Architecture
+- **Consolidate app files**: Decide if we need both `app.py` and `app_subprocess.py` or standardize on one approach
+- **Tool registration system**: Create more systematic tool registration with automatic description generation
+- **Configuration management**: Centralize settings, constants, and configuration in dedicated config files
+
+### Code Quality
+- **Error handling patterns**: Standardize error handling across all tools with consistent formatting and user feedback
+- **Import optimization**: Systematic review and cleanup of unused imports across all modules
+- **Function naming**: Ensure consistent naming patterns and conventions throughout codebase
+
+### UI/UX Improvements
+- **Responsive design**: Ensure UI works well on different screen sizes and devices
+- **Loading states**: Add better loading indicators and progress feedback for long-running operations
+- **Error messaging**: Standardize error message formatting and make them more user-friendly
+
 ## Memory System
 
 ### Vector-Based Memory Architecture

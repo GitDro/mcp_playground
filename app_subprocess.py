@@ -242,7 +242,7 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
                     # YouTube functions are meant to be processed by LLM, not shown to user
                     show_function_results = []
                     for i, (func_name, result) in enumerate(zip(function_names, function_results)):
-                        if not func_name.startswith('summarize_youtube') and not func_name.startswith('query_youtube'):
+                        if not func_name.startswith('analyze_youtube_url'):
                             show_function_results.append(result)
                     
                     if show_function_results:
@@ -349,24 +349,36 @@ with col2:
                         purpose = "web search"
                     elif 'summarize_url' in tool_name:
                         purpose = "webpage summary"
-                    elif 'analyze_url' in tool_name:  # Legacy fallback
-                        purpose = "URL analysis"
+                    elif 'save_link' in tool_name:
+                        purpose = "save webpage content"
                     elif 'arxiv_search' in tool_name:
                         purpose = "academic papers"
-                    elif 'stock_price' in tool_name:
-                        purpose = "stock prices"
-                    elif 'stock_history' in tool_name:
-                        purpose = "stock history"
-                    elif 'crypto_price' in tool_name:
-                        purpose = "crypto prices"
-                    elif 'market_summary' in tool_name:
-                        purpose = "market overview"
-                    elif 'summarize_youtube' in tool_name:
-                        purpose = "YouTube summaries"
-                    elif 'query_youtube' in tool_name:
-                        purpose = "YouTube Q&A"
+                    elif 'get_stock_overview' in tool_name:
+                        purpose = "stock market data"
+                    elif 'analyze_youtube_url' in tool_name:
+                        purpose = "video analysis"
+                    elif 'get_weather' in tool_name:
+                        purpose = "weather forecast"
+                    elif 'remember' in tool_name:
+                        purpose = "store user info"
+                    elif 'recall' in tool_name:
+                        purpose = "retrieve memories"
+                    elif 'forget' in tool_name:
+                        purpose = "remove memories"
+                    elif 'store_note' in tool_name:
+                        purpose = "save notes"
+                    elif 'search_documents' in tool_name:
+                        purpose = "search documents by keyword"
+                    elif 'show_all_documents' in tool_name:
+                        purpose = "show ALL saved documents"
+                    elif 'get_tide_info' in tool_name:
+                        purpose = "tide information"
+                    elif 'get_toronto_crime' in tool_name:
+                        purpose = "crime statistics"
+                    elif 'analyze_canadian_economy' in tool_name:
+                        purpose = "economic analysis"
                     else:
-                        purpose = "tool"
+                        purpose = "specialized tool"
                     
                     # Add tree-like formatting with inline descriptions
                     if i == len(mcp_tools) - 1:
