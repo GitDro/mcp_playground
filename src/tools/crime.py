@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 def register_crime_tools(mcp: FastMCP):
     """Register crime-related tools with the MCP server"""
     
-    @mcp.tool(description="crime statistics")
+    @mcp.tool(description="Get Toronto neighbourhood crime statistics and trends")
     def get_toronto_crime(neighbourhood: str, crime_type: str = "assault") -> str:
         """Analyze public safety statistics for Toronto neighbourhoods using official Toronto Police Service data. This tool provides historical crime trends with visualization for community safety awareness and urban planning purposes.
         

@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def register_memory_tools(mcp):
     """Register streamlined memory tools with the FastMCP server"""
     
-    @mcp.tool(description="Store conversation context and user preferences")
+    @mcp.tool(description="Remember conversation context and user preferences")
     def remember(content: str) -> str:
         """
         Store conversation context and preferences. Use for ongoing chat context only.
@@ -48,7 +48,7 @@ def register_memory_tools(mcp):
             logger.error(f"Error in remember: {e}")
             return f"✗ Error storing information: {str(e)}"
     
-    @mcp.tool(description="Show stored conversation context and preferences")
+    @mcp.tool(description="Recall conversation context and user preferences")
     def recall(query: str) -> str:
         """
         Show stored conversation context and preferences in bullet points.
@@ -85,7 +85,7 @@ def register_memory_tools(mcp):
             logger.error(f"Error in recall: {e}")
             return f"✗ Error retrieving information: {str(e)}"
     
-    @mcp.tool(description="Remove conversation memory and preferences (DANGEROUS)")
+    @mcp.tool(description="Delete conversation memory and preferences")
     def forget(description: str) -> str:
         """
         DANGEROUS: Remove conversation memory and preferences.

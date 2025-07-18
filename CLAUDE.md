@@ -45,17 +45,32 @@ src/
 - **UI Descriptions**: Update tool display names in `app.py:535-581` (lines with `elif 'tool_name' in tool_name:` logic)
 - **Design Philosophy**: Use emojis extremely sparingly. Aesthetics should come from clean typography and simple yet elegant design, not endless emojis
 
-### What LLMs See for Tool Selection
-**IMPORTANT**: LLMs do NOT see the short `@mcp.tool(description="...")` text. They see:
-1. **Tool name** (e.g., `get_weather`, `remember`)
-2. **Full docstring** with Args/Returns sections
+### FastMCP Tool Description Best Practices
+**CRITICAL**: Tools without descriptions expose their full docstrings to LLMs, making them harder to parse and select correctly.
 
-**For optimal LLM selection:**
-- Use clear, intuitive tool names that match user language
-- Include proper Args sections in docstrings
-- Add clear boundaries between similar tools (e.g., `remember` vs `store_note`)
-- Include common user phrases in docstrings
-- The short description is only for UI display, not LLM selection
+**How Tool Descriptions Work:**
+- **`@mcp.tool`** (naked decorator) - LLM sees the full docstring as the description
+- **`@mcp.tool(description="short description")`** - LLM sees only the short description
+
+**PROBLEM**: Tools without descriptions expose their full docstrings to LLMs, making them harder to parse and select correctly.
+
+**Best Practices:**
+1. **Always use `@mcp.tool(description="...")`** with concise, clear descriptions
+2. **Write descriptions that match user language** - how users would ask for this functionality
+3. **Keep descriptions under 10-15 words** - LLMs process short descriptions better
+4. **Include key distinguishing features** - what makes this tool unique vs similar ones
+5. **Use action verbs** - "Search academic papers", "Get weather forecast", "Remember conversation context"
+6. **Avoid technical jargon** - write for the user, not the developer
+
+**Examples:**
+- Good: `@mcp.tool(description="Search academic papers on arXiv with PDF analysis")`
+- Bad: `@mcp.tool` (exposes full docstring to LLM)
+- Bad: `@mcp.tool(description="tool")` (too vague)
+
+**Tool Boundaries:**
+- **Memory tools** (`remember`, `recall`, `forget`) - Conversation context only
+- **Document tools** (`search_documents`, `show_all_documents`, `store_note`) - Permanent knowledge base
+- **Web tools** - `save_link` (saves content), `analyze_url` (analysis only)
 
 ## Planned Refinements (Future Deep Dives)
 

@@ -194,7 +194,7 @@ Paper text:
             logger.error(f"Error in structured LLM analysis: {e}")
             return None
     
-    @mcp.tool
+    @mcp.tool(description="Search academic papers on arXiv with PDF analysis")
     def arxiv_search(query: str, max_results: Optional[int] = 3) -> str:
         """Search arXiv database for academic papers and extract key insights including abstract, methodology, and conclusions. Returns detailed analysis of up to 10 papers (default: 3).
         
