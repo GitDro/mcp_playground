@@ -130,20 +130,18 @@ def register_web_tools(mcp: FastMCP):
         except Exception as e:
             return f"Error performing search: {str(e)}"
     
-    @mcp.tool(description="Summarize webpage content from URL, with optional saving for offline access")
-    def summarize_url(url: str, save_content: Union[bool, str] = False) -> str:
+    @mcp.tool(description="Analyze and summarize webpage content from any URL")
+    def summarize_url(url: str) -> str:
         """
-        Fetch and analyze webpage content with optional offline saving.
+        Analyze and summarize webpage content without saving.
         
-        Set save_content=True when user wants to save, store, keep, or access content later.
-        Common phrases: "save this", "save the article", "save for later", "keep this link", etc.
+        Use this to read and understand web content. For saving links, use save_link instead.
         
         Args:
             url (str): Complete URL with http:// or https://
-            save_content (bool): True to save content offline, False for summary only
         
         Returns:
-            str: Clean content preview with save confirmation if saved
+            str: Clean content summary and preview
         """
         try:
             import httpx
@@ -168,10 +166,6 @@ def register_web_tools(mcp: FastMCP):
             if not parsed.netloc:
                 return "❌ Error: Invalid URL format - missing domain"
             
-            # Handle string boolean parameters (common when called by LLM)
-            if isinstance(save_content, str):
-                save_content_lower = save_content.lower().strip()
-                save_content = save_content_lower in ('true', '1', 'yes', 'on', 'save')
             
             # Check for YouTube URLs
             if 'youtube.com' in parsed.netloc or 'youtu.be' in parsed.netloc:
@@ -200,9 +194,8 @@ def register_web_tools(mcp: FastMCP):
                 content_length = len(response.content)
                 final_url = str(response.url)
                 
-                # Build analysis summary with mode indicator
-                mode_indicator = "💾 **SAVING**" if save_content else "📖 **SUMMARY**"
-                summary = f"{mode_indicator} | {final_url}\n"
+                # Build analysis summary
+                summary = f"📖 **SUMMARY** | {final_url}\n"
                 if final_url != url:
                     summary += f"↳ Redirected from: {url}\n"
                 summary += f"`{content_type}` • {content_length:,} bytes\n\n"
@@ -230,15 +223,7 @@ def register_web_tools(mcp: FastMCP):
                     
                     summary += f"\n**Content Preview**:\n{preview_text}\n"
                     
-                    # Handle content saving
-                    if save_content:
-                        try:
-                            saved_result = _save_web_content(final_url, response.text)
-                            summary += f"\n\n**SAVED:** {saved_result}"
-                        except Exception as e:
-                            summary += f"\n\n**SAVE FAILED:** {str(e)}"
-                    else:
-                        summary += f"\n\nTo save for offline access, use `save_content=True`"
+                    summary += f"\n\nTo save this link, use the `save_link` tool."
                         
                 elif 'application/json' in content_type:
                     try:
@@ -249,15 +234,85 @@ def register_web_tools(mcp: FastMCP):
                         
                 elif content_type.startswith('image/'):
                     summary += f"**Note**: Image file detected ({content_type})\n"
-                    if save_content:
-                        summary += f"**Note**: Cannot save image content as markdown\n"
                         
                 else:
                     summary += f"**Note**: Non-HTML content type: {content_type}\n"
-                    if save_content:
-                        summary += f"**Note**: Cannot save {content_type} content as markdown\n"
                 
                 return summary
                 
         except Exception as e:
             return f"❌ Unexpected error analyzing URL: {str(e)}\n\nPlease check that the URL is valid and accessible."
+    
+    @mcp.tool(description="Save a link/URL for offline access and future reference")
+    def save_link(url: str, title: str = None) -> str:
+        """
+        Save a URL for offline access and future reference.
+        
+        Simple, direct URL saving without analysis. Use this when you just want to 
+        save a link for later without reading the content first.
+        
+        Args:
+            url (str): The URL to save (must include http:// or https://)
+            title (str): Optional custom title (auto-generated from page if not provided)
+        
+        Returns:
+            str: Save confirmation with details
+        """
+        try:
+            import httpx
+            from urllib.parse import urlparse
+            
+            # Input validation
+            if not url or not isinstance(url, str):
+                return "❌ Error: URL is required and must be a string"
+            
+            url = url.strip()
+            if not url:
+                return "❌ Error: URL cannot be empty"
+            
+            # Validate URL format
+            parsed = urlparse(url)
+            if not parsed.scheme:
+                return "❌ Error: URL must include protocol (http:// or https://)"
+            
+            if parsed.scheme not in ['http', 'https']:
+                return "❌ Error: Only HTTP and HTTPS URLs are supported"
+            
+            if not parsed.netloc:
+                return "❌ Error: Invalid URL format - missing domain"
+            
+            # Check for YouTube URLs
+            if 'youtube.com' in parsed.netloc or 'youtu.be' in parsed.netloc:
+                return "❌ Error: Use analyze_youtube_url tool for YouTube videos, not save_link"
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'Connection': 'keep-alive'
+            }
+            
+            with httpx.Client(follow_redirects=True) as client:
+                try:
+                    response = client.get(url, headers=headers, timeout=30)
+                    response.raise_for_status()
+                except httpx.TimeoutException:
+                    return f"❌ Error: Request timed out after 30 seconds. Site may be slow or unresponsive."
+                except httpx.ConnectError:
+                    return f"❌ Error: Could not connect to {parsed.netloc}. Check if the URL is correct."
+                except httpx.HTTPStatusError as e:
+                    return f"❌ Error: HTTP {e.response.status_code} - {e.response.reason_phrase}"
+                
+                final_url = str(response.url)
+                content_type = response.headers.get('content-type', 'unknown').split(';')[0]
+                
+                if 'text/html' in content_type:
+                    # Save the content using existing function
+                    saved_result = _save_web_content(final_url, response.text)
+                    return f"💾 **LINK SAVED**\n{saved_result}"
+                else:
+                    return f"❌ Error: Cannot save {content_type} content as markdown. Only HTML pages can be saved."
+                    
+        except Exception as e:
+            return f"❌ Unexpected error saving link: {str(e)}\n\nPlease check that the URL is valid and accessible."

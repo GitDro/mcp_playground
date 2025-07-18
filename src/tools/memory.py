@@ -82,46 +82,28 @@ def register_memory_tools(mcp):
             Relevant conversation context and preferences
         """
         try:
-            # For "what do you remember about me" queries, return all facts
-            query_lower = query.lower()
-            general_queries = ['about me', 'what do you know', 'what do you recall', 'tell me about myself', 
-                             'what do you remember', 'about this user']
+            # Get all stored facts and present them simply
+            all_facts = vector_memory_manager.get_all_facts()
+            preferences = vector_memory_manager.get_all_preferences()
             
-            if any(phrase in query_lower for phrase in general_queries):
-                # Return all stored information
-                all_facts = vector_memory_manager.get_all_facts()
-                preferences = vector_memory_manager.get_all_preferences()
-                
-                result_parts = []
-                
-                if all_facts:
-                    facts_text = "Stored information about you:\n"
-                    for fact in all_facts:
-                        facts_text += f"• {fact.content}\n"
-                    result_parts.append(facts_text.strip())
-                
-                if preferences:
-                    prefs_text = "Your preferences:\n"
-                    for key, value in preferences.items():
-                        prefs_text += f"• {key}: {value}\n"
-                    result_parts.append(prefs_text.strip())
-                
-                if not result_parts:
-                    return "I don't have any stored information about you yet."
-                
-                return "\n\n".join(result_parts)
+            result_parts = []
             
-            # For specific queries, use semantic search
-            facts = vector_memory_manager.retrieve_facts_semantic(query, limit=5)
+            if all_facts:
+                facts_text = "What I remember about you:\n"
+                for fact in all_facts:
+                    facts_text += f"• {fact.content}\n"
+                result_parts.append(facts_text.strip())
             
-            if not facts:
-                return f"No stored information found matching '{query}'."
+            if preferences:
+                prefs_text = "Your preferences:\n"
+                for key, value in preferences.items():
+                    prefs_text += f"• {key}: {value}\n"
+                result_parts.append(prefs_text.strip())
             
-            result_text = "Stored information:\n"
-            for fact in facts:
-                result_text += f"• {fact.content}\n"
+            if not result_parts:
+                return "I don't have any stored information about you yet."
             
-            return result_text.strip()
+            return "\n\n".join(result_parts)
             
         except Exception as e:
             logger.error(f"Error in recall: {e}")
