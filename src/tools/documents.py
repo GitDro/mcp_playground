@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 def register_document_tools(mcp):
     """Register simplified document management tools with the FastMCP server"""
     
-    @mcp.tool(description="Store personal notes and documents with semantic search")
+    @mcp.tool(description="Store notes and documents for permanent knowledge base")
     def store_note(title: str, content: str, tags: List[str] = None, save_to_file: bool = True) -> str:
         """
         Store personal notes, articles, and documents with semantic search. Use for long-term knowledge.
@@ -49,16 +49,21 @@ def register_document_tools(mcp):
                 file_path=file_path
             )
             
-            file_info = f"\nSaved to: {file_path}" if file_path else ""
-            tag_info = f"\nTags: {', '.join(tags)}" if tags else ""
+            file_info = f"\n- **Saved to:** `{file_path}`" if file_path else ""
+            tag_info = f"\n- **Tags:** {', '.join(tags)}" if tags else ""
             
-            return f"Note stored successfully!\nTitle: {title}\nID: {doc_id}{tag_info}{file_info}\n\nYour note is now searchable and will be suggested when relevant."
+            return f"""**Note stored successfully**
+
+- **Title:** {title}
+- **ID:** `{doc_id}`{tag_info}{file_info}
+
+*Your note is now searchable and will be suggested when relevant.*"""
             
         except Exception as e:
             logger.error(f"Error storing note: {e}")
             return f"Failed to store note: {str(e)}"
     
-    @mcp.tool(description="Search saved documents by topic/keyword and show full content")
+    @mcp.tool(description="Search documents and notes by topic with full content")
     def search_documents(query: str, limit: int = 5, tags: Optional[List[str]] = None) -> str:
         """
         Search saved documents by topic/keyword and return their full content. 
@@ -129,7 +134,7 @@ def register_document_tools(mcp):
             logger.error(f"Error searching notes: {e}")
             return f"Search failed: {str(e)}"
     
-    @mcp.tool(description="Show ALL saved documents with full content (chronological)")
+    @mcp.tool(description="List all saved documents chronologically")
     def show_all_documents(limit: Optional[int] = 20) -> str:
         """
         List ALL saved documents with full content, organized by date (newest first).

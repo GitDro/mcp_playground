@@ -208,7 +208,7 @@ def register_weather_tools(mcp: FastMCP):
             logger.error(f"Error formatting weather response: {e}")
             return f"Error formatting weather data: {str(e)}"
     
-    @mcp.tool
+    @mcp.tool(description="Get weather forecast with automatic IP location detection")
     def get_weather(location: Optional[str] = None) -> str:
         """Get current weather conditions and 7-day forecast.
         

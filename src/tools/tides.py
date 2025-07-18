@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 def register_tide_tools(mcp: FastMCP):
     """Register tide-related tools with the MCP server"""
     
-    @mcp.tool(description="tide information")
+    @mcp.tool(description="Get Canadian coastal tide times and heights")
     def get_tide_info(location: str, date: Optional[str] = None) -> str:
         """Get tide information (high/low times and heights) for Canadian coastal locations. Supports major ports like Halifax, Vancouver, St. Johns. Specify date as 'July 20 2024', 'tomorrow', or leave blank for today. Returns formatted table with times and heights.
         
@@ -33,7 +33,7 @@ def register_tide_tools(mcp: FastMCP):
             # Find the station ID for the location
             station_info = _find_station(location_normalized)
             if not station_info:
-                return f"❌ No tide station found for '{location}'. Try locations like Halifax, Vancouver, St. Johns, or other major Canadian coastal cities."
+                return f"No tide station found for '{location}'. Try locations like Halifax, Vancouver, St. Johns, or other major Canadian coastal cities."
             
             station_id = station_info['id']
             station_name = station_info['name']
@@ -41,7 +41,7 @@ def register_tide_tools(mcp: FastMCP):
             # Parse the date
             target_date = _parse_date(date)
             if not target_date:
-                return f"❌ Could not parse date '{date}'. Try formats like 'July 20 2024', '2024-07-20', 'tomorrow', or leave blank for today."
+                return f"Could not parse date '{date}'. Try formats like 'July 20 2024', '2024-07-20', 'tomorrow', or leave blank for today."
             
             # Format date range for API (get the full day)
             start_date = target_date.strftime('%Y-%m-%dT00:00:00Z')
@@ -57,11 +57,11 @@ def register_tide_tools(mcp: FastMCP):
             
             response = requests.get(api_url, params=params, timeout=10)
             if response.status_code != 200:
-                return f"❌ Could not retrieve tide data for {station_name}. API returned status {response.status_code}."
+                return f"Could not retrieve tide data for {station_name}. API returned status {response.status_code}."
             
             tide_data = response.json()
             if not tide_data:
-                return f"❌ No tide data available for {station_name} on {target_date.strftime('%B %d, %Y')}."
+                return f"No tide data available for {station_name} on {target_date.strftime('%B %d, %Y')}."
             
             # Format the response
             formatted_result = _format_tide_data(station_name, target_date, tide_data)
@@ -69,7 +69,7 @@ def register_tide_tools(mcp: FastMCP):
             
         except Exception as e:
             logger.error(f"Error getting tide info: {e}")
-            return f"❌ Error retrieving tide information: {str(e)}"
+            return f"Error retrieving tide information: {str(e)}"
 
 
 def _find_station(location: str) -> Optional[Dict]:
@@ -152,21 +152,27 @@ def _parse_date(date_str: Optional[str]) -> Optional[datetime]:
 
 
 def _format_tide_data(station_name: str, date: datetime, tide_data: List[Dict]) -> str:
-    """Format tide data into a nice markdown table with emojis"""
+    """Format tide data into a clean markdown table with height visualization"""
     try:
         # Sort tide data by time
         sorted_tides = sorted(tide_data, key=lambda x: x['eventDate'])
         
         # Build the header
         date_str = date.strftime('%B %d, %Y')
-        result = f"🌊 **{station_name} Tides - {date_str}**\n\n"
+        result = f"**{station_name} Tides - {date_str}**\n\n"
         
         if not sorted_tides:
             return result + "No tide data available for this date."
         
+        # Find min/max heights for visualization scaling
+        heights = [float(tide['value']) for tide in sorted_tides]
+        min_height = min(heights)
+        max_height = max(heights)
+        height_range = max_height - min_height
+        
         # Build the table
-        result += "| Time | Type | Height |\n"
-        result += "|------|------|--------|\n"
+        result += "| Time | Type | Height | Level |\n"
+        result += "|------|------|--------|-------|\n"
         
         # Use UTC current time for comparison with tide times
         from datetime import timezone
@@ -181,19 +187,27 @@ def _format_tide_data(station_name: str, date: datetime, tide_data: List[Dict]) 
             # Convert to local time (assuming user is in same timezone as station)
             local_time = event_time.strftime('%I:%M %p').lstrip('0')
             
-            # Determine tide type and emoji based on height
-            if height > 1.5:
-                tide_emoji = "🌊"
-                tide_type = "High Tide"
-            elif height > 0.5:
-                tide_emoji = "🌀"
-                tide_type = "Medium Tide"
+            # Determine tide type based on height
+            if height > (min_height + height_range * 0.7):
+                tide_type = "High"
+            elif height > (min_height + height_range * 0.3):
+                tide_type = "Mid"
             else:
-                tide_emoji = "🏖️"
-                tide_type = "Low Tide"
+                tide_type = "Low"
+            
+            # Create clean height visualization with bars
+            if height_range > 0:
+                # Normalize height to 0-1 range
+                normalized_height = (height - min_height) / height_range
+                # Create a bar representation using block characters
+                bar_length = int(normalized_height * 10)
+                bar = "█" * bar_length + "░" * (10 - bar_length)
+                height_viz = f"`{bar}`"
+            else:
+                height_viz = "`██████████`"
             
             # Add to table
-            result += f"| {local_time} | {tide_emoji} {tide_type} | {height:.2f}m |\n"
+            result += f"| {local_time} | {tide_type} | {height:.2f}m | {height_viz} |\n"
             
             # Track next tide
             if event_time > current_time and not next_tide:
@@ -220,4 +234,4 @@ def _format_tide_data(station_name: str, date: datetime, tide_data: List[Dict]) 
         
     except Exception as e:
         logger.error(f"Error formatting tide data: {e}")
-        return f"❌ Error formatting tide data: {str(e)}"
+        return f"Error formatting tide data: {str(e)}"

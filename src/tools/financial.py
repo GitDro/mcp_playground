@@ -20,7 +20,7 @@ YAHOO_HEADERS = {
 def register_financial_tools(mcp: FastMCP):
     """Register financial-related tools with the MCP server"""
     
-    @mcp.tool(description="stock market data")
+    @mcp.tool(description="Get comprehensive stock, crypto, and market data")
     def get_stock_overview(symbol: str) -> str:
         """Get comprehensive stock market data for any asset - stocks (AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA), crypto (BTC, ETH), or market indices (SPY, QQQ). Shows current price, daily change, volume, 1-month performance, and trend visualization.
         
