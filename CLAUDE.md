@@ -42,6 +42,7 @@ src/
 - Add to appropriate `src/tools/` module or create new category
 - Register in `src/server.py` with `@mcp.tool` decorator
 - Tools automatically generate schemas from Python type hints
+- **UI Descriptions**: Update tool display names in `app.py:535-581` (lines with `elif 'tool_name' in tool_name:` logic)
 
 ## Memory System
 

@@ -567,16 +567,20 @@ with col2:
                         purpose = "remove memories"
                     elif 'store_note' in tool_name:
                         purpose = "save notes"
-                    elif 'search_notes' in tool_name:
-                        purpose = "find notes"
-                    elif 'list_notes' in tool_name:
-                        purpose = "list notes"
+                    elif 'find_saved' in tool_name:
+                        purpose = "search saved documents"
+                    elif 'list_saved' in tool_name:
+                        purpose = "browse all documents"
                     elif 'get_tide_info' in tool_name:
                         purpose = "tide information"
                     elif 'get_toronto_crime' in tool_name:
                         purpose = "crime statistics"
                     elif 'analyze_canadian_economy' in tool_name:
                         purpose = "economic analysis"
+                    elif 'save_link' in tool_name:
+                        purpose = "save webpage content"
+                    elif 'clean_duplicates' in tool_name:
+                        purpose = "find duplicate content"
                     else:
                         purpose = "tool"
                     
