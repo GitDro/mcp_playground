@@ -18,20 +18,20 @@ def register_memory_tools(mcp):
     @mcp.tool
     def remember(content: str) -> str:
         """
-        Store important information about the user for future conversations.
+        Store conversation context and user preferences for this session.
         
-        Use this tool when the user shares personal information, preferences,
-        work details, or anything else that should be remembered. The system
-        will automatically categorize the information appropriately.
+        Use ONLY for conversational facts and preferences that help with ongoing chat.
+        DO NOT use for saved articles, links, documents, or permanent notes.
         
-        Examples:
-        - "User prefers concise responses" (preference)
-        - "User works as a software engineer at OpenAI" (work)
-        - "User lives in Toronto" (personal)
-        - "User's favorite programming language is Python" (preference)
+        For saved links/articles: Use list_notes, search_notes, store_note instead.
+        
+        Examples of what to remember here:
+        - "User prefers concise responses" (conversation preference)
+        - "User is working on a Python project today" (current context)
+        - "User's communication style is direct" (conversation preference)
         
         Args:
-            content: The information to remember about the user
+            content: Conversation context or preference to remember
         
         Returns:
             Success message confirming what was stored
@@ -63,25 +63,23 @@ def register_memory_tools(mcp):
     @mcp.tool
     def recall(query: str) -> str:
         """
-        Search memory for specific information about the user.
+        Search conversation memory for context and preferences.
         
-        Use this tool when the user explicitly asks you to search memory
-        or when you need to find specific stored information.
+        Use ONLY for recalling conversation context and user preferences.
+        DO NOT use for finding saved articles, links, or documents.
         
-        Note: For "What do you remember about me?" queries, the memory system
-        automatically provides stored facts in conversation context, so this
-        tool may not be needed in those cases.
+        For saved links/articles: Use list_notes or search_notes instead.
         
-        Examples:
-        - When user asks: "What do you remember about my work?"
-        - When user asks: "What did we discuss about machine learning?"
-        - For specific searches of stored facts and preferences
+        Examples of when to use this:
+        - "What do you remember about me?" (conversation preferences)
+        - "What communication style do I prefer?" (session context)
+        - "What did we discuss about my current project?" (conversation memory)
         
         Args:
-            query: What to search for in memory
+            query: What conversation context to search for
         
         Returns:
-            Relevant stored information matching the query
+            Relevant conversation context and preferences
         """
         try:
             # For "what do you remember about me" queries, return all facts
@@ -132,25 +130,56 @@ def register_memory_tools(mcp):
     @mcp.tool
     def forget(description: str) -> str:
         """
-        Remove information from memory based on a description.
+        DANGEROUS: Remove conversation memory and preferences.
         
-        Use this tool only when the user explicitly asks to forget specific
-        information. Provide a description of what to forget rather than
-        technical IDs.
+        WARNING: This permanently deletes information. Use with extreme caution.
+        ONLY use when user explicitly and clearly requests deletion.
+        NEVER use this tool automatically or based on unclear requests.
         
-        Examples:
-        - "forget my work details"
-        - "remove information about my location"
-        - "delete my preference for concise responses"
+        For deleting saved documents/articles: Use document management tools instead.
+        
+        Confirmation required: Always confirm what will be deleted before proceeding.
+        
+        Examples of valid requests:
+        - User says: "Please forget my communication preferences"
+        - User says: "Delete my work information from memory"
         
         Args:
-            description: Description of what information to remove
+            description: Specific description of what conversation memory to remove
         
         Returns:
             Success message indicating what was removed
         """
         try:
-            # Use vector memory manager to forget facts
+            # Safety check: require explicit confirmation words
+            description_lower = description.lower()
+            confirmation_words = ['forget', 'remove', 'delete', 'clear']
+            if not any(word in description_lower for word in confirmation_words):
+                return f"⚠️ SAFETY: Deletion requires explicit confirmation. Please include words like 'forget', 'remove', or 'delete' in your request.\nExample: 'forget my work information'"
+            
+            # First, show what would be deleted (dry run)
+            matching_facts = vector_memory_manager.retrieve_facts_semantic(description, limit=10, min_similarity=0.3)
+            potential_deletions = []
+            
+            for fact in matching_facts:
+                if any(word in fact.content.lower() for word in description.lower().split()):
+                    preview = fact.content[:100] + "..." if len(fact.content) > 100 else fact.content
+                    potential_deletions.append(preview)
+            
+            if not potential_deletions:
+                return f"No matching information found for: {description}"
+            
+            # Show what would be deleted and require confirmation
+            if len(potential_deletions) > 1:
+                preview_text = f"⚠️ WARNING: This will permanently delete {len(potential_deletions)} items:\n"
+                for i, item in enumerate(potential_deletions[:3], 1):  # Show first 3
+                    preview_text += f"{i}. {item}\n"
+                if len(potential_deletions) > 3:
+                    preview_text += f"... and {len(potential_deletions) - 3} more items\n"
+                preview_text += f"\nTo confirm deletion, user must explicitly say 'yes, delete these memories' or similar."
+                return preview_text
+            
+            # For single item, proceed with deletion
             success, removed_items = vector_memory_manager.forget_fact(description)
             
             if success and removed_items:

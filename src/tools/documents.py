@@ -69,20 +69,24 @@ def register_document_tools(mcp):
     @mcp.tool
     def search_notes(query: str, limit: int = 5, tags: List[str] = None) -> str:
         """
-        Search your stored notes using semantic similarity.
+        Search your saved documents, articles, and notes.
         
-        Finds notes based on meaning, not just keywords. Perfect for finding
-        that note about "house size" when you search for "room dimensions".
+        Use this for finding saved links, articles, documents, and personal notes.
+        DO NOT use memory tools (recall) for this - they are for conversation context only.
         
-        Searches across all stored notes including manually edited files.
+        Perfect for queries like:
+        - "show me that article about AI"
+        - "find my saved links"
+        - "search for documents about Python"
+        - "what links do I have saved"
         
         Args:
-            query: What you're looking for (e.g., "medication schedule", "house measurements")
+            query: What to search for in your saved documents
             limit: Maximum number of results to return (default: 5)
             tags: Filter by specific tags
         
         Returns:
-            Formatted list of matching notes with relevance scores
+            Your saved documents matching the search
         """
         try:
             # Search documents using vector similarity
@@ -123,16 +127,21 @@ def register_document_tools(mcp):
     @mcp.tool
     def list_notes(limit: Optional[int] = 20) -> str:
         """
-        List all your stored notes.
+        List all your saved documents, articles, and notes.
         
-        Shows both notes created with store_note() and any manually added 
-        markdown files in the documents folder.
+        Use this to see all saved links, articles, documents, and personal notes.
+        DO NOT use memory tools (recall) for this - they are for conversation context only.
+        
+        Perfect for queries like:
+        - "show me all my saved links"
+        - "what documents do I have"
+        - "list my saved articles"
         
         Args:
-            limit: Maximum number of notes to show
+            limit: Maximum number of documents to show
         
         Returns:
-            Formatted list of all notes
+            Complete list of your saved documents and notes
         """
         try:
             # Handle None limit
