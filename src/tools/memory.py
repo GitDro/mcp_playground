@@ -15,26 +15,13 @@ logger = logging.getLogger(__name__)
 def register_memory_tools(mcp):
     """Register streamlined memory tools with the FastMCP server"""
     
-    @mcp.tool
+    @mcp.tool(description="Store conversation context and user preferences")
     def remember(content: str) -> str:
         """
-        Store conversation context and user preferences for this session.
-        
-        Use ONLY for conversational facts and preferences that help with ongoing chat.
-        DO NOT use for saved articles, links, documents, or permanent notes.
-        
-        For saved links/articles: Use list_notes, search_notes, store_note instead.
-        
-        Examples of what to remember here:
-        - "User prefers concise responses" (conversation preference)
-        - "User is working on a Python project today" (current context)
-        - "User's communication style is direct" (conversation preference)
+        Store conversation context and preferences. Use for ongoing chat context only.
         
         Args:
             content: Conversation context or preference to remember
-        
-        Returns:
-            Success message confirming what was stored
         """
         try:
             # Auto-categorize based content keywords
@@ -60,26 +47,13 @@ def register_memory_tools(mcp):
             logger.error(f"Error in remember: {e}")
             return f"✗ Error storing information: {str(e)}"
     
-    @mcp.tool
+    @mcp.tool(description="Show stored conversation context and preferences")
     def recall(query: str) -> str:
         """
-        Search conversation memory for context and preferences.
-        
-        Use ONLY for recalling conversation context and user preferences.
-        DO NOT use for finding saved articles, links, or documents.
-        
-        For saved links/articles: Use list_notes or search_notes instead.
-        
-        Examples of when to use this:
-        - "What do you remember about me?" (conversation preferences)
-        - "What communication style do I prefer?" (session context)
-        - "What did we discuss about my current project?" (conversation memory)
+        Show stored conversation context and preferences in bullet points.
         
         Args:
-            query: What conversation context to search for
-        
-        Returns:
-            Relevant conversation context and preferences
+            query: What to recall (typically "what do you remember about me")
         """
         try:
             # Get all stored facts and present them simply
@@ -109,7 +83,7 @@ def register_memory_tools(mcp):
             logger.error(f"Error in recall: {e}")
             return f"✗ Error retrieving information: {str(e)}"
     
-    @mcp.tool
+    @mcp.tool(description="Remove conversation memory and preferences (DANGEROUS)")
     def forget(description: str) -> str:
         """
         DANGEROUS: Remove conversation memory and preferences.

@@ -26,8 +26,9 @@ src/
 │   ├── models.py         # Pydantic models
 │   └── utils.py          # General utilities
 ├── tools/
-│   ├── memory.py         # 3 streamlined memory tools
-│   ├── web.py            # web_search, summarize_url
+│   ├── memory.py         # remember, recall, forget (conversation context)
+│   ├── documents.py      # store_note, find_saved, list_saved, clean_duplicates
+│   ├── web.py            # web_search, summarize_url, save_link
 │   ├── arxiv.py          # arxiv_search + paper analysis
 │   ├── financial.py      # stock/crypto/market tools
 │   ├── youtube.py        # YouTube analysis tools
@@ -56,6 +57,23 @@ src/
 - Local & private (no external API calls)
 - Foundation for future document RAG
 
+## Simplified Workflows
+
+### Knowledge Base Building
+1. **Save Content**: `save_link(url)` - Saves full webpage content with clean formatting
+2. **Find Content**: `find_saved("topic")` - Semantic search across saved content
+3. **Browse All**: `list_saved()` - See everything you've saved, organized by date
+
+### URL Management
+- **`save_link`** - Direct URL saving with full content extraction
+- **`summarize_url`** - Analysis only, no saving
+- **Auto-deduplication** - Prevents saving same URL twice
+
+### Memory vs Documents
+- **Memory tools** (`remember`, `recall`, `forget`) - Conversation context only
+- **Document tools** (`find_saved`, `list_saved`, `store_note`) - Permanent knowledge base
+- **Clear boundaries** - No more tool selection confusion
+
 ## Tool Categories
 
 ### Data Analysis & Research
@@ -66,9 +84,11 @@ src/
 - **Weather Data**: Location-based forecasts (IP/city/coordinates)
 - **Tide Information**: Canadian coastal tide times and heights
 
-### Content Analysis
+### Content Analysis & Document Management
+- **Document Storage**: `store_note`, `find_saved`, `list_saved` with semantic search
+- **Web Content**: URL saving (`save_link`) and analysis (`summarize_url`)
 - **YouTube Enhancement**: Adaptive transcription for 2-3 hour videos
-- **Web Analysis**: URL content extraction and summarization
+- **Duplicate Prevention**: Automatic deduplication of saved content
 - **Context Scaling**: 24K+ tokens (96K+ characters) by default
 
 ### Data Visualization

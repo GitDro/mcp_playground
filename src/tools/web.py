@@ -96,7 +96,7 @@ def _save_web_content(url: str, html_content: str) -> str:
 def register_web_tools(mcp: FastMCP):
     """Register web-related tools with the MCP server"""
     
-    @mcp.tool(description="Search the web using DuckDuckGo with rate limiting protection")
+    @mcp.tool(description="Search web for current information using DuckDuckGo")
     def web_search(query: str, max_results: int = 5) -> str:
         """Search the web using DuckDuckGo and return current information with titles, URLs, and summaries. Returns up to 10 results (default: 5). Uses timeout configuration for reliability."""
         try:
@@ -136,18 +136,13 @@ def register_web_tools(mcp: FastMCP):
         except Exception as e:
             return f"Error performing search: {str(e)}"
     
-    @mcp.tool(description="Analyze and summarize webpage content from any URL")
+    @mcp.tool(description="Analyze and summarize webpage content without saving")
     def summarize_url(url: str) -> str:
         """
-        Analyze and summarize webpage content without saving.
-        
-        Use this to read and understand web content. For saving links, use save_link instead.
+        Analyze webpage content without saving. Use save_link to save content.
         
         Args:
-            url (str): Complete URL with http:// or https://
-        
-        Returns:
-            str: Clean content summary and preview
+            url: Complete URL with http:// or https://
         """
         try:
             import httpx
@@ -249,20 +244,14 @@ def register_web_tools(mcp: FastMCP):
         except Exception as e:
             return f"❌ Unexpected error analyzing URL: {str(e)}\n\nPlease check that the URL is valid and accessible."
     
-    @mcp.tool(description="Save a link/URL for offline access and future reference")
+    @mcp.tool(description="Save webpage content for offline access and knowledge building")
     def save_link(url: str, title: str = None) -> str:
         """
-        Save a URL for offline access and future reference.
-        
-        Simple, direct URL saving without analysis. Use this when you just want to 
-        save a link for later without reading the content first.
+        Save webpage content for offline access and knowledge building.
         
         Args:
-            url (str): The URL to save (must include http:// or https://)
-            title (str): Optional custom title (auto-generated from page if not provided)
-        
-        Returns:
-            str: Save confirmation with details
+            url: URL to save (must include http:// or https://)
+            title: Optional custom title (auto-generated if not provided)
         """
         try:
             import httpx

@@ -16,25 +16,16 @@ logger = logging.getLogger(__name__)
 def register_document_tools(mcp):
     """Register simplified document management tools with the FastMCP server"""
     
-    @mcp.tool
+    @mcp.tool(description="Store personal notes and documents with semantic search")
     def store_note(title: str, content: str, tags: List[str] = None, save_to_file: bool = True) -> str:
         """
-        Store a personal note locally with semantic search capabilities.
-        
-        Perfect for private information like house measurements, medication details,
-        personal reminders, or any sensitive data you want to keep local and private.
-        
-        Files are automatically saved to ~/.cache/mcp_playground/documents/notes/ 
-        and can be manually edited - changes will be detected and re-indexed.
+        Store personal notes with semantic search. Files saved to documents/notes/.
         
         Args:
-            title: Title of the note
-            content: The note content (supports markdown)
-            tags: Optional tags for organization (e.g., ["personal", "health", "home"])
-            save_to_file: Whether to save as a markdown file (default: True)
-        
-        Returns:
-            Success message with document ID
+            title: Note title
+            content: Note content (supports markdown)
+            tags: Optional tags for organization
+            save_to_file: Save as markdown file (default: True)
         """
         try:
             # Determine file path if saving to file
@@ -66,25 +57,15 @@ def register_document_tools(mcp):
             logger.error(f"Error storing note: {e}")
             return f"❌ Failed to store note: {str(e)}"
     
-    @mcp.tool
+    @mcp.tool(description="Find saved documents and links by searching content")
     def find_saved(query: str, limit: int = 5, tags: Optional[List[str]] = None) -> str:
         """
-        Find saved documents, articles, and links by searching.
-        
-        Use this when you want to find specific saved content by searching for keywords.
-        
-        Perfect for queries like:
-        - "find that article about AI"
-        - "search for Python tutorials I saved"  
-        - "show me documents about machine learning"
+        Find saved documents by searching content. Use for finding specific saved content.
         
         Args:
-            query: What to search for in your saved documents
-            limit: Maximum number of results to return (default: 5)
-            tags: Filter by specific tags
-        
-        Returns:
-            Your saved documents matching the search
+            query: What to search for
+            limit: Maximum results (default: 5)
+            tags: Filter by tags
         """
         try:
             # Search documents using vector similarity
@@ -122,23 +103,13 @@ def register_document_tools(mcp):
             logger.error(f"Error searching notes: {e}")
             return f"❌ Search failed: {str(e)}"
     
-    @mcp.tool
+    @mcp.tool(description="List all saved documents, articles, and links")
     def list_saved(limit: Optional[int] = 20) -> str:
         """
-        List all your saved documents, articles, and links.
-        
-        Use this to see everything you've saved, organized by date.
-        
-        Perfect for queries like:
-        - "show me all my saved content"
-        - "what do I have saved"
-        - "list everything I've saved"
+        List all saved documents, organized by date.
         
         Args:
-            limit: Maximum number of documents to show
-        
-        Returns:
-            Complete list of your saved documents and notes
+            limit: Maximum documents to show
         """
         try:
             # Handle None limit
@@ -177,7 +148,7 @@ def register_document_tools(mcp):
             logger.error(f"Error listing notes: {e}")
             return f"❌ Failed to list notes: {str(e)}"
     
-    @mcp.tool
+    @mcp.tool(description="Clean up duplicate documents and saved content")
     def clean_duplicates() -> str:
         """
         Remove duplicate documents based on content similarity.
