@@ -43,6 +43,7 @@ src/
 - Register in `src/server.py` with `@mcp.tool` decorator
 - Tools automatically generate schemas from Python type hints
 - **UI Descriptions**: Update tool display names in `app.py:535-581` (lines with `elif 'tool_name' in tool_name:` logic)
+- **Design Philosophy**: Use emojis extremely sparingly. Aesthetics should come from clean typography and simple yet elegant design, not endless emojis
 
 ## Memory System
 

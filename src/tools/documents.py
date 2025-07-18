@@ -48,14 +48,14 @@ def register_document_tools(mcp):
                 file_path=file_path
             )
             
-            file_info = f"\n📁 Saved to: {file_path}" if file_path else ""
-            tag_info = f"\n🏷️ Tags: {', '.join(tags)}" if tags else ""
+            file_info = f"\nSaved to: {file_path}" if file_path else ""
+            tag_info = f"\nTags: {', '.join(tags)}" if tags else ""
             
-            return f"✅ Note stored successfully!\n📝 Title: {title}\n🆔 ID: {doc_id}{tag_info}{file_info}\n\nYour note is now searchable and will be suggested when relevant."
+            return f"Note stored successfully!\nTitle: {title}\nID: {doc_id}{tag_info}{file_info}\n\nYour note is now searchable and will be suggested when relevant."
             
         except Exception as e:
             logger.error(f"Error storing note: {e}")
-            return f"❌ Failed to store note: {str(e)}"
+            return f"Failed to store note: {str(e)}"
     
     @mcp.tool(description="Search saved documents by topic/keyword and show full content")
     def search_documents(query: str, limit: int = 5, tags: Optional[List[str]] = None) -> str:
@@ -79,34 +79,53 @@ def register_document_tools(mcp):
             
             if not results:
                 tag_filter = f" with tags {tags}" if tags else ""
-                return f"🔍 No notes found matching '{query}'{tag_filter}.\n\nTry different keywords or check if you've stored relevant notes."
+                return f"No documents found matching '{query}'{tag_filter}.\n\nTry different keywords or check if you've stored relevant documents."
             
-            # Format results with full content
-            response = f"🔍 Found {len(results)} document(s) matching '{query}':\n\n"
+            # Format results with clean excerpts
+            response = f"Found {len(results)} document(s) matching '{query}':\n\n"
             
             for i, doc in enumerate(results, 1):
                 relevance = doc['relevance_score']
-                relevance_emoji = "🎯" if relevance > 0.7 else "📌" if relevance > 0.5 else "📄"
                 
-                response += f"{relevance_emoji} **{doc['title']}** (relevance: {relevance:.0%})\n"
-                response += f"📅 {doc['created_at'][:10] if doc['created_at'] else 'Unknown date'}"
+                response += f"**{doc['title']}** (relevance: {relevance:.0%})\n"
+                response += f"{doc['created_at'][:10] if doc['created_at'] else 'Unknown date'}"
+                
+                # Add domain from URL if available
+                if doc.get('source_url'):
+                    from urllib.parse import urlparse
+                    try:
+                        domain = urlparse(doc['source_url']).netloc.replace('www.', '')
+                        response += f" | {domain}"
+                    except:
+                        pass
                 
                 if doc['tags']:
-                    response += f" | 🏷️ {', '.join(doc['tags'])}"
+                    response += f" | {', '.join(doc['tags'])}"
                 
-                if doc.get('source_url'):
-                    response += f" | 🔗 {doc['source_url']}"
+                response += f"\nID: {doc['id']}\n"
                 
-                response += f"\n🆔 ID: {doc['id']}\n\n"
+                # Generate summary
+                content = doc['content']
+                sentences = content.replace('\n', ' ').split('. ')
+                summary = '. '.join(sentences[:2])[:200]
+                if len(summary) < len(content):
+                    summary += "..."
                 
-                # Show full content instead of just snippet
-                response += f"**Full Content:**\n{doc['content']}\n\n"
-                response += "---\n\n"
+                response += f"Summary: {summary}\n"
+                
+                # Show relevant excerpt from match_snippet
+                if doc.get('match_snippet'):
+                    excerpt = doc['match_snippet'][:300]
+                    if len(doc['match_snippet']) > 300:
+                        excerpt += "..."
+                    response += f"Relevant excerpt: \"{excerpt}\"\n"
+                
+                response += "\n"
             return response
             
         except Exception as e:
             logger.error(f"Error searching notes: {e}")
-            return f"❌ Search failed: {str(e)}"
+            return f"Search failed: {str(e)}"
     
     @mcp.tool(description="Show ALL saved documents with full content (chronological)")
     def show_all_documents(limit: Optional[int] = 20) -> str:
@@ -125,35 +144,46 @@ def register_document_tools(mcp):
             documents = vector_memory_manager.get_all_documents()
             
             if not documents:
-                return f"📝 No notes found.\n\nUse `store_note()` to create your first note!"
+                return f"No documents found.\n\nUse store_note() to create your first document!"
             
             # Sort by creation date (newest first)
             documents.sort(key=lambda x: x.get('created_at', ''), reverse=True)
             documents = documents[:limit]
             
-            response = f"📚 Your Saved Documents ({len(documents)} shown):\n\n"
+            response = f"Your Saved Documents ({len(documents)} total):\n\n"
             
             for doc in documents:
-                response += f"📝 **{doc['title']}**\n"
-                response += f"📅 {doc['created_at'][:10] if doc['created_at'] else 'Unknown date'}"
+                response += f"**{doc['title']}**\n"
+                response += f"{doc['created_at'][:10] if doc['created_at'] else 'Unknown date'}"
+                
+                # Add domain from URL if available
+                if doc.get('source_url'):
+                    from urllib.parse import urlparse
+                    try:
+                        domain = urlparse(doc['source_url']).netloc.replace('www.', '')
+                        response += f" | {domain}"
+                    except:
+                        pass
                 
                 if doc['tags']:
-                    response += f" | 🏷️ {', '.join(doc['tags'])}"
+                    response += f" | {', '.join(doc['tags'])}"
                 
-                if doc.get('source_url'):
-                    response += f" | 🔗 {doc['source_url']}"
+                response += f"\nID: {doc['id']}\n"
                 
-                response += f"\n🆔 {doc['id']}\n\n"
+                # Generate clean summary (first 2-3 sentences)
+                content = doc['content']
+                sentences = content.replace('\n', ' ').split('. ')
+                summary = '. '.join(sentences[:3])[:300]
+                if len(summary) < len(content):
+                    summary += "..."
                 
-                # Show full content instead of useless preview
-                response += f"**Full Content:**\n{doc['content']}\n\n"
-                response += "---\n\n"
+                response += f"Summary: {summary}\n\n"
             
             return response
             
         except Exception as e:
             logger.error(f"Error listing notes: {e}")
-            return f"❌ Failed to list notes: {str(e)}"
+            return f"Failed to list documents: {str(e)}"
     
     def _find_duplicates(self) -> List[str]:
         """
