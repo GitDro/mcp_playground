@@ -27,7 +27,7 @@ src/
 │   └── utils.py          # General utilities
 ├── tools/
 │   ├── memory.py         # remember, recall, forget (conversation context)
-│   ├── documents.py      # store_note, find_saved, list_saved, clean_duplicates
+│   ├── documents.py      # store_note, find_saved, list_saved (automatic deduplication)
 │   ├── web.py            # web_search, summarize_url, save_link
 │   ├── arxiv.py          # arxiv_search + paper analysis
 │   ├── financial.py      # stock/crypto/market tools
@@ -68,7 +68,7 @@ src/
 ### URL Management
 - **`save_link`** - Direct URL saving with full content extraction
 - **`summarize_url`** - Analysis only, no saving
-- **Auto-deduplication** - Prevents saving same URL twice
+- **Auto-deduplication** - Automatically prevents saving duplicate URLs or identical content
 
 ### Memory vs Documents
 - **Memory tools** (`remember`, `recall`, `forget`) - Conversation context only
@@ -89,7 +89,7 @@ src/
 - **Document Storage**: `store_note`, `find_saved`, `list_saved` with semantic search
 - **Web Content**: URL saving (`save_link`) and analysis (`summarize_url`)
 - **YouTube Enhancement**: Adaptive transcription for 2-3 hour videos
-- **Duplicate Prevention**: Automatic deduplication of saved content
+- **Automatic Deduplication**: Prevents duplicate URLs and identical content without user intervention
 - **Context Scaling**: 24K+ tokens (96K+ characters) by default
 
 ### Data Visualization

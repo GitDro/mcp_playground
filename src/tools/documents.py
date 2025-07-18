@@ -148,22 +148,16 @@ def register_document_tools(mcp):
             logger.error(f"Error listing notes: {e}")
             return f"❌ Failed to list notes: {str(e)}"
     
-    @mcp.tool(description="Clean up duplicate documents and saved content")
-    def clean_duplicates() -> str:
+    def _find_duplicates(self) -> List[str]:
         """
-        Remove duplicate documents based on content similarity.
-        
-        Identifies and removes documents with identical URLs or very similar content.
-        Use this to clean up your saved documents collection.
-        
-        Returns:
-            Summary of cleanup actions performed
+        Internal method to find duplicate documents.
+        Returns list of duplicate document IDs to be removed.
         """
         try:
             all_docs = vector_memory_manager.get_all_documents()
             
             if not all_docs:
-                return "No documents found to clean up."
+                return []
             
             # Group by URL for exact duplicates
             url_groups = {}
@@ -191,15 +185,8 @@ def register_document_tools(mcp):
                     else:
                         content_hashes[content_hash] = doc['id']
             
-            if not duplicates_found:
-                return f"✅ No duplicates found in {len(all_docs)} documents."
-            
-            # Report what was found (actual deletion would require implementing delete in vector_memory_manager)
-            return f"🧹 Found {len(duplicates_found)} duplicate documents:\n" + \
-                   "\n".join(f"• {dup_id}" for dup_id in duplicates_found[:10]) + \
-                   (f"\n... and {len(duplicates_found) - 10} more" if len(duplicates_found) > 10 else "") + \
-                   f"\n\nTotal documents: {len(all_docs)} | Duplicates: {len(duplicates_found)} | Unique: {len(all_docs) - len(duplicates_found)}"
+            return duplicates_found
             
         except Exception as e:
-            logger.error(f"Error cleaning duplicates: {e}")
-            return f"❌ Cleanup failed: {str(e)}"
+            logger.error(f"Error finding duplicates: {e}")
+            return []

@@ -579,8 +579,6 @@ with col2:
                         purpose = "economic analysis"
                     elif 'save_link' in tool_name:
                         purpose = "save webpage content"
-                    elif 'clean_duplicates' in tool_name:
-                        purpose = "find duplicate content"
                     else:
                         purpose = "tool"
                     

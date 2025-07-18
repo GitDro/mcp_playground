@@ -422,13 +422,21 @@ class VectorMemoryManager:
                 content_hash = hashlib.md5(f"{title}{content}".encode()).hexdigest()[:4]
                 return f"{base_id}_{content_hash}"
             
-            # Check for URL deduplication
-            if source_url:
-                existing_docs = self.get_all_documents()
-                for existing_doc in existing_docs:
-                    if existing_doc.get('source_url') == source_url:
-                        logger.info(f"Document with URL {source_url} already exists: {existing_doc['id']}")
-                        return existing_doc['id']  # Return existing document ID
+            # Enhanced deduplication check
+            existing_docs = self.get_all_documents()
+            content_hash = hashlib.md5(content.encode()).hexdigest()
+            
+            for existing_doc in existing_docs:
+                # Check URL deduplication (for web captures)
+                if source_url and existing_doc.get('source_url') == source_url:
+                    logger.info(f"Document with URL {source_url} already exists: {existing_doc['id']}")
+                    return existing_doc['id']  # Return existing document ID
+                
+                # Check content hash deduplication (for identical content)
+                existing_content_hash = hashlib.md5(existing_doc.get('content', '').encode()).hexdigest()
+                if content_hash == existing_content_hash:
+                    logger.info(f"Document with identical content already exists: {existing_doc['id']}")
+                    return existing_doc['id']  # Return existing document ID
             
             doc_id = create_document_id(title, doc_type, source_url)
             
