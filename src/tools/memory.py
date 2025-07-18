@@ -19,9 +19,10 @@ def register_memory_tools(mcp):
     def remember(content: str) -> str:
         """
         Store conversation context and preferences. Use for ongoing chat context only.
+        NOT for articles, documents, or long-term knowledge - use store_note instead.
         
         Args:
-            content: Conversation context or preference to remember
+            content: Conversation context or preference to remember (e.g., "I like coffee", "I work at Microsoft")
         """
         try:
             # Auto-categorize based content keywords
@@ -51,9 +52,10 @@ def register_memory_tools(mcp):
     def recall(query: str) -> str:
         """
         Show stored conversation context and preferences in bullet points.
+        NOT for documents or articles - use search_documents instead.
         
         Args:
-            query: What to recall (typically "what do you remember about me")
+            query: What to recall (typically "what do you remember about me", "my preferences")
         """
         try:
             # Get all stored facts and present them simply

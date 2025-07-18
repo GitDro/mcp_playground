@@ -17,7 +17,12 @@ def register_youtube_tools(mcp: FastMCP):
     
     @mcp.tool(description="Analyze YouTube video content from YouTube URLs")
     def analyze_youtube_url(url: str, question: str = "") -> str:
-        """Analyze YouTube video content from YouTube URLs. Provide just a YouTube URL for a comprehensive summary, or include a specific question to get targeted answers about the video content. Handles videos up to 2-3 hours with adaptive context management."""
+        """Analyze YouTube video content from YouTube URLs. Provide just a YouTube URL for a comprehensive summary, or include a specific question to get targeted answers about the video content. Handles videos up to 2-3 hours with adaptive context management.
+        
+        Args:
+            url: YouTube video URL (e.g., "https://youtube.com/watch?v=...")
+            question: Optional specific question about the video content (e.g., "What are the key points about AI?")
+        """
         try:
             # Get the transcript
             transcript_result = _get_youtube_transcript(url)

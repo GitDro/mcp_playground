@@ -140,7 +140,7 @@ def register_web_tools(mcp: FastMCP):
             return f"Error performing search: {str(e)}"
     
     @mcp.tool(description="Analyze and summarize webpage content without saving")
-    def summarize_url(url: str) -> str:
+    def analyze_url(url: str) -> str:
         """
         Analyze webpage content without saving. Use save_link to save content.
         
@@ -173,7 +173,7 @@ def register_web_tools(mcp: FastMCP):
             
             # Check for YouTube URLs
             if 'youtube.com' in parsed.netloc or 'youtu.be' in parsed.netloc:
-                return "❌ Error: Use analyze_youtube_url tool for YouTube videos, not summarize_url"
+                return "❌ Error: Use analyze_youtube_url tool for YouTube videos, not analyze_url"
             
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',

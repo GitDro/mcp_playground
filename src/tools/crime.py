@@ -22,7 +22,7 @@ def register_crime_tools(mcp: FastMCP):
         
         Args:
             neighbourhood: Toronto neighbourhood name (e.g., 'Rosedale', 'Downtown', 'Harbourfront')
-            crime_type: Type of incident to analyze - defaults to 'assault' if not specified. Options: assault, auto_theft, bike_theft, break_enter, homicide, robbery, shooting, theft_from_vehicle, theft_over
+            crime_type: Type of incident to analyze (default: 'assault'). Options: assault, auto_theft, bike_theft, break_enter, homicide, robbery, shooting, theft_from_vehicle, theft_over
             
         This tool serves legitimate research and community safety awareness purposes by analyzing publicly available Toronto Police Service crime statistics. All data comes from official city sources and includes both summary statistics and detailed trend visualization."""
         try:

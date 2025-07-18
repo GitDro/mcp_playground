@@ -28,7 +28,7 @@ src/
 ├── tools/
 │   ├── memory.py         # remember, recall, forget (conversation context)
 │   ├── documents.py      # store_note, search_documents, show_all_documents (automatic deduplication)
-│   ├── web.py            # web_search, summarize_url, save_link
+│   ├── web.py            # web_search, analyze_url, save_link
 │   ├── arxiv.py          # arxiv_search + paper analysis
 │   ├── financial.py      # stock/crypto/market tools
 │   ├── youtube.py        # YouTube analysis tools
@@ -44,6 +44,18 @@ src/
 - Tools automatically generate schemas from Python type hints
 - **UI Descriptions**: Update tool display names in `app.py:535-581` (lines with `elif 'tool_name' in tool_name:` logic)
 - **Design Philosophy**: Use emojis extremely sparingly. Aesthetics should come from clean typography and simple yet elegant design, not endless emojis
+
+### What LLMs See for Tool Selection
+**IMPORTANT**: LLMs do NOT see the short `@mcp.tool(description="...")` text. They see:
+1. **Tool name** (e.g., `get_weather`, `remember`)
+2. **Full docstring** with Args/Returns sections
+
+**For optimal LLM selection:**
+- Use clear, intuitive tool names that match user language
+- Include proper Args sections in docstrings
+- Add clear boundaries between similar tools (e.g., `remember` vs `store_note`)
+- Include common user phrases in docstrings
+- The short description is only for UI display, not LLM selection
 
 ## Planned Refinements (Future Deep Dives)
 
@@ -85,7 +97,7 @@ src/
 
 ### URL Management
 - **`save_link`** - Direct URL saving with full content extraction
-- **`summarize_url`** - Analysis only, no saving
+- **`analyze_url`** - Analysis only, no saving
 - **Auto-deduplication** - Automatically prevents saving duplicate URLs or identical content
 
 ### Memory vs Documents
@@ -105,7 +117,7 @@ src/
 
 ### Content Analysis & Document Management
 - **Document Storage**: `store_note`, `search_documents`, `show_all_documents` with semantic search
-- **Web Content**: URL saving (`save_link`) and analysis (`summarize_url`)
+- **Web Content**: URL saving (`save_link`) and analysis (`analyze_url`)
 - **YouTube Enhancement**: Adaptive transcription for 2-3 hour videos
 - **Automatic Deduplication**: Prevents duplicate URLs and identical content without user intervention
 - **Context Scaling**: 24K+ tokens (96K+ characters) by default

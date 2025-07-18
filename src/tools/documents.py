@@ -19,7 +19,8 @@ def register_document_tools(mcp):
     @mcp.tool(description="Store personal notes and documents with semantic search")
     def store_note(title: str, content: str, tags: List[str] = None, save_to_file: bool = True) -> str:
         """
-        Store personal notes with semantic search. Files saved to documents/notes/.
+        Store personal notes, articles, and documents with semantic search. Use for long-term knowledge.
+        NOT for conversation context - use remember instead. Files saved to documents/notes/.
         
         Args:
             title: Note title
@@ -61,7 +62,8 @@ def register_document_tools(mcp):
     def search_documents(query: str, limit: int = 5, tags: Optional[List[str]] = None) -> str:
         """
         Search saved documents by topic/keyword and return their full content. 
-        Use when looking for specific documents (e.g., "find my ChatGPT note").
+        Use when looking for specific documents (e.g., "find my ChatGPT note", "search my Python articles").
+        NOT for conversation context - use recall instead.
         
         Args:
             query: What to search for (topic, keyword, title)

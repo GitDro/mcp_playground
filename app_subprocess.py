@@ -347,7 +347,7 @@ with col2:
                     # Extract concise inline descriptions
                     if 'web_search' in tool_name:
                         purpose = "web search"
-                    elif 'summarize_url' in tool_name:
+                    elif 'analyze_url' in tool_name:
                         purpose = "webpage summary"
                     elif 'save_link' in tool_name:
                         purpose = "save webpage content"
