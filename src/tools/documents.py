@@ -121,7 +121,7 @@ def register_document_tools(mcp):
             return f"❌ Search failed: {str(e)}"
     
     @mcp.tool
-    def list_notes(limit: int = 20) -> str:
+    def list_notes(limit: Optional[int] = 20) -> str:
         """
         List all your stored notes.
         
@@ -135,6 +135,10 @@ def register_document_tools(mcp):
             Formatted list of all notes
         """
         try:
+            # Handle None limit
+            if limit is None:
+                limit = 20
+                
             documents = vector_memory_manager.get_all_documents()
             
             if not documents:
