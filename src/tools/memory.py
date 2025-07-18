@@ -15,26 +15,13 @@ logger = logging.getLogger(__name__)
 def register_memory_tools(mcp):
     """Register streamlined memory tools with the FastMCP server"""
     
-    @mcp.tool
+    @mcp.tool(description="Store conversation context and user preferences")
     def remember(content: str) -> str:
         """
-        Store important information about the user for future conversations.
-        
-        Use this tool when the user shares personal information, preferences,
-        work details, or anything else that should be remembered. The system
-        will automatically categorize the information appropriately.
-        
-        Examples:
-        - "User prefers concise responses" (preference)
-        - "User works as a software engineer at OpenAI" (work)
-        - "User lives in Toronto" (personal)
-        - "User's favorite programming language is Python" (preference)
+        Store conversation context and preferences. Use for ongoing chat context only.
         
         Args:
-            content: The information to remember about the user
-        
-        Returns:
-            Success message confirming what was stored
+            content: Conversation context or preference to remember
         """
         try:
             # Auto-categorize based content keywords
@@ -60,97 +47,95 @@ def register_memory_tools(mcp):
             logger.error(f"Error in remember: {e}")
             return f"✗ Error storing information: {str(e)}"
     
-    @mcp.tool
+    @mcp.tool(description="Show stored conversation context and preferences")
     def recall(query: str) -> str:
         """
-        Search memory for specific information about the user.
-        
-        Use this tool when the user explicitly asks you to search memory
-        or when you need to find specific stored information.
-        
-        Note: For "What do you remember about me?" queries, the memory system
-        automatically provides stored facts in conversation context, so this
-        tool may not be needed in those cases.
-        
-        Examples:
-        - When user asks: "What do you remember about my work?"
-        - When user asks: "What did we discuss about machine learning?"
-        - For specific searches of stored facts and preferences
+        Show stored conversation context and preferences in bullet points.
         
         Args:
-            query: What to search for in memory
-        
-        Returns:
-            Relevant stored information matching the query
+            query: What to recall (typically "what do you remember about me")
         """
         try:
-            # For "what do you remember about me" queries, return all facts
-            query_lower = query.lower()
-            general_queries = ['about me', 'what do you know', 'what do you recall', 'tell me about myself', 
-                             'what do you remember', 'about this user']
+            # Get all stored facts and present them simply
+            all_facts = vector_memory_manager.get_all_facts()
+            preferences = vector_memory_manager.get_all_preferences()
             
-            if any(phrase in query_lower for phrase in general_queries):
-                # Return all stored information
-                all_facts = vector_memory_manager.get_all_facts()
-                preferences = vector_memory_manager.get_all_preferences()
-                
-                result_parts = []
-                
-                if all_facts:
-                    facts_text = "Stored information about you:\n"
-                    for fact in all_facts:
-                        facts_text += f"• {fact.content}\n"
-                    result_parts.append(facts_text.strip())
-                
-                if preferences:
-                    prefs_text = "Your preferences:\n"
-                    for key, value in preferences.items():
-                        prefs_text += f"• {key}: {value}\n"
-                    result_parts.append(prefs_text.strip())
-                
-                if not result_parts:
-                    return "I don't have any stored information about you yet."
-                
-                return "\n\n".join(result_parts)
+            result_parts = []
             
-            # For specific queries, use semantic search
-            facts = vector_memory_manager.retrieve_facts_semantic(query, limit=5)
+            if all_facts:
+                facts_text = "What I remember about you:\n"
+                for fact in all_facts:
+                    facts_text += f"• {fact.content}\n"
+                result_parts.append(facts_text.strip())
             
-            if not facts:
-                return f"No stored information found matching '{query}'."
+            if preferences:
+                prefs_text = "Your preferences:\n"
+                for key, value in preferences.items():
+                    prefs_text += f"• {key}: {value}\n"
+                result_parts.append(prefs_text.strip())
             
-            result_text = "Stored information:\n"
-            for fact in facts:
-                result_text += f"• {fact.content}\n"
+            if not result_parts:
+                return "I don't have any stored information about you yet."
             
-            return result_text.strip()
+            return "\n\n".join(result_parts)
             
         except Exception as e:
             logger.error(f"Error in recall: {e}")
             return f"✗ Error retrieving information: {str(e)}"
     
-    @mcp.tool
+    @mcp.tool(description="Remove conversation memory and preferences (DANGEROUS)")
     def forget(description: str) -> str:
         """
-        Remove information from memory based on a description.
+        DANGEROUS: Remove conversation memory and preferences.
         
-        Use this tool only when the user explicitly asks to forget specific
-        information. Provide a description of what to forget rather than
-        technical IDs.
+        WARNING: This permanently deletes information. Use with extreme caution.
+        ONLY use when user explicitly and clearly requests deletion.
+        NEVER use this tool automatically or based on unclear requests.
         
-        Examples:
-        - "forget my work details"
-        - "remove information about my location"
-        - "delete my preference for concise responses"
+        For deleting saved documents/articles: Use document management tools instead.
+        
+        Confirmation required: Always confirm what will be deleted before proceeding.
+        
+        Examples of valid requests:
+        - User says: "Please forget my communication preferences"
+        - User says: "Delete my work information from memory"
         
         Args:
-            description: Description of what information to remove
+            description: Specific description of what conversation memory to remove
         
         Returns:
             Success message indicating what was removed
         """
         try:
-            # Use vector memory manager to forget facts
+            # Safety check: require explicit confirmation words
+            description_lower = description.lower()
+            confirmation_words = ['forget', 'remove', 'delete', 'clear']
+            if not any(word in description_lower for word in confirmation_words):
+                return f"⚠️ SAFETY: Deletion requires explicit confirmation. Please include words like 'forget', 'remove', or 'delete' in your request.\nExample: 'forget my work information'"
+            
+            # First, show what would be deleted (dry run)
+            matching_facts = vector_memory_manager.retrieve_facts_semantic(description, limit=10, min_similarity=0.3)
+            potential_deletions = []
+            
+            for fact in matching_facts:
+                if any(word in fact.content.lower() for word in description.lower().split()):
+                    preview = fact.content[:100] + "..." if len(fact.content) > 100 else fact.content
+                    potential_deletions.append(preview)
+            
+            if not potential_deletions:
+                return f"No matching information found for: {description}"
+            
+            # Show what would be deleted and require confirmation
+            if len(potential_deletions) > 1:
+                preview_text = f"⚠️ WARNING: This will permanently delete {len(potential_deletions)} items:\n"
+                for i, item in enumerate(potential_deletions[:3], 1):  # Show first 3
+                    preview_text += f"{i}. {item}\n"
+                if len(potential_deletions) > 3:
+                    preview_text += f"... and {len(potential_deletions) - 3} more items\n"
+                preview_text += f"\nTo confirm deletion, user must explicitly say 'yes, delete these memories' or similar."
+                return preview_text
+            
+            # For single item, proceed with deletion
             success, removed_items = vector_memory_manager.forget_fact(description)
             
             if success and removed_items:

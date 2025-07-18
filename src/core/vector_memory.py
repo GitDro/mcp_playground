@@ -8,6 +8,9 @@ and Ollama's nomic-embed-text model for generating embeddings.
 import os
 import logging
 import uuid
+import hashlib
+import threading
+import time
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from dataclasses import dataclass, asdict
@@ -53,6 +56,10 @@ class OllamaEmbeddingFunction(embedding_functions.EmbeddingFunction):
     def __init__(self, model_name: str = "nomic-embed-text"):
         self.model_name = model_name
         self._test_ollama_connection()
+    
+    def name(self) -> str:
+        """Return the name of this embedding function (required by ChromaDB)"""
+        return f"ollama-{self.model_name}"
     
     def _test_ollama_connection(self):
         """Test if Ollama is running and model is available"""
@@ -112,10 +119,18 @@ class VectorMemoryManager:
         # Initialize collections
         self.facts_collection = self._get_or_create_collection("user_facts")
         self.conversations_collection = self._get_or_create_collection("conversations")
+        self.documents_collection = self._get_or_create_collection("documents")
         
         # Import the original TinyDB memory manager for hybrid functionality
         from .memory import memory_manager as tiny_memory
         self.tiny_memory = tiny_memory
+        
+        # Initialize file watching for documents
+        self.documents_dir = os.path.join(self.cache_dir, 'documents')
+        self._file_timestamps = {}
+        self._watcher_thread = None
+        self._watcher_running = False
+        self._start_file_watcher()
         
         logger.info(f"Vector memory manager initialized with ChromaDB at {self.chroma_path}")
     
@@ -366,6 +381,428 @@ class VectorMemoryManager:
         """Build context from memories for conversation with privacy protection"""
         # Use the enhanced privacy-aware context building from TinyDB memory manager
         return self.tiny_memory.build_conversation_context(current_query, session_history)
+    
+    # Document Management Methods
+    def store_document(self, title: str, content: str, doc_type: str = "note", 
+                      tags: List[str] = None, file_path: str = None, 
+                      source_url: str = None, summary: str = None) -> str:
+        """Store a document in vector memory and optionally as a file"""
+        try:
+            from .models import Document
+            
+            # Generate meaningful document ID
+            def create_document_id(title: str, doc_type: str, source_url: str = None) -> str:
+                # Create a slug from title
+                title_slug = "".join(c.lower() if c.isalnum() else "_" for c in title)[:30]
+                title_slug = title_slug.strip("_")
+                
+                # Add type prefix
+                if source_url:
+                    # For URLs, use domain
+                    from urllib.parse import urlparse
+                    try:
+                        domain = urlparse(source_url).netloc.replace("www.", "").replace(".", "_")[:15]
+                        prefix = f"url_{domain}"
+                    except:
+                        prefix = "url"
+                elif doc_type == "note":
+                    prefix = "note"
+                elif doc_type == "capture":
+                    prefix = "capture"
+                else:
+                    prefix = doc_type
+                
+                # Add date
+                date_str = datetime.now().strftime("%m%d")
+                
+                # Combine
+                base_id = f"{prefix}_{title_slug}_{date_str}"
+                
+                # Ensure uniqueness with short hash if needed
+                content_hash = hashlib.md5(f"{title}{content}".encode()).hexdigest()[:4]
+                return f"{base_id}_{content_hash}"
+            
+            # Enhanced deduplication check
+            existing_docs = self.get_all_documents()
+            content_hash = hashlib.md5(content.encode()).hexdigest()
+            
+            for existing_doc in existing_docs:
+                # Check URL deduplication (for web captures)
+                if source_url and existing_doc.get('source_url') == source_url:
+                    logger.info(f"Document with URL {source_url} already exists: {existing_doc['id']}")
+                    return existing_doc['id']  # Return existing document ID
+                
+                # Check content hash deduplication (for identical content)
+                existing_content_hash = hashlib.md5(existing_doc.get('content', '').encode()).hexdigest()
+                if content_hash == existing_content_hash:
+                    logger.info(f"Document with identical content already exists: {existing_doc['id']}")
+                    return existing_doc['id']  # Return existing document ID
+            
+            doc_id = create_document_id(title, doc_type, source_url)
+            
+            # Create document model
+            document = Document(
+                id=doc_id,
+                title=title,
+                content=content,
+                summary=summary,
+                tags=tags or [],
+                doc_type=doc_type,
+                file_path=file_path,
+                source_url=source_url
+            )
+            
+            # Store in ChromaDB for semantic search
+            if self.documents_collection is not None:
+                # For long documents, we might want to chunk them
+                # For now, store the full content with metadata
+                self.documents_collection.add(
+                    documents=[content],
+                    metadatas=[document.to_chromadb_metadata()],
+                    ids=[doc_id]
+                )
+                logger.info(f"Stored document in vector memory: {doc_id}")
+            else:
+                logger.warning("ChromaDB documents collection not available")
+            
+            # Optionally save as file
+            if file_path:
+                try:
+                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        # Write markdown with frontmatter
+                        f.write(f"---\n")
+                        f.write(f"title: {title}\n")
+                        f.write(f"doc_type: {doc_type}\n")
+                        f.write(f"tags: [{', '.join(tags or [])}]\n")
+                        if source_url:
+                            f.write(f"source_url: {source_url}\n")
+                        f.write(f"created_at: {document.created_at.isoformat()}\n")
+                        f.write(f"---\n\n")
+                        f.write(content)
+                    logger.info(f"Saved document to file: {file_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to save document to file {file_path}: {e}")
+            
+            return doc_id
+            
+        except Exception as e:
+            logger.error(f"Failed to store document: {e}")
+            raise
+    
+    def search_documents(self, query: str, limit: int = 5, min_similarity: float = 0.1, 
+                        doc_type: str = None, tags: List[str] = None) -> List[Dict[str, Any]]:
+        """Search documents using semantic similarity"""
+        try:
+            if self.documents_collection is None:
+                logger.warning("ChromaDB documents collection not available for search")
+                return []
+            
+            # Build where clause for filtering
+            where_clause = {}
+            if doc_type:
+                where_clause["doc_type"] = doc_type
+            
+            # Perform semantic search
+            search_params = {
+                "query_texts": [query],
+                "n_results": limit,
+                "include": ['documents', 'metadatas', 'distances']
+            }
+            
+            if where_clause:
+                search_params["where"] = where_clause
+            
+            results = self.documents_collection.query(**search_params)
+            
+            documents = []
+            if results['documents'] and results['documents'][0]:
+                for i, doc_content in enumerate(results['documents'][0]):
+                    # Convert distance to similarity
+                    distance = results['distances'][0][i] if results['distances'] else 1.0
+                    similarity = 1.0 - distance
+                    
+                    if similarity >= min_similarity:
+                        metadata = results['metadatas'][0][i]
+                        
+                        # Filter by tags if specified
+                        if tags:
+                            doc_tags = metadata.get('tags', '').split(',') if metadata.get('tags') else []
+                            if not any(tag.strip() in doc_tags for tag in tags):
+                                continue
+                        
+                        # Create search result
+                        doc_result = {
+                            'id': results['ids'][0][i],
+                            'title': metadata.get('title', 'Untitled'),
+                            'content': doc_content,
+                            'doc_type': metadata.get('doc_type', 'note'),
+                            'tags': metadata.get('tags', '').split(',') if metadata.get('tags') else [],
+                            'source_url': metadata.get('source_url') or None,
+                            'file_path': metadata.get('file_path') or None,
+                            'created_at': metadata.get('created_at'),
+                            'relevance_score': similarity,
+                            'match_snippet': doc_content[:200] + "..." if len(doc_content) > 200 else doc_content
+                        }
+                        documents.append(doc_result)
+            
+            logger.info(f"Document search for '{query}' returned {len(documents)} results")
+            return documents
+            
+        except Exception as e:
+            logger.error(f"Error in document search: {e}")
+            return []
+    
+    def get_document_by_id(self, doc_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve a specific document by ID"""
+        try:
+            if self.documents_collection is None:
+                return None
+            
+            results = self.documents_collection.get(
+                ids=[doc_id],
+                include=['documents', 'metadatas']
+            )
+            
+            if results['documents'] and results['documents'][0]:
+                metadata = results['metadatas'][0]
+                content = results['documents'][0]
+                
+                return {
+                    'id': doc_id,
+                    'title': metadata.get('title', 'Untitled'),
+                    'content': content,
+                    'doc_type': metadata.get('doc_type', 'note'),
+                    'tags': metadata.get('tags', '').split(',') if metadata.get('tags') else [],
+                    'source_url': metadata.get('source_url') or None,
+                    'file_path': metadata.get('file_path') or None,
+                    'created_at': metadata.get('created_at'),
+                    'summary': metadata.get('summary') or None
+                }
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error retrieving document {doc_id}: {e}")
+            return None
+    
+    def delete_document(self, doc_id: str) -> bool:
+        """Delete a document from vector storage"""
+        try:
+            if self.documents_collection is None:
+                return False
+            
+            # Get document info first (for file cleanup)
+            doc_info = self.get_document_by_id(doc_id)
+            
+            # Delete from ChromaDB
+            self.documents_collection.delete(ids=[doc_id])
+            
+            # Optionally delete file
+            if doc_info and doc_info.get('file_path'):
+                try:
+                    if os.path.exists(doc_info['file_path']):
+                        os.remove(doc_info['file_path'])
+                        logger.info(f"Deleted document file: {doc_info['file_path']}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete document file: {e}")
+            
+            logger.info(f"Deleted document: {doc_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error deleting document {doc_id}: {e}")
+            return False
+    
+    def get_all_documents(self, doc_type: str = None) -> List[Dict[str, Any]]:
+        """Get all stored documents, optionally filtered by type"""
+        try:
+            if self.documents_collection is None:
+                return []
+            
+            search_params = {
+                "include": ['documents', 'metadatas']
+            }
+            
+            if doc_type:
+                search_params["where"] = {"doc_type": doc_type}
+            
+            results = self.documents_collection.get(**search_params)
+            
+            documents = []
+            if results['documents']:
+                for i, content in enumerate(results['documents']):
+                    metadata = results['metadatas'][i]
+                    doc_result = {
+                        'id': results['ids'][i],
+                        'title': metadata.get('title', 'Untitled'),
+                        'content': content,
+                        'doc_type': metadata.get('doc_type', 'note'),
+                        'tags': metadata.get('tags', '').split(',') if metadata.get('tags') else [],
+                        'source_url': metadata.get('source_url') or None,
+                        'file_path': metadata.get('file_path') or None,
+                        'created_at': metadata.get('created_at'),
+                        'summary': metadata.get('summary') or None
+                    }
+                    documents.append(doc_result)
+            
+            return documents
+            
+        except Exception as e:
+            logger.error(f"Error getting all documents: {e}")
+            return []
+    
+    # File Watching System
+    def _start_file_watcher(self):
+        """Start the file watcher thread"""
+        try:
+            self._watcher_running = True
+            self._watcher_thread = threading.Thread(target=self._watch_documents_folder, daemon=True)
+            self._watcher_thread.start()
+            logger.info("Document file watcher started")
+        except Exception as e:
+            logger.warning(f"Failed to start file watcher: {e}")
+    
+    def _stop_file_watcher(self):
+        """Stop the file watcher thread"""
+        self._watcher_running = False
+        if self._watcher_thread:
+            self._watcher_thread.join(timeout=1)
+    
+    def _watch_documents_folder(self):
+        """Watch documents folder for file changes"""
+        while self._watcher_running:
+            try:
+                # Check documents folder exists
+                if not os.path.exists(self.documents_dir):
+                    time.sleep(5)
+                    continue
+                
+                # Scan for markdown files in documents subdirectories
+                for root, dirs, files in os.walk(self.documents_dir):
+                    for file in files:
+                        if file.endswith(('.md', '.txt')):
+                            file_path = os.path.join(root, file)
+                            try:
+                                # Get file modification time
+                                mtime = os.path.getmtime(file_path)
+                                
+                                # Check if file is new or modified
+                                if file_path not in self._file_timestamps or self._file_timestamps[file_path] != mtime:
+                                    self._file_timestamps[file_path] = mtime
+                                    
+                                    # Process the file change
+                                    self._process_file_change(file_path)
+                                    
+                            except OSError:
+                                # File might have been deleted
+                                if file_path in self._file_timestamps:
+                                    del self._file_timestamps[file_path]
+                                    self._process_file_deletion(file_path)
+                
+                # Sleep before next check
+                time.sleep(10)  # Check every 10 seconds
+                
+            except Exception as e:
+                logger.error(f"Error in file watcher: {e}")
+                time.sleep(30)  # Wait longer on error
+    
+    def _process_file_change(self, file_path: str):
+        """Process a changed or new file"""
+        try:
+            # Read the file content
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Skip empty files
+            if not content.strip():
+                return
+            
+            # Parse frontmatter if present
+            title = None
+            tags = []
+            doc_type = "note"
+            
+            if content.startswith('---'):
+                try:
+                    # Simple frontmatter parsing
+                    parts = content.split('---', 2)
+                    if len(parts) >= 3:
+                        frontmatter = parts[1]
+                        content = parts[2].strip()
+                        
+                        for line in frontmatter.split('\n'):
+                            line = line.strip()
+                            if line.startswith('title:'):
+                                title = line.split(':', 1)[1].strip().strip('"\'')
+                            elif line.startswith('tags:'):
+                                tags_str = line.split(':', 1)[1].strip()
+                                # Parse simple tag list [tag1, tag2] or tag1, tag2
+                                tags_str = tags_str.strip('[]')
+                                tags = [tag.strip().strip('"\'') for tag in tags_str.split(',') if tag.strip()]
+                            elif line.startswith('doc_type:'):
+                                doc_type = line.split(':', 1)[1].strip().strip('"\'')
+                except:
+                    # If frontmatter parsing fails, use whole content
+                    pass
+            
+            # Use filename as title if not found in frontmatter
+            if not title:
+                title = os.path.splitext(os.path.basename(file_path))[0]
+                # Clean up auto-generated filenames
+                if title.startswith(('20', '19')) and '_' in title:  # Timestamp-based filename
+                    parts = title.split('_', 2)
+                    if len(parts) > 2:
+                        title = parts[2].replace('_', ' ')
+            
+            # Generate document ID based on file path
+            doc_id = f"file_{hashlib.md5(file_path.encode()).hexdigest()[:8]}"
+            
+            # Check if document already exists and remove old version
+            try:
+                if self.documents_collection is not None:
+                    existing = self.documents_collection.get(ids=[doc_id])
+                    if existing['documents']:
+                        self.documents_collection.delete(ids=[doc_id])
+            except:
+                pass
+            
+            # Store/update the document
+            if self.documents_collection is not None:
+                self.documents_collection.add(
+                    documents=[content],
+                    metadatas=[{
+                        'title': title,
+                        'doc_type': doc_type,
+                        'tags': ','.join(tags),
+                        'file_path': file_path,
+                        'created_at': datetime.now().isoformat(),
+                        'updated_at': datetime.now().isoformat(),
+                        'source': 'file_watcher'
+                    }],
+                    ids=[doc_id]
+                )
+                logger.info(f"Re-indexed file: {file_path} -> {title}")
+            
+        except Exception as e:
+            logger.error(f"Error processing file change {file_path}: {e}")
+    
+    def _process_file_deletion(self, file_path: str):
+        """Process a deleted file"""
+        try:
+            # Generate document ID based on file path
+            doc_id = f"file_{hashlib.md5(file_path.encode()).hexdigest()[:8]}"
+            
+            # Remove from ChromaDB
+            if self.documents_collection is not None:
+                try:
+                    self.documents_collection.delete(ids=[doc_id])
+                    logger.info(f"Removed deleted file from index: {file_path}")
+                except:
+                    pass
+                    
+        except Exception as e:
+            logger.error(f"Error processing file deletion {file_path}: {e}")
     
 
 # Global vector memory manager instance

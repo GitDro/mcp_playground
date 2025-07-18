@@ -18,6 +18,7 @@ from .tools.memory import register_memory_tools
 from .tools.tides import register_tide_tools
 from .tools.crime import register_crime_tools
 from .tools.statscan import register_statscan_tools
+from .tools.documents import register_document_tools
 
 # Load environment variables
 load_dotenv()
@@ -44,6 +45,7 @@ def setup_server():
     register_tide_tools(mcp)
     register_crime_tools(mcp)
     register_statscan_tools(mcp)
+    register_document_tools(mcp)
     
     logger.info("All tools registered successfully")
     return mcp

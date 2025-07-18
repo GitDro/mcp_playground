@@ -159,25 +159,19 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
         for msg in conversation_history:
             messages.append({"role": msg["role"], "content": msg["content"]})
         
-        # MVP Memory: Inject high-relevance facts as conversation history
+        # Simple Semantic RAG: Inject facts and documents based on pure similarity
         if use_functions:
             try:
-                # Detect memory queries to inject ALL stored facts
+                # Detect memory queries to inject ALL stored information
                 memory_keywords = [
                     'what do you remember', 'what do you know about me', 'what do you recall',
                     'tell me about myself', 'about me', 'remember about me'
                 ]
                 
-                # Skip memory injection for tool-focused queries
+                # Skip memory injection for tool-focused queries (keep minimal list)
                 tool_keywords = [
-                    'stock', 'price', 'crypto', 'market', 'finance', 'ticker',
-                    'weather', 'forecast', 'temperature', 'climate',
-                    'youtube', 'video', 'analyze', 'summarize', 
-                    'arxiv', 'paper', 'research', 'academic',
-                    'crime', 'safety', 'toronto', 'neighbourhood',
-                    'tide', 'tides', 'water', 'ocean',
-                    'search', 'web search', 'find', 'google',
-                    'url', 'website', 'link'
+                    'stock', 'price', 'crypto', 'weather', 'youtube', 'arxiv', 
+                    'crime', 'tide', 'search', 'url', 'analyze'
                 ]
                 
                 query_lower = message.lower()
@@ -185,27 +179,38 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
                 is_memory_query = any(keyword in query_lower for keyword in memory_keywords)
                 
                 if is_memory_query:
-                    # For "what do you remember about me" queries, inject ALL stored facts
+                    # For "what do you remember about me" queries, inject ALL stored information
                     all_facts = memory_manager.get_all_facts()
-                    if all_facts:
-                        facts_content = "Here's what I remember about you: " + "; ".join([fact.content for fact in all_facts])
+                    all_documents = memory_manager.get_all_documents()
+                    
+                    if all_facts or all_documents:
+                        content_parts = []
+                        if all_facts:
+                            facts_content = "; ".join([fact.content for fact in all_facts])
+                            content_parts.append(f"Facts: {facts_content}")
+                        if all_documents:
+                            docs_content = "; ".join([f"{doc['title']}: {doc['content'][:100]}..." for doc in all_documents[:3]])
+                            content_parts.append(f"Notes: {docs_content}")
+                        
                         messages.append({
                             "role": "user",
-                            "content": facts_content
+                            "content": f"Here's what I remember about you: {' | '.join(content_parts)}"
                         })
                         messages.append({
                             "role": "assistant",
                             "content": "Got it, I have that information."
                         })
-                        print(f"DEBUG - Injected all stored facts for memory query ({len(all_facts)} facts)")
+                        print(f"DEBUG - Injected all stored information for memory query ({len(all_facts)} facts, {len(all_documents)} documents)")
+                        
                 elif not is_tool_query:
-                    # Get high-relevance facts only (80%+ similarity)
+                    # Pure Semantic RAG: Simple threshold-based injection
+                    injected_items = []
+                    
+                    # 1. Inject high-relevance facts (80%+ similarity) - unchanged
                     relevant_facts = memory_manager.retrieve_facts_semantic(message, limit=5)
                     high_relevance_facts = [fact for fact in relevant_facts if fact.relevance_score > 0.8]
                     
-                    # Inject max 2 most relevant facts as conversation history
                     for fact in high_relevance_facts[:2]:
-                        # Add as fake conversation history
                         messages.append({
                             "role": "user",
                             "content": f"Just so you know, {fact.content.lower()}"
@@ -214,10 +219,55 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
                             "role": "assistant", 
                             "content": "Got it, I'll keep that in mind!"
                         })
-                        print(f"DEBUG - Injected memory: {fact.content} (relevance: {fact.relevance_score:.2f})")
+                        injected_items.append(f"fact: {fact.content} ({fact.relevance_score:.0%})")
+                    
+                    # 2. Pure semantic document injection - no keyword logic
+                    relevant_documents = memory_manager.search_documents(message, limit=3, min_similarity=0.3)
+                    
+                    for doc in relevant_documents:
+                        relevance = doc['relevance_score']
+                        
+                        # Simple threshold-based injection
+                        if relevance > 0.85:
+                            # High confidence - inject full context
+                            doc_content = doc['content'][:200] + "..." if len(doc['content']) > 200 else doc['content']
+                            
+                            messages.append({
+                                "role": "user",
+                                "content": f"For context, from my notes '{doc['title']}': {doc_content}"
+                            })
+                            messages.append({
+                                "role": "assistant",
+                                "content": "I see that from your notes."
+                            })
+                            injected_items.append(f"document: {doc['title']} ({relevance:.0%}, high-conf)")
+                            
+                        elif relevance > 0.70:
+                            # Medium confidence - inject shorter snippet
+                            doc_snippet = doc['content'][:100] + "..." if len(doc['content']) > 100 else doc['content']
+                            
+                            messages.append({
+                                "role": "user",
+                                "content": f"From my notes '{doc['title']}': {doc_snippet}"
+                            })
+                            messages.append({
+                                "role": "assistant",
+                                "content": "Got it."
+                            })
+                            injected_items.append(f"document: {doc['title']} ({relevance:.0%}, med-conf)")
+                        
+                        # Below 70% - no injection to avoid noise
+                        
+                        # Limit total injections to prevent context overload
+                        if len(injected_items) >= 3:
+                            break
+                    
+                    # Debug output
+                    if injected_items:
+                        print(f"DEBUG - Semantic injection: {'; '.join(injected_items)}")
                 
             except Exception as e:
-                print(f"Memory injection failed: {e}")
+                print(f"Enhanced memory injection failed: {e}")
         
         messages.append({"role": "user", "content": message})
         
@@ -485,7 +535,9 @@ with col2:
                     # Extract concise inline descriptions
                     if 'web_search' in tool_name:
                         purpose = "web search"
-                    elif 'analyze_url' in tool_name:
+                    elif 'summarize_url' in tool_name:
+                        purpose = "webpage summary"
+                    elif 'analyze_url' in tool_name:  # Legacy fallback
                         purpose = "URL analysis"
                     elif 'arxiv_search' in tool_name:
                         purpose = "academic papers"
@@ -497,10 +549,14 @@ with col2:
                         purpose = "crypto prices"
                     elif 'market_summary' in tool_name:
                         purpose = "market overview"
+                    elif 'get_stock_overview' in tool_name:
+                        purpose = "stock market data"
                     elif 'summarize_youtube' in tool_name:
                         purpose = "YouTube summaries"
                     elif 'query_youtube' in tool_name:
                         purpose = "YouTube Q&A"
+                    elif 'analyze_youtube_url' in tool_name:
+                        purpose = "video analysis"
                     elif 'get_weather' in tool_name:
                         purpose = "weather forecast"
                     elif 'remember' in tool_name:
@@ -509,14 +565,20 @@ with col2:
                         purpose = "retrieve memories"
                     elif 'forget' in tool_name:
                         purpose = "remove memories"
-                    elif 'get_stock_overview' in tool_name:
-                        purpose = "stock market data"
-                    elif 'analyze_youtube_url' in tool_name:
-                        purpose = "video analysis"
+                    elif 'store_note' in tool_name:
+                        purpose = "save notes"
+                    elif 'search_documents' in tool_name:
+                        purpose = "search documents by keyword"
+                    elif 'show_all_documents' in tool_name:
+                        purpose = "show ALL saved documents"
                     elif 'get_tide_info' in tool_name:
                         purpose = "tide information"
                     elif 'get_toronto_crime' in tool_name:
                         purpose = "crime statistics"
+                    elif 'analyze_canadian_economy' in tool_name:
+                        purpose = "economic analysis"
+                    elif 'save_link' in tool_name:
+                        purpose = "save webpage content"
                     else:
                         purpose = "tool"
                     

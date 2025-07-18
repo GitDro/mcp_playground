@@ -55,7 +55,7 @@ You can use these tools directly in Windsurf IDE through MCP integration:
 
 **Available Tools in Windsurf:**
 - `web_search` - Real-time web search with DuckDuckGo
-- `analyze_url` - Website content analysis and summarization
+- `summarize_url` - Website content summarization and analysis
 - `arxiv_search` - Academic paper search with deep PDF analysis
 - `get_stock_overview` - Comprehensive financial data for stocks, crypto, and market indices with trend visualization
 - `analyze_youtube_url` - AI-powered YouTube analysis - summaries or targeted Q&A
@@ -163,8 +163,9 @@ uv run python mcp_server.py http 8000
 ```
 
 ### Available Tools
-- **Memory**: `remember`, `recall`, `forget` - Simple ChromaDB storage with conversation history injection
-- **Web**: `web_search`, `analyze_url` - Web search and content analysis
+- **Memory**: `remember`, `recall`, `forget` - Conversation context and preferences
+- **Documents**: `store_note`, `find_saved`, `list_saved`, `clean_duplicates` - Knowledge base management
+- **Web**: `web_search`, `summarize_url`, `save_link` - Web search, analysis, and content saving
 - **Media**: `analyze_youtube_url` - YouTube analysis (summaries and Q&A)
 - **Finance**: `get_stock_overview` - Comprehensive financial data with visualization
 - **Research**: `arxiv_search` - Academic paper analysis
@@ -194,10 +195,10 @@ async def use_tools():
 - **Hybrid Storage**: Vector facts + TinyDB preferences
 - **Local & Private**: All data at `~/.cache/mcp_playground/`
 
-### Memory Tools
-- `remember`: Store user information (auto-categorizes)
-- `recall`: Semantic search across all memories
-- `forget`: Remove by description, not IDs
+### Memory vs Documents
+- **Memory Tools** (`remember`, `recall`, `forget`): Conversation context only
+- **Document Tools** (`store_note`, `find_saved`, `list_saved`): Permanent knowledge base
+- **Web Tools** (`save_link`, `summarize_url`): Content saving and analysis
 
 ### Key Benefits (MVP July 2025)
 - **Simple & Effective**: Conversation history injection instead of complex prompt engineering
