@@ -57,6 +57,10 @@ class OllamaEmbeddingFunction(embedding_functions.EmbeddingFunction):
         self.model_name = model_name
         self._test_ollama_connection()
     
+    def name(self) -> str:
+        """Return the name of this embedding function (required by ChromaDB)"""
+        return f"ollama-{self.model_name}"
+    
     def _test_ollama_connection(self):
         """Test if Ollama is running and model is available"""
         try:
