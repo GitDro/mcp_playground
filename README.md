@@ -149,6 +149,7 @@ src/tools/               # Organized tool modules
 - **Standards-Compliant**: Uses Model Context Protocol (MCP)
 - **Automatic Schema Generation**: From Python type hints
 - **Vector Memory**: Semantic search with local embeddings
+- **Intelligent Retry System**: Automatic type correction and error recovery for LLM tool calls
 - **Modular Design**: Clean tool organization
 
 ## 🔧 MCP Server Usage

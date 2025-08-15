@@ -23,6 +23,9 @@ src/
 │   ├── vector_memory.py  # Vector-based memory with ChromaDB + Ollama
 │   ├── memory.py         # TinyDB memory manager (fallback)
 │   ├── cache.py          # Financial data caching
+│   ├── retry_manager.py  # Tool retry logic and error recovery
+│   ├── tool_wrapper.py   # @retry_tool decorator for enhanced reliability
+│   ├── retry_state_manager.py  # Learning system for retry patterns
 │   ├── models.py         # Pydantic models
 │   └── utils.py          # General utilities
 ├── tools/
@@ -141,6 +144,22 @@ src/
 - **Plot Generation**: Matplotlib charts returned as base64 images
 - **Crime Trends**: Time series visualization for neighbourhood data
 - **No External Dependencies**: Self-contained plotting system
+
+## Tool Retry System
+
+### Automatic Error Recovery
+- **@retry_tool decorator**: Enhances existing tools with automatic type correction and retry logic
+- **Smart type coercion**: Converts string "123" → int 123, "true" → bool True automatically
+- **Learning system**: Uses vector memory to learn from successful corrections
+- **LLM-friendly errors**: Clear, actionable error messages with correction suggestions
+
+### Configuration
+```bash
+# Environment variables for retry behavior
+export MCP_RETRY_MAX_ATTEMPTS=3
+export MCP_RETRY_BASE_DELAY=0.5
+export MCP_RETRY_TYPE_COERCION=true
+```
 
 ## Helpful Links
 
