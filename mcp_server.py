@@ -2,7 +2,7 @@
 FastMCP Server for MCP Playground
 
 Main entry point for the MCP server. This file maintains compatibility with 
-external MCP clients like Windsurf while using the new modularized structure.
+external MCP clients while using the new modularized structure.
 
 The actual server implementation is now in src/server.py with tools organized
 in separate modules for better maintainability.
