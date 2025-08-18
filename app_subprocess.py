@@ -49,27 +49,126 @@ async def get_mcp_tools():
         return []
 
 async def call_mcp_tool(tool_name: str, arguments: dict):
-    """Call a tool using the FastMCP client with auto-inferred subprocess transport"""
-    try:
-        # Auto-inferred transport from .py file (FastMCP handles subprocess automatically)
-        async with Client("mcp_server.py") as client:
-            result = await client.call_tool(tool_name, arguments)
-            
-            # Extract the content from the result (updated for MCP 2.10.0+)
-            if hasattr(result, 'content') and result.content:
-                # Handle different content types
-                content_item = result.content[0]
-                if hasattr(content_item, 'text'):
-                    return content_item.text
+    """Call a tool using the FastMCP client with retry logic for error recovery"""
+    from src.core.retry_manager import RetryManager, ErrorAnalyzer, ErrorType
+    import time
+    
+    # Create retry manager for this call
+    retry_manager = RetryManager(max_attempts=3, base_delay=0.5)
+    context = retry_manager.create_context(tool_name, arguments)
+    
+    current_args = arguments.copy()
+    
+    while context.should_retry:
+        start_time = time.time()
+        
+        try:
+            # Auto-inferred transport from .py file (FastMCP handles subprocess automatically)
+            async with Client("mcp_server.py") as client:
+                result = await client.call_tool(tool_name, current_args)
+                
+                # Extract the content from the result (updated for MCP 2.10.0+)
+                content = None
+                if hasattr(result, 'content') and result.content:
+                    # Handle different content types
+                    content_item = result.content[0]
+                    if hasattr(content_item, 'text'):
+                        content = content_item.text
+                    else:
+                        content = str(content_item)
+                elif hasattr(result, 'data'):
+                    # Structured output from the tool
+                    content = str(result.data)
                 else:
-                    return str(content_item)
-            elif hasattr(result, 'data'):
-                # Structured output from the tool
-                return str(result.data)
-            else:
-                return str(result)
-    except Exception as e:
-        return f"Error calling tool {tool_name}: {str(e)}"
+                    content = str(result)
+                
+                # Success - record attempt and return
+                execution_time = time.time() - start_time
+                context.add_attempt(
+                    error_type=ErrorType.UNKNOWN_ERROR,
+                    error_message="Success",
+                    corrected_args=current_args if current_args != arguments else None,
+                    success=True,
+                    execution_time=execution_time
+                )
+                
+                # Add success metadata if we had retries
+                if context.attempt_count > 1:
+                    success_note = f"\n\n*✅ Tool succeeded after {context.attempt_count} attempts*"
+                    if context.corrected_args:
+                        success_note += f"\n*Applied corrections: {context.corrected_args}*"
+                    content += success_note
+                
+                return content
+                
+        except Exception as e:
+            execution_time = time.time() - start_time
+            error_message = str(e)
+            error_type = ErrorAnalyzer.analyze_error(error_message)
+            
+            # Record the failed attempt
+            context.add_attempt(
+                error_type=error_type,
+                error_message=error_message,
+                execution_time=execution_time
+            )
+            
+            # Try to correct type errors for next attempt
+            if error_type == ErrorType.TYPE_ERROR and context.should_retry:
+                corrected_args = ErrorAnalyzer.suggest_type_correction(current_args, error_message)
+                if corrected_args:
+                    current_args = corrected_args
+                    # Apply exponential backoff before retry
+                    delay = 0.5 * (2 ** (context.attempt_count - 1))
+                    await asyncio.sleep(delay)
+                    continue
+            
+            # If we can't correct the error or out of retries, return error response
+            if not context.should_retry:
+                return _generate_enhanced_error_response(tool_name, context)
+                
+            # Apply exponential backoff before retry
+            delay = 0.5 * (2 ** (context.attempt_count - 1))
+            await asyncio.sleep(delay)
+    
+    # Fallback - should not reach here
+    return _generate_enhanced_error_response(tool_name, context)
+
+
+def _generate_enhanced_error_response(tool_name: str, context) -> str:
+    """Generate enhanced error response with retry information and suggestions"""
+    from src.core.retry_manager import ErrorAnalyzer
+    
+    error_parts = []
+    error_parts.append(f"❌ **Tool '{tool_name}' failed after {context.attempt_count} attempts**")
+    
+    if context.attempts:
+        last_attempt = context.attempts[-1]
+        error_parts.append(f"\n**Final Error**: {last_attempt.error_message}")
+        
+        # Provide specific suggestions based on error type
+        if last_attempt.error_type.value == "type_error":
+            error_parts.append("\n**💡 Type Error Suggestions**:")
+            for key, value in context.original_args.items():
+                if isinstance(value, str):
+                    if ErrorAnalyzer._looks_like_int(value):
+                        error_parts.append(f"• Parameter `{key}`: Use integer `{int(value)}` instead of string `'{value}'`")
+                    elif ErrorAnalyzer._looks_like_float(value):
+                        error_parts.append(f"• Parameter `{key}`: Use float `{float(value)}` instead of string `'{value}'`")
+                    elif ErrorAnalyzer._looks_like_bool(value):
+                        bool_val = ErrorAnalyzer._parse_bool(value)
+                        error_parts.append(f"• Parameter `{key}`: Use boolean `{bool_val}` instead of string `'{value}'`")
+        
+        # Show attempt summary
+        error_parts.append(f"\n**Retry History**:")
+        for i, attempt in enumerate(context.attempts, 1):
+            status = "✅" if attempt.success else "❌"
+            error_type = attempt.error_type.value.replace("_", " ").title()
+            error_parts.append(f"{i}. {status} {error_type}: {attempt.error_message[:80]}...")
+            
+        error_parts.append(f"\n**Total Execution Time**: {context.total_execution_time:.2f}s")
+    
+    return "\n".join(error_parts)
 
 def get_ollama_models() -> List[str]:
     """Fetch available Ollama models from the local Ollama instance."""
