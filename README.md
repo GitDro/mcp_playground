@@ -1,9 +1,8 @@
 # MCP Playground
 
-* A **modern** Streamlit chat app with Ollama integration and AI-powered tool calling capabilities.
-* This project uses the **Model Context Protocol (MCP)** for scalable, standards-compliant tool execution.
+A modern Streamlit chat application with Ollama integration and AI-powered tool calling capabilities. Built using the Model Context Protocol (MCP) for scalable, standards-compliant tool execution.
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 1. **Install Ollama**: Visit https://ollama.ai
@@ -46,14 +45,15 @@ You can use these tools with any MCP-compatible client through standard MCP conf
 **Note**: Replace `/path/to/your/project/` with the actual path to your cloned repository. The configuration format may vary depending on your MCP client.
 
 **Available Tools:**
-- `web_search` - Real-time web search with DuckDuckGo
-- `analyze_url` - Website content summarization and analysis
-- `arxiv_search` - Academic paper search with deep PDF analysis
-- `get_stock_overview` - Comprehensive financial data for stocks, crypto, and market indices with trend visualization
-- `analyze_youtube_url` - AI-powered YouTube analysis - summaries or targeted Q&A
-- `get_weather` - Current weather and forecasts by city name or coordinates
-- `get_tide_info` - Canadian tide information with high/low times and heights
-- `get_toronto_crime` - Toronto neighbourhood crime statistics with trend analysis and visualization
+- `web_search`, `analyze_url`, `save_link` - Web search, analysis, and content saving
+- `arxiv_search` - Academic paper search with PDF analysis
+- `get_stock_overview` - Financial data for stocks, crypto, and market indices
+- `analyze_youtube_url` - YouTube video analysis and summarization
+- `get_weather` - Weather forecasts by location
+- `get_tide_info` - Canadian tide information
+- `get_toronto_crime` - Toronto neighbourhood crime statistics
+- `remember`, `recall`, `forget` - Conversation memory
+- `store_note`, `search_documents`, `show_all_documents` - Document management
 
 #### Standalone MCP Server
 ```bash
@@ -64,70 +64,43 @@ uv run python mcp_server.py
 uv run python mcp_server.py http 8000
 ```
 
-## ✨ Capabilities
+## Capabilities
 
-- **💬 Chat**: Direct integration with local Ollama models
-- **🔍 Web Search**: Real-time DuckDuckGo search with current information
-- **📄 URL Analysis**: Analyze and summarize content from any website  
-- **📚 arXiv Search**: Find and deeply analyze academic papers with structured insights
-- **📈 Financial Data**: Get stock prices, crypto rates, and market summaries without API keys
-- **🎥 YouTube Analysis**: Analyze and summarize video content from YouTube links (includes beginning + ending for longer videos)
-- **🌤️ Weather**: Get current weather and 7-day forecasts by IP location, city name, or coordinates (prefers Canada, no API keys needed)
-- **🌊 Tide Information**: Canadian coastal tide times and heights with emoji indicators (Halifax, Vancouver, St. Johns, etc.)
-- **🚨 Crime Analytics**: Toronto neighbourhood safety statistics with semantic neighbourhood search and trend visualization
-- **🧠 Simple Memory System**: Natural conversation history injection with 80% relevance threshold (MVP - July 2025)
-- **🎛️ Function Toggle**: Enable/disable AI tool usage per conversation
+- **Local LLM Integration**: Direct integration with Ollama models
+- **Web Search & Analysis**: Real-time web search and URL content analysis
+- **Academic Research**: arXiv paper search with PDF analysis
+- **Financial Data**: Stock prices, crypto rates, and market data without API keys
+- **Media Analysis**: YouTube video analysis and summarization
+- **Weather & Tides**: Location-based forecasts and Canadian tide information
+- **Crime Analytics**: Toronto neighbourhood safety statistics with visualization
+- **Vector Memory**: Semantic memory system with conversation context
+- **Tool Management**: Enable/disable AI tool usage per conversation
 
-## 🎯 Example Prompts
+## Example Usage
 
-**Web Search:**
+**Web & Research:**
 - "Search for Python 3.13 features"
-- "What's the latest news on AI?"
-
-**URL Analysis:**
 - "Analyze https://example.com"
+- "Find papers on transformer architectures"
+
+**Financial & Market Data:**
+- "What's Apple's stock price?"
+- "Get Bitcoin price"
+
+**Media & Content:**
+- "Analyze this YouTube video: [URL]"
 - "Summarize the content at this URL"
 
-**Academic Research:**
-- "Find papers on transformer architectures"
-- "Search for recent quantum computing research"
-
-**Financial Data:**
-- "What's Apple's stock price?"
-- "Show Tesla's performance"  
-- "Get Bitcoin price"
-- "How is NVDA doing?"
-
-**YouTube Videos:**
-- "Analyze this YouTube video: [paste URL]"
-- "What are the main points in this video: [URL]?"
-- "What does this video say about AI: [URL]?"
-
-**Weather:**
-- "What's the weather like?"
-- "Show me the weather forecast"
-- "Get weather for Niagara Falls"
+**Location Services:**
 - "Weather in Toronto"
-
-**Tide Information:**
 - "When is high tide in Halifax today?"
-- "Show me Halifax tide times for July 20th"
-- "Get tide information for Vancouver tomorrow"
-- "What are the tides like in St. Johns?"
+- "Crime statistics for downtown Toronto"
 
-**Crime Analytics:**
-- "What is crime like in Rosedale?"
-- "Show me car theft statistics for downtown Toronto"
-- "How safe is Harbourfront neighbourhood?"
-- "Compare assault rates in different Toronto areas"
-
-**Memory & Preferences (MVP 2025):**
+**Memory:**
 - "Remember I like reading sci-fi books"
-- Next: "Any book recommendations?" (automatic context: "Since you enjoy sci-fi books...")
-- "What do you remember about me?" (simple direct response)
-- High precision: only 80%+ relevant facts injected
+- "What do you remember about me?"
 
-## 🏗️ Architecture
+## Architecture
 
 ### Core Components
 ```
@@ -137,14 +110,14 @@ src/core/vector_memory.py # Vector memory with ChromaDB + Ollama
 src/tools/               # Organized tool modules
 ```
 
-### Key Benefits
-- **Standards-Compliant**: Uses Model Context Protocol (MCP)
-- **Automatic Schema Generation**: From Python type hints
-- **Vector Memory**: Semantic search with local embeddings
-- **Intelligent Retry System**: Automatic type correction and error recovery for LLM tool calls
-- **Modular Design**: Clean tool organization
+### Key Features
+- Standards-compliant MCP implementation
+- Automatic schema generation from Python type hints
+- Vector memory with semantic search
+- Intelligent retry system with error recovery
+- Modular tool organization
 
-## 🔧 MCP Server Usage
+## MCP Server Usage
 
 ### Standalone Server
 ```bash
@@ -154,18 +127,6 @@ uv run python mcp_server.py stdio
 # Run as HTTP server
 uv run python mcp_server.py http 8000
 ```
-
-### Available Tools
-- **Memory**: `remember`, `recall`, `forget` - Conversation context and preferences
-- **Documents**: `store_note`, `search_documents`, `show_all_documents` - Knowledge base management
-- **Web**: `web_search`, `analyze_url`, `save_link` - Web search, analysis, and content saving
-- **Media**: `analyze_youtube_url` - YouTube analysis (summaries and Q&A)
-- **Finance**: `get_stock_overview` - Comprehensive financial data with visualization
-- **Research**: `arxiv_search` - Academic paper analysis
-- **Weather**: `get_weather` - Location-based weather forecasts
-- **Canadian Economy**: `analyze_canadian_economy` - Comprehensive economic analysis with Statistics Canada data (CPI, GDP, employment)
-- **Tides**: `get_tide_info` - Canadian coastal tide times and heights
-- **Crime**: `get_toronto_crime` - Toronto neighbourhood safety statistics with semantic search and visualization
 
 ### Client Integration
 ```python
@@ -178,48 +139,34 @@ async def use_tools():
         print(result.content[0].text)
 ```
 
-## 🧠 Vector Memory System
+## Vector Memory System
 
-**Semantic memory that understands meaning, not just keywords.**
+Semantic memory system that understands meaning, not just keywords.
 
 ### Architecture
-- **ChromaDB + Ollama**: `nomic-embed-text` embeddings (768d, 8K context)
-- **Semantic Search**: "about me" finds "User likes ice cream" via meaning
-- **Hybrid Storage**: Vector facts + TinyDB preferences
-- **Local & Private**: All data at `~/.cache/mcp_playground/`
+- **ChromaDB + Ollama**: Uses `nomic-embed-text` embeddings for semantic search
+- **Hybrid Storage**: Vector facts with TinyDB fallback
+- **Local & Private**: All data stored at `~/.cache/mcp_playground/`
 
-### Memory vs Documents
-- **Memory Tools** (`remember`, `recall`, `forget`): Conversation context only
-- **Document Tools** (`store_note`, `search_documents`, `show_all_documents`): Permanent knowledge base
+### Tool Categories
+- **Memory Tools** (`remember`, `recall`, `forget`): Conversation context
+- **Document Tools** (`store_note`, `search_documents`, `show_all_documents`): Knowledge base
 - **Web Tools** (`save_link`, `analyze_url`): Content saving and analysis
 
-### Key Benefits (MVP July 2025)
-- **Simple & Effective**: Conversation history injection instead of complex prompt engineering
-- **High Precision**: 80% similarity threshold prevents irrelevant memory injection
-- **Natural Integration**: LLM treats memory as conversation context, not external data  
-- **No Confusion**: Eliminates "I don't know X while showing X" responses
-- **Minimal Code**: ~50 lines vs 500+ lines of complexity
-- **Reliable**: ChromaDB semantic search with conversation history injection
+### Key Features
+- High precision with 80% similarity threshold
+- Natural conversation history injection
+- Eliminates irrelevant memory injection
+- Automatic context awareness
 
-**How It Works**:
-1. `remember("User likes reading sci-fi books")` → stored in ChromaDB
-2. "Any good book recommendations?" → 86% similarity found
-3. System injects: "Just so you know, user likes reading sci-fi books"
-4. LLM: "Since you enjoy sci-fi books, I'd recommend..." (natural response)
-
-**Precision Examples**:
-- ✅ "sci-fi book recs" → 86% similarity → memory injected
-- ❌ "what's the weather" → <80% similarity → no injection
-- ✅ Clean separation: tool queries vs memory queries
-
-## 📚 Documentation
+## Documentation
 
 - **[FastMCP Overview](docs/FASTMCP_OVERVIEW.md)** - How the @mcp.tool decorator eliminates boilerplate
 - **[Memory System](docs/MEMORY_SYSTEM.md)** - Simple MVP memory system with conversation history injection
 - **[RAG Architecture](docs/RAG_ARCHITECTURE.md)** - Simplified RAG with high-precision filtering
 - **[FastMCP Usage](docs/FASTMCP_USAGE.md)** - FastMCP framework documentation
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 **No models found?**
 ```bash
