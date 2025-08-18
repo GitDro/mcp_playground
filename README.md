@@ -27,33 +27,25 @@ uv run streamlit run app_subprocess.py
 
 Open http://localhost:8501
 
-#### Add to Windsurf IDE
+#### MCP Client Integration
 
-You can use these tools directly in Windsurf IDE through MCP integration:
+You can use these tools with any MCP-compatible client through standard MCP configuration:
 
-1. **Create Windsurf MCP config file**:
-   ```bash
-   mkdir -p ~/.codeium/windsurf
-   ```
+**Example MCP Configuration**:
+```json
+{
+  "mcpServers": {
+    "mcp-playground": {
+      "command": "/path/to/your/project/.venv/bin/python3",
+      "args": ["/path/to/your/project/mcp_server.py", "stdio"]
+    }
+  }
+}
+```
 
-2. **Add this configuration** to `~/.codeium/windsurf/mcp_config.json`:
-   ```json
-   {
-     "mcpServers": {
-       "mcp-playground": {
-         "command": "/Users/YOUR_USERNAME/Documents/GitHub/mcp_playground/.venv/bin/python3",
-         "args": ["/Users/YOUR_USERNAME/Documents/GitHub/mcp_playground/mcp_server.py", "stdio"],
-         "cwd": "/Users/YOUR_USERNAME/Documents/GitHub/mcp_playground"
-       }
-     }
-   }
-   ```
-   
-   **Note**: Replace `YOUR_USERNAME` with your actual username, or use the full path to your project.
+**Note**: Replace `/path/to/your/project/` with the actual path to your cloned repository. The configuration format may vary depending on your MCP client.
 
-3. **Restart Windsurf** and access tools via Cascade panel → Plugins
-
-**Available Tools in Windsurf:**
+**Available Tools:**
 - `web_search` - Real-time web search with DuckDuckGo
 - `analyze_url` - Website content summarization and analysis
 - `arxiv_search` - Academic paper search with deep PDF analysis
