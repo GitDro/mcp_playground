@@ -290,16 +290,52 @@ def _save_web_content(url: str, html_content: str) -> str:
             source_url=url
         )
         
+        # Extract key metadata for user-friendly response
+        from urllib.parse import urlparse
+        try:
+            domain = urlparse(url).netloc.replace('www.', '')
+        except:
+            domain = "Unknown domain"
+        
+        author = metadata.get('author', '')
+        publish_date = metadata.get('publish_date', '')
+        
+        # Format date nicely if available
+        date_str = ""
+        if publish_date:
+            try:
+                from datetime import datetime
+                # Try to parse and format date
+                if 'T' in publish_date:
+                    dt = datetime.fromisoformat(publish_date.replace('Z', '+00:00'))
+                    date_str = dt.strftime('%b %d, %Y')
+                else:
+                    date_str = publish_date[:10]  # Take first 10 chars if it looks like a date
+            except:
+                date_str = publish_date
+        
+        # Build metadata line
+        metadata_parts = [domain]
+        if author:
+            metadata_parts.append(author)
+        if date_str:
+            metadata_parts.append(date_str)
+        metadata_line = " • ".join(metadata_parts)
+        
         # Check if this was a duplicate (existing ID returned)
         existing_docs = vector_memory_manager.get_all_documents()
         existing_doc = next((doc for doc in existing_docs if doc['id'] == doc_id), None)
         
         if existing_doc and existing_doc.get('source_url') == url:
             # This was a duplicate URL
-            return f"URL already saved!\nTitle: {existing_doc['title']}\nID: {doc_id}\nUse find_saved or list_saved to access your saved content."
+            return f"""**Already saved: {existing_doc['title']}**
+{metadata_line}
+**Find it:** `search_documents("{page_title[:30]}")` or `search_documents("{domain}")`"""
         else:
             # This is a new document
-            return f"Title: {page_title}\nID: {doc_id}\nFile: {file_path}\nContent is now searchable and available offline."
+            return f"""**Saved: {page_title}**
+{metadata_line}
+**Find it:** `search_documents("{page_title[:30]}")` or `search_documents("{domain}")`"""
         
     except Exception as e:
         return f"❌ Error saving web content: {str(e)}"

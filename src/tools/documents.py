@@ -95,21 +95,40 @@ def register_document_tools(mcp):
                 relevance = doc['relevance_score']
                 
                 response += f"**{doc['title']}** (relevance: {relevance:.0%})\n"
-                response += f"{doc['created_at'][:10] if doc['created_at'] else 'Unknown date'}"
+                
+                # Build metadata line with improved formatting
+                metadata_parts = []
+                
+                # Add formatted date
+                if doc['created_at']:
+                    try:
+                        date_part = doc['created_at'][:10]  # YYYY-MM-DD format
+                        # Convert to more readable format
+                        from datetime import datetime
+                        dt = datetime.fromisoformat(date_part)
+                        metadata_parts.append(dt.strftime('%b %d, %Y'))
+                    except:
+                        metadata_parts.append(doc['created_at'][:10])
+                else:
+                    metadata_parts.append('Unknown date')
                 
                 # Add domain from URL if available
                 if doc.get('source_url'):
                     from urllib.parse import urlparse
                     try:
                         domain = urlparse(doc['source_url']).netloc.replace('www.', '')
-                        response += f" | {domain}"
+                        metadata_parts.append(domain)
                     except:
                         pass
                 
+                # Add tags if available
                 if doc['tags']:
-                    response += f" | {', '.join(doc['tags'])}"
+                    metadata_parts.append(f"tags: {', '.join(doc['tags'])}")
                 
-                response += f"\nID: {doc['id']}\n"
+                # Format metadata line with bullets
+                metadata_line = " • ".join(metadata_parts)
+                response += f"{metadata_line}\n"
+                response += f"ID: {doc['id']}\n"
                 
                 # Generate summary
                 content = doc['content']
@@ -161,21 +180,40 @@ def register_document_tools(mcp):
             
             for doc in documents:
                 response += f"**{doc['title']}**\n"
-                response += f"{doc['created_at'][:10] if doc['created_at'] else 'Unknown date'}"
+                
+                # Build metadata line with improved formatting
+                metadata_parts = []
+                
+                # Add formatted date
+                if doc['created_at']:
+                    try:
+                        date_part = doc['created_at'][:10]  # YYYY-MM-DD format
+                        # Convert to more readable format
+                        from datetime import datetime
+                        dt = datetime.fromisoformat(date_part)
+                        metadata_parts.append(dt.strftime('%b %d, %Y'))
+                    except:
+                        metadata_parts.append(doc['created_at'][:10])
+                else:
+                    metadata_parts.append('Unknown date')
                 
                 # Add domain from URL if available
                 if doc.get('source_url'):
                     from urllib.parse import urlparse
                     try:
                         domain = urlparse(doc['source_url']).netloc.replace('www.', '')
-                        response += f" | {domain}"
+                        metadata_parts.append(domain)
                     except:
                         pass
                 
+                # Add tags if available
                 if doc['tags']:
-                    response += f" | {', '.join(doc['tags'])}"
+                    metadata_parts.append(f"tags: {', '.join(doc['tags'])}")
                 
-                response += f"\nID: {doc['id']}\n"
+                # Format metadata line with bullets
+                metadata_line = " • ".join(metadata_parts)
+                response += f"{metadata_line}\n"
+                response += f"ID: {doc['id']}\n"
                 
                 # Generate clean summary (first 2-3 sentences)
                 content = doc['content']
