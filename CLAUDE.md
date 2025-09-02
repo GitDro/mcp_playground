@@ -1,18 +1,46 @@
 # Claude Development Notes
 
+## Recent Changes (Sept 2025)
+
+### 🚀 Cloud Deployment Ready
+- **FastMCP Cloud workspace**: `https://fastmcp.cloud/dro-serve`
+- **Security-first**: Mandatory authentication for cloud deployment
+- **Optimized dependencies**: pyproject.toml restructured for faster cloud deployments
+- **Graceful degradation**: Vector memory tools provide helpful fallbacks in cloud mode
+
+### 🔧 Code Optimizations  
+- **Removed local LLM analysis** from arXiv tool - now returns raw content for host LLM analysis
+- **Cloud-aware tools**: Memory and document tools detect cloud mode and provide appropriate messages
+- **Dependency cleanup**: Removed redundant requirements.txt, optimized pyproject.toml structure
+
 ## Dependency Management
 - **Always use `uv` for dependency management** instead of `pip` or `python -m`
 - Run commands with `uv run python` instead of just `python`
 - Install packages with `uv add package-name`
+- **Cloud deployment**: Uses core dependencies only (auto-detected from pyproject.toml)
+- **Local development**: `uv sync --extra local` for full features including Streamlit and vector memory
 
 ## Testing Commands
 ```bash
-# Test MCP server
+# Test MCP server (local)
 uv run python test_mcp.py
 
-# Run main app
+# Run main app (local UI)
 uv run streamlit run app.py
+
+# Test cloud server locally
+DISABLE_VECTOR_MEMORY=true uv run python cloud_server.py
+
+# Test HTTP mode locally  
+python -m src.server http 8001
 ```
+
+## Cloud Deployment Workflow
+1. **Commit changes**: `git add . && git commit -m "Deploy updates" && git push`
+2. **Access workspace**: `https://fastmcp.cloud/dro-serve`
+3. **Monitor deployment**: Check logs and status in FastMCP Cloud dashboard
+4. **Get URL**: Your server will be available at `https://your-project-name.fastmcp.app/mcp`
+5. **Configure client**: Add bearer token to Claude Desktop config
 
 ## Architecture
 
@@ -106,6 +134,14 @@ src/
 - Local & private (no external API calls)
 - Foundation for future document RAG
 
+## Cloud Deployment Optimizations
+
+### Local vs Host LLM Processing
+- **arXiv Tool**: Extracts raw PDF text and metadata for host LLM analysis (no local processing)
+- **Vector Memory**: Uses Ollama embeddings locally (appropriate for search indexing)
+- **All Other Tools**: Return raw data for host LLM analysis (web content, financial data, etc.)
+- **Design Principle**: MCP server handles data retrieval, host LLM handles analysis and insights
+
 ## Simplified Workflows
 
 ### Knowledge Base Building
@@ -128,7 +164,7 @@ src/
 ### Data Analysis & Research
 - **Financial Tools**: Real-time stock/crypto prices with caching
 - **Canadian Economy**: Comprehensive economic analysis with Statistics Canada data (CPI, GDP, employment)
-- **Academic Research**: arXiv search with PDF analysis
+- **Academic Research**: arXiv search with full text extraction for host LLM analysis
 - **Crime Analytics**: Toronto neighbourhood safety statistics with semantic search
 - **Weather Data**: Location-based forecasts (IP/city/coordinates)
 - **Tide Information**: Canadian coastal tide times and heights

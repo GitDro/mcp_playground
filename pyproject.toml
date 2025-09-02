@@ -1,29 +1,63 @@
 [project]
 name = "mcp-playground"
 version = "1.0.0"
-description = "Minimal Streamlit chat playground with Ollama and function calling"
+description = "MCP Arena - FastMCP server with comprehensive tools for research, finance, and analysis"
 readme = "README.md"
 requires-python = ">=3.12"
+
+# Core dependencies - always required for MCP server functionality
 dependencies = [
-    "streamlit>=1.46.1",
-    "requests>=2.32.4",
+    # Core MCP Framework
+    "fastmcp>=2.10.1",
+    
+    # HTTP and Web handling
     "httpx>=0.27.0",
+    "requests>=2.32.4",
+    
+    # Data models and validation
+    "pydantic>=2.0.0",
+    
+    # Environment configuration
+    "python-dotenv>=1.0.0",
+    
+    # Date and time utilities
+    "python-dateutil>=2.8.0",
+    
+    # Academic and research tools
     "arxiv>=2.1.0",
     "PyMuPDF>=1.23.0",
-    "pydantic>=2.0.0",
-    "ollama>=0.3.0",
-    "python-dotenv>=1.0.0",
+    
+    # YouTube integration
     "youtube-transcript-api>=0.6.0",
-    "tinydb>=4.8.0",
-    "fastmcp>=2.10.1",
-    "chromadb>=0.4.0",
-    "python-dateutil>=2.8.0",
-    "matplotlib>=3.7.0",
-    "pandas>=2.0.0",
-    "seaborn>=0.12.0",
+    
+    # Web search and content parsing
     "ddgs>=9.0.1",
     "beautifulsoup4>=4.12.0",
     "html2text>=2020.1.16",
+    
+    # Data visualization for financial/crime tools
+    "matplotlib>=3.7.0",
+    "pandas>=2.0.0",
+    "seaborn>=0.12.0",
+]
+
+[project.optional-dependencies]
+# Local development with full UI and vector memory
+local = [
+    "streamlit>=1.46.1",
+    "ollama>=0.3.0",
+    "chromadb>=0.4.0",
+    "tinydb>=4.8.0",
+]
+
+# Development and testing dependencies
+dev = [
     "pytest>=8.4.1",
     "pytest-asyncio>=1.1.0",
+]
+
+# Cloud deployment - minimal additional deps (most handled by core)
+cloud = [
+    # TinyDB for lightweight storage fallbacks
+    "tinydb>=4.8.0",
 ]

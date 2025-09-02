@@ -9,7 +9,6 @@ from typing import List, Optional
 from datetime import datetime
 
 from fastmcp import FastMCP
-from ..core.models import PaperAnalysis
 from ..core.utils import clean_markdown_text
 
 logger = logging.getLogger(__name__)
@@ -69,16 +68,16 @@ def register_arxiv_tools(mcp: FastMCP):
         scored_results.sort(key=lambda x: x[0], reverse=True)
         return [paper for score, paper in scored_results[:max_results] if score > 0]
     
-    def _extract_paper_content(pdf_url: str) -> Optional[PaperAnalysis]:
-        """Extract structured content from arXiv PDF using LLM analysis"""
+    def _extract_paper_text(pdf_url: str) -> Optional[str]:
+        """Extract raw text content from arXiv PDF for host LLM analysis"""
         try:
             import fitz  # PyMuPDF
             import httpx
-            logger.info(f"Starting PDF analysis for {pdf_url}")
+            logger.info(f"Extracting text from PDF: {pdf_url}")
             
             # Download PDF to temporary file
             with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
-                response = httpx.get(pdf_url, timeout=30)
+                response = httpx.get(pdf_url, timeout=30, follow_redirects=True)
                 response.raise_for_status()
                 tmp_file.write(response.content)
                 tmp_path = tmp_file.name
@@ -97,13 +96,15 @@ def register_arxiv_tools(mcp: FastMCP):
                     logger.warning(f"Very little text extracted from PDF")
                     return None
                 
-                # Analyze with structured LLM output
-                analysis = _analyze_paper_with_structured_output(full_text)
-                if analysis:
-                    logger.info("LLM analysis completed successfully")
-                else:
-                    logger.warning("LLM analysis returned None")
-                return analysis
+                # Clean up the text for better readability
+                full_text = clean_markdown_text(full_text)
+                
+                # Truncate if too long (keep reasonable length for host LLM)
+                if len(full_text) > 12000:  # Increased limit since host LLM will handle it
+                    full_text = full_text[:12000] + "\n\n[Content truncated for length]"
+                    logger.info(f"Text truncated to 12000 characters")
+                
+                return full_text
                 
             finally:
                 # Clean up temp file
@@ -111,96 +112,17 @@ def register_arxiv_tools(mcp: FastMCP):
                     os.unlink(tmp_path)
                     
         except Exception as e:
-            logger.error(f"Error extracting paper content: {e}")
+            logger.error(f"Error extracting paper text: {e}")
             return None
     
-    def _analyze_paper_with_structured_output(full_text: str) -> Optional[PaperAnalysis]:
-        """Use Ollama structured output to analyze a research paper"""
-        try:
-            from ollama import chat
-            
-            # Limit text length to avoid overwhelming the LLM
-            original_length = len(full_text)
-            if len(full_text) > 8000:
-                full_text = full_text[:8000] + "..."
-                logger.info(f"Truncated text from {original_length} to {len(full_text)} chars")
-            
-            # Create comprehensive prompt for paper analysis
-            prompt = f"""You must analyze this research paper and provide structured insights in JSON format.
-
-Examine the paper text and provide analysis for these sections (include ALL sections that apply):
-
-1. Introduction: What is the main problem/gap? What is the key contribution? What makes this novel?
-2. Methods: What novel techniques are used? What are the key innovations? What unique approaches?
-3. Results: What performance improvements are shown? What comparisons are made? What significant findings?
-4. Discussion: What conclusions are drawn? What limitations exist? What future work is suggested?
-
-For each section that exists in the paper, provide 2-3 specific, informative bullet points.
-You MUST respond in the exact JSON format requested. Do not include any text outside the JSON.
-
-Paper text:
-{full_text}"""
-
-            logger.info("Calling Ollama for structured analysis")
-            # Use structured output with Pydantic schema
-            response = chat(
-                messages=[{
-                    'role': 'user',
-                    'content': prompt,
-                }],
-                model='llama3.2',  # Use available model, might make it dynamic
-                format=PaperAnalysis.model_json_schema(),
-                options={
-                    'temperature': 0.2,  # Slightly higher temperature for more content
-                    'num_predict': 1200,  # More tokens for complete analysis
-                    'top_p': 0.9,  # Add top_p for better generation
-                    'repeat_penalty': 1.1  # Prevent repetition
-                }
-            )
-            
-            logger.info(f"Got Ollama response, length: {len(response.message.content)}")
-            
-            # Check if response is too short (likely an error)
-            if len(response.message.content.strip()) < 20:
-                logger.warning(f"Ollama response too short: '{response.message.content}'")
-                return None
-            
-            # Parse and validate the structured response
-            try:
-                analysis = PaperAnalysis.model_validate_json(response.message.content)
-            except Exception as parse_error:
-                logger.error(f"Failed to parse Ollama response as JSON: {parse_error}")
-                logger.error(f"Raw response: {response.message.content}")
-                return None
-            
-            # Check if analysis has content
-            sections_with_content = sum([
-                bool(analysis.introduction and analysis.introduction.bullet_points),
-                bool(analysis.methods and analysis.methods.bullet_points),
-                bool(analysis.results and analysis.results.bullet_points),
-                bool(analysis.discussion and analysis.discussion.bullet_points)
-            ])
-            
-            logger.info(f"Analysis parsed with {sections_with_content} sections containing content")
-            
-            # If no sections have content, return None to indicate failure
-            if sections_with_content == 0:
-                logger.warning("Analysis succeeded but contains no content in any section")
-                return None
-                
-            return analysis
-            
-        except Exception as e:
-            logger.error(f"Error in structured LLM analysis: {e}")
-            return None
     
-    @mcp.tool(description="Search academic papers on arXiv with PDF analysis")
+    @mcp.tool(description="Search academic papers on arXiv with full text extraction")
     def arxiv_search(query: str, max_results: Optional[int] = 3) -> str:
-        """Search arXiv database for academic papers and extract key insights including abstract, methodology, and conclusions. Returns detailed analysis of up to 10 papers (default: 3).
+        """Search arXiv database for academic papers and provide full text content for analysis. Returns paper metadata, abstracts, and full PDF text for up to 10 papers (default: 3). The host LLM can then analyze methodology, findings, and contributions.
         
         Args:
             query: Search terms for academic papers (e.g., "machine learning", "quantum computing")
-            max_results: Maximum number of papers to analyze (default: 3, max: 10)
+            max_results: Maximum number of papers to retrieve (default: 3, max: 10)
         """
         try:
             import arxiv
@@ -257,45 +179,16 @@ Paper text:
                 formatted_results += f"**Abstract**: {abstract}\n"
                 formatted_results += f"**PDF**: {result.pdf_url}\n"
                 
-                # Deep analysis for top 1 paper only
-                if i <= 1:
-                    formatted_results += "\n**📄 Deep Analysis:**\n"
-                    paper_content = _extract_paper_content(result.pdf_url)
+                # Extract full paper text for top 1-2 papers for host LLM analysis
+                if i <= 2:
+                    paper_text = _extract_paper_text(result.pdf_url)
                     
-                    if paper_content:
-                        # Introduction/Background
-                        if paper_content.introduction and paper_content.introduction.bullet_points:
-                            formatted_results += "\n**Introduction:**\n\n"
-                            for point in paper_content.introduction.bullet_points:
-                                clean_point = clean_markdown_text(point)
-                                formatted_results += f"- {clean_point}\n\n"
-                            formatted_results += "\n"
-                        
-                        # Methods/Approach
-                        if paper_content.methods and paper_content.methods.bullet_points:
-                            formatted_results += "\n**Methods:**\n\n"
-                            for point in paper_content.methods.bullet_points:
-                                clean_point = clean_markdown_text(point)
-                                formatted_results += f"- {clean_point}\n\n"
-                            formatted_results += "\n"
-                        
-                        # Results
-                        if paper_content.results and paper_content.results.bullet_points:
-                            formatted_results += "\n**Results:**\n\n"
-                            for point in paper_content.results.bullet_points:
-                                clean_point = clean_markdown_text(point)
-                                formatted_results += f"- {clean_point}\n\n"
-                            formatted_results += "\n"
-                        
-                        # Discussion/Limitations
-                        if paper_content.discussion and paper_content.discussion.bullet_points:
-                            formatted_results += "\n**Discussion:**\n\n"
-                            for point in paper_content.discussion.bullet_points:
-                                clean_point = clean_markdown_text(point)
-                                formatted_results += f"- {clean_point}\n\n"
-                            formatted_results += "\n"
+                    if paper_text:
+                        formatted_results += "\n**📄 Full Paper Text (for analysis):**\n"
+                        formatted_results += f"```\n{paper_text}\n```\n\n"
+                        formatted_results += "*Note: Above is the full paper content extracted for your analysis. Please provide insights on methodology, key findings, and contributions.*\n\n"
                     else:
-                        formatted_results += "*PDF analysis unavailable - using abstract only.*\n\n"
+                        formatted_results += "*PDF text extraction unavailable - analysis will be based on abstract only.*\n\n"
                 
                 # Add separator with proper spacing to prevent markdown bleeding
                 formatted_results += "\n---\n\n"
