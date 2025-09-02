@@ -118,32 +118,65 @@ def enable_retry_for_existing_tools():
 # Initialize the server
 setup_server()
 
+def run_http_server(host="0.0.0.0", port=8000, enable_cors=True):
+    """Run the server in HTTP mode for cloud deployment and web clients"""
+    logger.info(f"Starting MCP Arena HTTP server on {host}:{port}")
+    logger.info("HTTP mode - suitable for cloud deployment and web clients")
+    
+    if enable_cors:
+        logger.info("CORS enabled for cross-origin requests")
+    
+    try:
+        mcp.run(
+            transport="http",
+            host=host,
+            port=port,
+        )
+    except Exception as e:
+        logger.error(f"Failed to start HTTP server: {e}")
+        raise
+
+def run_stdio_server():
+    """Run the server in stdio mode for local development"""
+    logger.info("Starting MCP Arena stdio server")
+    logger.info("Stdio mode - suitable for local MCP clients and development")
+    
+    try:
+        mcp.run(transport="stdio")
+    except Exception as e:
+        logger.error(f"Failed to start stdio server: {e}")
+        raise
+
 def main():
-    """Main function to run the FastMCP server"""
+    """Main function to run the FastMCP server with enhanced transport support"""
     import sys
     
     # Check for command line arguments for different modes
     if len(sys.argv) > 1:
         mode = sys.argv[1].lower()
         if mode == "http":
-            # Run as HTTP server for web-based clients
+            # Run as HTTP server for web-based clients and cloud deployment
             port = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
             host = sys.argv[3] if len(sys.argv) > 3 else "0.0.0.0"
-            print(f"Starting FastMCP HTTP server on {host}:{port}")
-            mcp.run(transport="http", host=host, port=port)
+            enable_cors = os.getenv("ENABLE_CORS", "true").lower() == "true"
+            run_http_server(host=host, port=port, enable_cors=enable_cors)
         elif mode == "stdio":
             # Run as stdio server (default for local clients)
-            print("Starting FastMCP stdio server")
-            mcp.run(transport="stdio")
+            run_stdio_server()
         else:
             print(f"Unknown mode: {mode}")
-            print("Usage: python mcp_server.py [stdio|http] [port] [host]")
+            print("Usage:")
+            print("  python -m src.server stdio              # Local development (default)")
+            print("  python -m src.server http [port] [host] # HTTP server for cloud")
+            print("Examples:")
+            print("  python -m src.server http 8000          # HTTP on port 8000")
+            print("  python -m src.server http 8000 0.0.0.0  # HTTP on all interfaces")
             sys.exit(1)
     else:
         # Default to stdio transport for local development
-        print("Starting FastMCP server in stdio mode (default)")
-        print("Use 'python mcp_server.py http 8000' for web mode")
-        mcp.run(transport="stdio")
+        logger.info("No mode specified - defaulting to stdio mode for local development")
+        logger.info("Use 'python -m src.server http' for cloud/web mode")
+        run_stdio_server()
 
 if __name__ == "__main__":
     main()

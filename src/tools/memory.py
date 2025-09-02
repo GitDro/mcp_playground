@@ -6,14 +6,29 @@ about the user and previous conversations. Uses vector-based semantic search
 with ChromaDB and Ollama embeddings for better understanding.
 """
 
+import os
 import logging
 from typing import Dict, List, Optional
-from ..core.vector_memory import vector_memory_manager
 
 logger = logging.getLogger(__name__)
 
+# Check if vector memory should be disabled (for cloud deployment)
+DISABLE_VECTOR_MEMORY = os.getenv("DISABLE_VECTOR_MEMORY", "false").lower() == "true"
+
+if not DISABLE_VECTOR_MEMORY:
+    try:
+        from ..core.vector_memory import vector_memory_manager
+        logger.info("Vector memory enabled - full functionality available")
+    except Exception as e:
+        logger.warning(f"Vector memory unavailable: {e}")
+        DISABLE_VECTOR_MEMORY = True
+        vector_memory_manager = None
+else:
+    vector_memory_manager = None
+    logger.info("Vector memory disabled - memory tools will return friendly messages")
+
 def register_memory_tools(mcp):
-    """Register streamlined memory tools with the FastMCP server"""
+    """Register memory tools with cloud-aware fallbacks"""
     
     @mcp.tool(description="Remember conversation context and user preferences")
     def remember(content: str) -> str:
@@ -24,6 +39,9 @@ def register_memory_tools(mcp):
         Args:
             content: Conversation context or preference to remember (e.g., "I like coffee", "I work at Microsoft")
         """
+        if DISABLE_VECTOR_MEMORY or not vector_memory_manager:
+            return "💭 Memory storage is not available in cloud mode. I can only remember things within this conversation. For permanent storage, use the 'store_note' tool instead!"
+        
         try:
             # Auto-categorize based content keywords
             content_lower = content.lower()
@@ -57,6 +75,9 @@ def register_memory_tools(mcp):
         Args:
             query: What to recall (typically "what do you remember about me", "my preferences")
         """
+        if DISABLE_VECTOR_MEMORY or not vector_memory_manager:
+            return "💭 Memory recall is not available in cloud mode. I can only remember things from this conversation. For searching saved documents, use the 'search_documents' tool instead!"
+        
         try:
             # Get all stored facts and present them simply
             all_facts = vector_memory_manager.get_all_facts()
@@ -108,6 +129,9 @@ def register_memory_tools(mcp):
         Returns:
             Success message indicating what was removed
         """
+        if DISABLE_VECTOR_MEMORY or not vector_memory_manager:
+            return "💭 Memory deletion is not available in cloud mode. There are no stored memories to delete. For deleting saved documents, use the document management tools instead!"
+        
         try:
             # Safety check: require explicit confirmation words
             description_lower = description.lower()

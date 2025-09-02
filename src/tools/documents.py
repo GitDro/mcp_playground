@@ -9,12 +9,26 @@ import logging
 import os
 from typing import List, Optional
 from datetime import datetime
-from ..core.vector_memory import vector_memory_manager
 
 logger = logging.getLogger(__name__)
 
+# Check if vector memory should be disabled (for cloud deployment)
+DISABLE_VECTOR_MEMORY = os.getenv("DISABLE_VECTOR_MEMORY", "false").lower() == "true"
+
+if not DISABLE_VECTOR_MEMORY:
+    try:
+        from ..core.vector_memory import vector_memory_manager
+        logger.info("Document tools: Vector memory enabled")
+    except Exception as e:
+        logger.warning(f"Document tools: Vector memory unavailable: {e}")
+        DISABLE_VECTOR_MEMORY = True
+        vector_memory_manager = None
+else:
+    vector_memory_manager = None
+    logger.info("Document tools: Vector memory disabled for cloud mode")
+
 def register_document_tools(mcp):
-    """Register simplified document management tools with the FastMCP server"""
+    """Register document management tools with cloud-aware fallbacks"""
     
     @mcp.tool(description="Store notes and documents for permanent knowledge base")
     def store_note(title: str, content: str, tags: List[str] = None, save_to_file: bool = True) -> str:
@@ -28,6 +42,9 @@ def register_document_tools(mcp):
             tags: Optional tags for organization
             save_to_file: Save as markdown file (default: True)
         """
+        if DISABLE_VECTOR_MEMORY or not vector_memory_manager:
+            return "📝 Document storage with search is not available in cloud mode. Use local deployment for full document management capabilities, or store content as plain text in this conversation."
+        
         try:
             # Determine file path if saving to file
             file_path = None
@@ -75,6 +92,9 @@ def register_document_tools(mcp):
             limit: Maximum results (default: 5)
             tags: Filter by tags
         """
+        if DISABLE_VECTOR_MEMORY or not vector_memory_manager:
+            return "🔍 Document search is not available in cloud mode. Use local deployment for full document search capabilities, or ask me to help you organize information in this conversation."
+        
         try:
             # Search documents using vector similarity
             results = vector_memory_manager.search_documents(
@@ -162,6 +182,9 @@ def register_document_tools(mcp):
         Args:
             limit: Maximum documents to show (default: 20)
         """
+        if DISABLE_VECTOR_MEMORY or not vector_memory_manager:
+            return "📋 Document listing is not available in cloud mode. Use local deployment for full document management capabilities."
+        
         try:
             # Handle None limit
             if limit is None:
