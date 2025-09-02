@@ -106,6 +106,14 @@ src/
 - Local & private (no external API calls)
 - Foundation for future document RAG
 
+## Cloud Deployment Optimizations
+
+### Local vs Host LLM Processing
+- **arXiv Tool**: Extracts raw PDF text and metadata for host LLM analysis (no local processing)
+- **Vector Memory**: Uses Ollama embeddings locally (appropriate for search indexing)
+- **All Other Tools**: Return raw data for host LLM analysis (web content, financial data, etc.)
+- **Design Principle**: MCP server handles data retrieval, host LLM handles analysis and insights
+
 ## Simplified Workflows
 
 ### Knowledge Base Building
@@ -128,7 +136,7 @@ src/
 ### Data Analysis & Research
 - **Financial Tools**: Real-time stock/crypto prices with caching
 - **Canadian Economy**: Comprehensive economic analysis with Statistics Canada data (CPI, GDP, employment)
-- **Academic Research**: arXiv search with PDF analysis
+- **Academic Research**: arXiv search with full text extraction for host LLM analysis
 - **Crime Analytics**: Toronto neighbourhood safety statistics with semantic search
 - **Weather Data**: Location-based forecasts (IP/city/coordinates)
 - **Tide Information**: Canadian coastal tide times and heights
