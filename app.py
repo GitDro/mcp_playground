@@ -411,7 +411,7 @@ col1, col2, col3 = st.columns([1, 3, 1])
 
 with col2:
     # Clean header
-    st.markdown("# **MCP Playground (Subprocess)**")
+    st.markdown("# **MCP Playground**")
     
     # Status section with expandable hierarchy
     models = get_ollama_models()
