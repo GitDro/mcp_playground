@@ -6,6 +6,9 @@ All new caching should use the unified SQLite-based system.
 """
 
 import logging
+import os
+import tempfile
+from datetime import datetime
 from typing import Dict, Optional
 from .unified_cache import get_cached_data, save_cached_data as save_unified_data, cleanup_cache
 
@@ -30,62 +33,5 @@ def cleanup_old_cache() -> None:
     cleanup_cache()
 
 
-def get_transcript_db():
-    """Get or create SQLite database for transcripts"""
-    import sqlite3
-    
-    # Use user's cache directory or temp directory if read-only
-    cache_dir = os.path.expanduser('~/.cache/mcp_playground')
-    try:
-        os.makedirs(cache_dir, exist_ok=True)
-        db_path = os.path.join(cache_dir, 'transcripts.db')
-    except (OSError, PermissionError):
-        # Fallback to temp directory if cache dir is not writable
-        db_path = os.path.join(tempfile.gettempdir(), 'mcp_playground_transcripts.db')
-    
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row  # Enable dict-like access
-    
-    # Create table if it doesn't exist
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS transcripts (
-            video_id TEXT PRIMARY KEY,
-            url TEXT NOT NULL,
-            title TEXT NOT NULL,
-            transcript TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            language TEXT NOT NULL DEFAULT 'en'
-        )
-    ''')
-    conn.commit()
-    
-    return conn
-
-
-def get_cached_transcript(video_id: str) -> Optional[Dict]:
-    """Get cached transcript by video ID"""
-    try:
-        with get_transcript_db() as conn:
-            cursor = conn.execute(
-                'SELECT * FROM transcripts WHERE video_id = ?',
-                (video_id,)
-            )
-            row = cursor.fetchone()
-            return dict(row) if row else None
-    except Exception as e:
-        logger.warning(f"Failed to get cached transcript for {video_id}: {e}")
-        return None
-
-
-def save_transcript_cache(video_id: str, url: str, title: str, transcript: str, language: str = 'en') -> None:
-    """Save transcript to cache"""
-    try:
-        with get_transcript_db() as conn:
-            conn.execute('''
-                INSERT OR REPLACE INTO transcripts 
-                (video_id, url, title, transcript, created_at, language)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (video_id, url, title, transcript, datetime.now().isoformat(), language))
-            conn.commit()
-    except Exception as e:
-        logger.warning(f"Failed to cache transcript for {video_id}: {e}")
+# All transcript caching functionality has been moved to unified_cache.py
+# YouTube tools now use the unified caching system with proper table schemas
