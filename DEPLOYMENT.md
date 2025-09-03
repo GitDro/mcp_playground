@@ -62,23 +62,23 @@ MCP Arena provides a comprehensive set of research, financial, and analysis tool
    - Click "Create Project"
    - Select your GitHub repository
    - Choose project settings:
-     - **Name**: `mcp-arena` (or your preferred name)
+     - **Name**: `mcp-playground`
      - **Entrypoint**: `cloud_server.py`
-     - **Authentication**: Enable (recommended)
+     - **Authentication**: Enable (mandatory)
    - Click "Deploy"
 
 3. **Wait for deployment:**
    - FastMCP Cloud will:
      - Clone your repository
-     - Detect dependencies from `requirements.txt`
+     - Detect dependencies from `pyproject.toml`
      - Build your server
-     - Deploy to a unique URL
+     - Deploy to the URL
    - This takes 1-3 minutes
 
-4. **Get your deployment URL:**
-   - Access your workspace at: `https://fastmcp.cloud/dro-serve`
-   - Your deployment URL will be: `https://your-project-name.fastmcp.app/mcp`
-   - Copy the authentication token from the workspace dashboard
+4. **Access your deployment:**
+   - **Deployment URL**: `https://mcp-playground.fastmcp.app/mcp`
+   - **Dashboard**: Access FastMCP Cloud dashboard for logs and token
+   - **Authentication**: Copy the token from the dashboard
 
 ### Phase 3: Configure Client Access
 
@@ -94,13 +94,13 @@ MCP Arena provides a comprehensive set of research, financial, and analysis tool
      "mcpServers": {
        "mcp-arena-local": {
          "command": "uv",
-         "args": ["run", "python", "test_mcp.py"],
+         "args": ["run", "python", "mcp_server.py"],
          "cwd": "/path/to/mcp_arena"
        },
        "mcp-arena-cloud": {
          "type": "http",
-         "url": "https://your-project-name.fastmcp.app/mcp",
-         "authorization_token": "your-token-here"
+         "url": "https://mcp-playground.fastmcp.app/mcp",
+         "authorization_token": "your-fastmcp-cloud-token"
        }
      }
    }
@@ -108,7 +108,26 @@ MCP Arena provides a comprehensive set of research, financial, and analysis tool
 
 3. **Restart Claude Desktop**
 
-#### Option B: Direct API Integration
+#### Option B: Claude Code / VS Code
+
+**For Claude Code:**
+1. Open Claude Code
+2. Access MCP Server settings (Cmd/Ctrl + Shift + P → "MCP: Add Server")
+3. Choose **"Add remote HTTP server"**
+4. Configure:
+   - **URL**: `https://mcp-playground.fastmcp.app/mcp`
+   - **Authorization Token**: Your FastMCP Cloud token
+   - **Scope**: Choose project/user/local based on your needs
+5. Save configuration
+
+**For VS Code:**
+1. Install MCP extension or Claude Code extension
+2. Configure remote HTTP server:
+   - **URL**: `https://mcp-playground.fastmcp.app/mcp`
+   - **Auth Token**: From FastMCP Cloud dashboard
+3. Restart VS Code
+
+#### Option C: Direct API Integration
 
 ```python
 import httpx
@@ -117,9 +136,9 @@ import asyncio
 async def test_cloud_server():
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            "https://your-project-name.fastmcp.app/mcp",
+            "https://mcp-playground.fastmcp.app/mcp",
             headers={
-                "Authorization": "Bearer your-token-here",
+                "Authorization": "Bearer your-fastmcp-cloud-token",
                 "Content-Type": "application/json"
             },
             json={

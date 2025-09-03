@@ -1,192 +1,237 @@
-# MCP Playground
+# MCP Arena
 
-A modern Streamlit chat application with Ollama integration and AI-powered tool calling capabilities. Built using the Model Context Protocol (MCP) for scalable, standards-compliant tool execution.
+A comprehensive research and analysis toolkit deployed via the Model Context Protocol (MCP). Access real-time data for research, financial analysis, crime statistics, weather, and more through both local Streamlit UI and cloud deployment.
 
-## Quick Start
+## 🚀 Quick Start
 
-### Prerequisites
-1. **Install Ollama**: Visit https://ollama.ai
-2. **Start Ollama**: `ollama serve`
-3. **Pull a model**: `ollama pull llama3.2`
-4. **Pull embedding model**: `ollama pull nomic-embed-text` (required for vector memory)
-
-### Run the App
-
+### Local Development
 ```bash
 git clone <your-repo>
-cd mcp_playground
-uv sync
+cd mcp_arena
+uv sync --extra local
 
-# Run the main application
+# Run Streamlit UI for testing
 uv run streamlit run app.py
-
-# Or run the subprocess version
-uv run streamlit run app_subprocess.py
 ```
 
-Open http://localhost:8501
+### Cloud Deployment
+**Live Server**: https://mcp-playground.fastmcp.app/mcp
 
-#### MCP Client Integration
+Use with any MCP-compatible client (Claude Desktop, Claude Code, VS Code).
 
-You can use these tools with any MCP-compatible client through standard MCP configuration:
+## 🔧 MCP Integration
 
-**Example MCP Configuration**:
+### Claude Desktop
+Add to `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "mcp-playground": {
-      "command": "/path/to/your/project/.venv/bin/python3",
-      "args": ["/path/to/your/project/mcp_server.py", "stdio"]
+    "mcp-arena": {
+      "type": "http",
+      "url": "https://mcp-playground.fastmcp.app/mcp",
+      "authorization_token": "your-fastmcp-cloud-token"
     }
   }
 }
 ```
 
-**Note**: Replace `/path/to/your/project/` with the actual path to your cloned repository. The configuration format may vary depending on your MCP client.
+### Claude Code / VS Code
 
-**Available Tools:**
-- `web_search`, `analyze_url`, `save_link` - Web search, analysis, and content saving
-- `arxiv_search` - Academic paper search with PDF analysis
-- `get_stock_overview` - Financial data for stocks, crypto, and market indices
-- `analyze_youtube_url` - YouTube video analysis and summarization
-- `get_weather` - Weather forecasts by location
-- `get_tide_info` - Canadian tide information
-- `get_toronto_crime` - Toronto neighbourhood crime statistics
-- `remember`, `recall`, `forget` - Conversation memory
-- `store_note`, `search_documents`, `show_all_documents` - Document management
+**Claude Code Integration:**
+1. Open Claude Code
+2. Access MCP settings: `Cmd/Ctrl + Shift + P` → "MCP: Add Server"
+3. Choose **"Add remote HTTP server"**
+4. Configure:
+   - **URL**: `https://mcp-playground.fastmcp.app/mcp`
+   - **Authorization Token**: Get from FastMCP Cloud dashboard
+   - **Scope**: Choose project/user/local based on needs
+5. Save and start using tools in chat
 
-#### Standalone MCP Server
+**VS Code Integration:**
+1. Install MCP extension or Claude Code extension
+2. Add remote HTTP server with same URL and token
+3. Access tools through the extension interface
+
+### Local MCP Server
 ```bash
-# Run as standalone MCP server (stdio mode)
+# For Claude Desktop (stdio mode)
 uv run python mcp_server.py
 
-# Run as HTTP server for web integration
-uv run python mcp_server.py http 8000
+# Test HTTP mode locally
+uv run python -m src.server http 8000
 ```
 
-## Capabilities
+## 📊 Available Tools
 
-- **Local LLM Integration**: Direct integration with Ollama models
-- **Web Search & Analysis**: Real-time web search and URL content analysis
-- **Academic Research**: arXiv paper search with PDF analysis
-- **Financial Data**: Stock prices, crypto rates, and market data without API keys
-- **Media Analysis**: YouTube video analysis and summarization
-- **Weather & Tides**: Location-based forecasts and Canadian tide information
-- **Crime Analytics**: Toronto neighbourhood safety statistics with visualization
-- **Vector Memory**: Semantic memory system with conversation context
-- **Tool Management**: Enable/disable AI tool usage per conversation
+### Research & Analysis
+- **`web_search(query)`** - DuckDuckGo web search with clean results
+- **`analyze_url(url)`** - Extract and analyze webpage content  
+- **`arxiv_search(query)`** - Academic paper search with full PDF text
 
-## Example Usage
+### Financial & Economic Data
+- **`get_stock_overview(symbol)`** - Real-time stock, crypto, and market data
+- **`analyze_canadian_economy()`** - Economic indicators and analysis
 
-**Web & Research:**
-- "Search for Python 3.13 features"
-- "Analyze https://example.com"
-- "Find papers on transformer architectures"
+### Media & Content  
+- **`analyze_youtube_url(url)`** - Video transcription and analysis
 
-**Financial & Market Data:**
-- "What's Apple's stock price?"
-- "Get Bitcoin price"
+### Location & Weather
+- **`get_weather(location)`** - Weather forecasts by city or coordinates
+- **`get_tide_info(location)`** - Canadian coastal tide times
 
-**Media & Content:**
-- "Analyze this YouTube video: [URL]"
-- "Summarize the content at this URL"
+### Toronto Data
+- **`get_toronto_crime(neighbourhood, crime_type)`** - Crime statistics by area
+- **`list_toronto_neighbourhoods()`** - Complete list of available neighborhoods
+
+### System
+- **`health_check()`** - Server health monitoring (cloud deployment)
+
+## 💡 Example Usage
+
+**Research:**
+- "Search for recent developments in quantum computing"
+- "Analyze this research paper: https://arxiv.org/abs/..."
+- "What does this webpage say about climate change?"
+
+**Financial Analysis:**  
+- "Get Apple stock price and recent performance"
+- "How is the Canadian economy doing?"
+- "Bitcoin price and market trends"
 
 **Location Services:**
-- "Weather in Toronto"
-- "When is high tide in Halifax today?"
+- "Weather in Toronto this week"
+- "High tide times in Vancouver today"  
 - "Crime statistics for downtown Toronto"
 
-**Memory:**
-- "Remember I like reading sci-fi books"
-- "What do you remember about me?"
+**Media Analysis:**
+- "Summarize this YouTube video about AI"
+- "What are the key points from this lecture?"
 
-## Architecture
+## 🏗️ Architecture
 
-### Core Components
+### Unified Server Design
 ```
-app.py                    # Main Streamlit application
-mcp_server.py            # FastMCP server with all tools
-src/core/vector_memory.py # Vector memory with ChromaDB + Ollama
-src/tools/               # Organized tool modules
+src/server.py           # Core server (stdio + HTTP modes)
+├── mcp_server.py       # Local development entry point  
+├── cloud_server.py     # FastMCP Cloud deployment entry
+└── app.py              # Streamlit UI for local testing
 ```
 
-### Key Features
-- Standards-compliant MCP implementation
-- Automatic schema generation from Python type hints
-- Vector memory with semantic search
-- Intelligent retry system with error recovery
-- Modular tool organization
+### Deployment Modes
 
-## MCP Server Usage
-
-### Standalone Server
+**Local Development (stdio)**:
 ```bash
-# Run as MCP server
-uv run python mcp_server.py stdio
-
-# Run as HTTP server
-uv run python mcp_server.py http 8000
+uv run python mcp_server.py
+# → Direct connection to Claude Desktop
 ```
 
-### Client Integration
-```python
-from fastmcp import Client
-from mcp_server import mcp
-
-async def use_tools():
-    async with Client(mcp) as client:
-        result = await client.call_tool("web_search", {"query": "MCP framework"})
-        print(result.content[0].text)
+**Local HTTP Testing**:  
+```bash  
+uv run python -m src.server http 8000
+# → Test HTTP transport at localhost:8000
 ```
 
-## Vector Memory System
-
-Semantic memory system that understands meaning, not just keywords.
-
-### Architecture
-- **ChromaDB + Ollama**: Uses `nomic-embed-text` embeddings for semantic search
-- **Hybrid Storage**: Vector facts with TinyDB fallback
-- **Local & Private**: All data stored at `~/.cache/mcp_playground/`
-
-### Tool Categories
-- **Memory Tools** (`remember`, `recall`, `forget`): Conversation context
-- **Document Tools** (`store_note`, `search_documents`, `show_all_documents`): Knowledge base
-- **Web Tools** (`save_link`, `analyze_url`): Content saving and analysis
-
-### Key Features
-- High precision with 80% similarity threshold
-- Natural conversation history injection
-- Eliminates irrelevant memory injection
-- Automatic context awareness
-
-## Documentation
-
-- **[FastMCP Overview](docs/FASTMCP_OVERVIEW.md)** - How the @mcp.tool decorator eliminates boilerplate
-- **[Memory System](docs/MEMORY_SYSTEM.md)** - Simple MVP memory system with conversation history injection
-- **[RAG Architecture](docs/RAG_ARCHITECTURE.md)** - Simplified RAG with high-precision filtering
-- **[FastMCP Usage](docs/FASTMCP_USAGE.md)** - FastMCP framework documentation
-
-## Troubleshooting
-
-**No models found?**
+**Cloud Deployment**:
 ```bash
-ollama serve
-ollama pull llama3.2
-ollama pull nomic-embed-text
+uv run python cloud_server.py  
+# → FastMCP Cloud at https://mcp-playground.fastmcp.app/mcp
 ```
 
-**Function calling not working?**
-- Check internet connection
-- Ensure "Tools" checkbox is enabled  
-- Use a recent model (llama3.2, devstral)
+## 🛠️ Development
 
-**Memory not working?**
-- Ensure Ollama is running: `ollama serve`
-- Check model availability: `ollama list`
-- Memory falls back to TinyDB if ChromaDB/Ollama unavailable
-
-**App won't start?**
+### Dependencies
 ```bash
+# Core tools only
 uv sync
+
+# With Streamlit UI  
+uv sync --extra local
+
+# With development tools
+uv sync --extra dev
+```
+
+### Configuration
+Copy `.env.example` to `.env` and customize:
+```bash
+# Server settings
+HOST=0.0.0.0
+PORT=8000
+LOG_LEVEL=INFO
+
+# Tool settings  
+YOUTUBE_MAX_TOKENS=24000
+MCP_RETRY_MAX_ATTEMPTS=3
+```
+
+### Tool Development
+Tools are organized in `src/tools/` modules:
+- Each module registers tools with `@mcp.tool(description="...")`
+- Automatic schema generation from Python type hints
+- Built-in retry system with type coercion
+- Error handling and logging
+
+## 📚 Key Features
+
+### Real-Time Data Access
+- No API keys required for most tools
+- Direct web scraping and API integration
+- Cached responses for performance
+
+### Robust Error Handling  
+- Automatic retry with exponential backoff
+- Type coercion (string → int/bool/float)
+- Graceful fallbacks for network issues
+
+### Stateless Design
+- No local dependencies for cloud deployment
+- Works anywhere with internet connection
+- Optimized for serverless environments
+
+### Standards Compliant
+- Full MCP protocol implementation
+- Compatible with any MCP client
+- FastMCP framework for rapid development
+
+## 🚀 Deployment
+
+### FastMCP Cloud
+1. **Push to main branch**
+2. **FastMCP Cloud auto-deploys** from GitHub
+3. **Get auth token** from dashboard
+4. **Configure clients** with deployment URL
+
+### Local Development  
+1. **Clone repository**
+2. **Install dependencies**: `uv sync --extra local`
+3. **Run Streamlit UI**: `uv run streamlit run app.py`
+4. **Test MCP server**: `uv run python mcp_server.py`
+
+## 🆘 Troubleshooting
+
+**Tools not working?**
+- Check internet connection
+- Verify MCP client configuration
+- Check server logs for errors
+
+**Authentication issues?**  
+- Verify FastMCP Cloud token
+- Check token hasn't expired
+- Ensure correct deployment URL
+
+**Local development issues?**
+```bash
+uv sync --extra local
 python --version  # Requires Python 3.12+
 ```
+
+## 📄 Documentation
+
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Detailed deployment guide
+- **[CLAUDE.md](CLAUDE.md)** - Development notes and architecture
+- **FastMCP Cloud**: https://fastmcp.cloud
+- **MCP Protocol**: https://modelcontextprotocol.io
+
+---
+
+**🎉 Ready for both local development and global deployment!**
