@@ -152,17 +152,41 @@ uv sync --extra dev
 ```
 
 ### Configuration
-Copy `.env.example` to `.env` and customize:
-```bash
-# Server settings
-HOST=0.0.0.0
-PORT=8000
-LOG_LEVEL=INFO
 
-# Tool settings  
-YOUTUBE_MAX_TOKENS=24000
-MCP_RETRY_MAX_ATTEMPTS=3
+#### Environment Files Explained
+
+**For Local Development:**
+```bash
+# Copy the local template
+cp .env.example .env
+
+# Edit as needed for your local setup
+# Contains: server settings, tool config, retry system
 ```
+
+**For Cloud Deployment:**
+```bash
+# Usually no .env file needed at all!
+# FastMCP Cloud provides all defaults automatically
+
+# Only create .env if you need custom overrides (rare):
+# Just create .env with the specific variables you want to override
+```
+
+#### Key Environment Variables
+
+**Tool Configuration:**
+- `YOUTUBE_MAX_TOKENS=24000` - Transcript processing limit
+- `CACHE_DIRECTORY=cache` - Local cache storage location
+
+**Server Settings (Local Only):**
+- `HOST=0.0.0.0` - Server host for HTTP mode
+- `PORT=8000` - Server port for HTTP mode  
+- `LOG_LEVEL=INFO` - Logging verbosity
+
+**Retry System:**
+- `MCP_RETRY_MAX_ATTEMPTS=3` - Auto-retry failed tool calls
+- `MCP_RETRY_TYPE_COERCION=true` - Auto-fix type mismatches
 
 ### Tool Development
 Tools are organized in `src/tools/` modules:
