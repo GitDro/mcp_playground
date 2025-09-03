@@ -16,11 +16,9 @@ from .tools.arxiv import register_arxiv_tools
 from .tools.financial import register_financial_tools
 from .tools.youtube import register_youtube_tools
 from .tools.weather import register_weather_tools
-from .tools.memory import register_memory_tools
 from .tools.tides import register_tide_tools
 from .tools.crime import register_crime_tools
 from .tools.statscan import register_statscan_tools
-from .tools.documents import register_document_tools
 
 # Import retry framework
 from .core.tool_wrapper import configure_retry_behavior, ToolWrapperConfig
@@ -75,11 +73,9 @@ def setup_server(enable_retry_middleware: bool = True):
     register_financial_tools(mcp)
     register_youtube_tools(mcp)
     register_weather_tools(mcp)
-    register_memory_tools(mcp)
     register_tide_tools(mcp)
     register_crime_tools(mcp)
     register_statscan_tools(mcp)
-    register_document_tools(mcp)
     
     logger.info("All tools registered successfully")
     return mcp

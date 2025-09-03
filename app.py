@@ -1,12 +1,9 @@
 """
-MCP Playground - FastMCP Version
-Simple Streamlit Chat App with FastMCP Integration
+MCP Arena - Streamlit Chat Interface
+Streamlit Chat App with FastMCP Integration
 
-A modernized chat application that integrates with Ollama for local AI
-and uses FastMCP for tool execution.
-
-Author: MCP Arena Team
-Version: 2.0.0 (FastMCP)
+Uses FastMCP PythonStdioTransport for proper client-server separation.
+Works with the unified server architecture for both local and cloud deployments.
 """
 
 import streamlit as st
@@ -17,29 +14,24 @@ from datetime import datetime
 
 # Import our modules
 from ui_config import STREAMLIT_STYLE, TOOLS_HELP_TEXT, get_system_prompt
-from src.core.vector_memory import vector_memory_manager as memory_manager
-import uuid
 
-# Import FastMCP client
+# Import FastMCP client and transport
 from fastmcp import Client
+from fastmcp.client.transports import PythonStdioTransport
 
-# Page config - Minimalist setup
+# Page config
 st.set_page_config(
-    page_title="MCP Playground",
+    page_title="MCP Arena",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
 async def get_mcp_tools():
-    """Get available tools from the FastMCP server using in-memory transport"""
+    """Get available tools from the FastMCP server using auto-inferred subprocess transport"""
     try:
-        # Import the FastMCP server instance
-        from src import mcp
-        from fastmcp import Client
-        
-        # Create a client with in-memory transport (FastMCPTransport auto-inferred)
-        async with Client(mcp) as client:
+        # Auto-inferred transport from .py file (FastMCP handles subprocess automatically)
+        async with Client("mcp_server.py") as client:
             tools_data = await client.list_tools()
             
             # Convert to the format expected by the app
@@ -57,39 +49,129 @@ async def get_mcp_tools():
         return []
 
 async def call_mcp_tool(tool_name: str, arguments: dict):
-    """Call a tool using the FastMCP client with in-memory transport"""
-    try:
-        # Import the FastMCP server instance
-        from src import mcp
-        from fastmcp import Client
+    """Call a tool using the FastMCP client with retry logic for error recovery"""
+    from src.core.retry_manager import RetryManager, ErrorAnalyzer, ErrorType
+    import time
+    
+    # Create retry manager for this call
+    retry_manager = RetryManager(max_attempts=3, base_delay=0.5, enable_state_management=False)
+    context = retry_manager.create_context(tool_name, arguments)
+    
+    current_args = arguments.copy()
+    
+    while context.should_retry:
+        start_time = time.time()
         
-        # Create a client with in-memory transport
-        async with Client(mcp) as client:
-            result = await client.call_tool(tool_name, arguments)
-            
-            # Extract the content from the result (updated for MCP 2.10.0+)
-            if hasattr(result, 'content') and result.content:
-                # Handle different content types
-                content_item = result.content[0]
-                if hasattr(content_item, 'text'):
-                    return content_item.text
+        try:
+            # Auto-inferred transport from .py file (FastMCP handles subprocess automatically)
+            async with Client("mcp_server.py") as client:
+                result = await client.call_tool(tool_name, current_args)
+                
+                # Extract the content from the result (updated for MCP 2.10.0+)
+                content = None
+                if hasattr(result, 'content') and result.content:
+                    # Handle different content types
+                    content_item = result.content[0]
+                    if hasattr(content_item, 'text'):
+                        content = content_item.text
+                    else:
+                        content = str(content_item)
+                elif hasattr(result, 'data'):
+                    # Structured output from the tool
+                    content = str(result.data)
                 else:
-                    return str(content_item)
-            elif hasattr(result, 'data'):
-                # Structured output from the tool
-                return str(result.data)
-            else:
-                return str(result)
-    except Exception as e:
-        return f"Error calling tool {tool_name}: {str(e)}"
+                    content = str(result)
+                
+                # Success - record attempt and return
+                execution_time = time.time() - start_time
+                context.add_attempt(
+                    error_type=ErrorType.UNKNOWN_ERROR,
+                    error_message="Success",
+                    corrected_args=current_args if current_args != arguments else None,
+                    success=True,
+                    execution_time=execution_time
+                )
+                
+                # Add success metadata if we had retries
+                if context.attempt_count > 1:
+                    success_note = f"\n\n*✅ Tool succeeded after {context.attempt_count} attempts*"
+                    if context.corrected_args:
+                        success_note += f"\n*Applied corrections: {context.corrected_args}*"
+                    content += success_note
+                
+                return content
+                
+        except Exception as e:
+            execution_time = time.time() - start_time
+            error_message = str(e)
+            error_type = ErrorAnalyzer.analyze_error(error_message)
+            
+            # Record the failed attempt
+            context.add_attempt(
+                error_type=error_type,
+                error_message=error_message,
+                execution_time=execution_time
+            )
+            
+            # Try to correct type errors for next attempt
+            if error_type == ErrorType.TYPE_ERROR and context.should_retry:
+                corrected_args = ErrorAnalyzer.suggest_type_correction(current_args, error_message)
+                if corrected_args:
+                    current_args = corrected_args
+                    # Apply exponential backoff before retry
+                    delay = 0.5 * (2 ** (context.attempt_count - 1))
+                    await asyncio.sleep(delay)
+                    continue
+            
+            # If we can't correct the error or out of retries, return error response
+            if not context.should_retry:
+                return _generate_enhanced_error_response(tool_name, context)
+                
+            # Apply exponential backoff before retry
+            delay = 0.5 * (2 ** (context.attempt_count - 1))
+            await asyncio.sleep(delay)
+    
+    # Fallback - should not reach here
+    return _generate_enhanced_error_response(tool_name, context)
+
+
+def _generate_enhanced_error_response(tool_name: str, context) -> str:
+    """Generate enhanced error response with retry information and suggestions"""
+    from src.core.retry_manager import ErrorAnalyzer
+    
+    error_parts = []
+    error_parts.append(f"❌ **Tool '{tool_name}' failed after {context.attempt_count} attempts**")
+    
+    if context.attempts:
+        last_attempt = context.attempts[-1]
+        error_parts.append(f"\n**Final Error**: {last_attempt.error_message}")
+        
+        # Provide specific suggestions based on error type
+        if last_attempt.error_type.value == "type_error":
+            error_parts.append("\n**💡 Type Error Suggestions**:")
+            for key, value in context.original_args.items():
+                if isinstance(value, str):
+                    if ErrorAnalyzer._looks_like_int(value):
+                        error_parts.append(f"• Parameter `{key}`: Use integer `{int(value)}` instead of string `'{value}'`")
+                    elif ErrorAnalyzer._looks_like_float(value):
+                        error_parts.append(f"• Parameter `{key}`: Use float `{float(value)}` instead of string `'{value}'`")
+                    elif ErrorAnalyzer._looks_like_bool(value):
+                        bool_val = ErrorAnalyzer._parse_bool(value)
+                        error_parts.append(f"• Parameter `{key}`: Use boolean `{bool_val}` instead of string `'{value}'`")
+        
+        # Show attempt summary
+        error_parts.append(f"\n**Retry History**:")
+        for i, attempt in enumerate(context.attempts, 1):
+            status = "✅" if attempt.success else "❌"
+            error_type = attempt.error_type.value.replace("_", " ").title()
+            error_parts.append(f"{i}. {status} {error_type}: {attempt.error_message[:80]}...")
+            
+        error_parts.append(f"\n**Total Execution Time**: {context.total_execution_time:.2f}s")
+    
+    return "\n".join(error_parts)
 
 def get_ollama_models() -> List[str]:
-    """
-    Fetch available Ollama models from the local Ollama instance.
-    
-    Returns:
-        List of model names, empty list if Ollama is not accessible
-    """
+    """Fetch available Ollama models from the local Ollama instance."""
     try:
         response = requests.get("http://localhost:11434/api/tags", timeout=5)
         if response.status_code == 200:
@@ -121,18 +203,9 @@ def create_function_schema_from_mcp_tools(mcp_tools: List[Dict]) -> List[Dict]:
     
     return schemas
 
-async def chat_with_ollama_and_mcp(model: str, message: str, conversation_history: List[Dict], use_functions: bool = True) -> tuple[str, List[str]]:
+async def chat_with_ollama_and_mcp(model: str, message: str, conversation_history: List[Dict], use_functions: bool = True) -> str:
     """
-    Send chat message to Ollama with FastMCP function calling support.
-    
-    Args:
-        model: Ollama model name to use
-        message: User's message
-        conversation_history: Previous messages in the conversation
-        use_functions: Whether to enable function calling
-        
-    Returns:
-        Tuple of (AI response string, list of tool names used)
+    Send chat message to Ollama with FastMCP function calling support using subprocess transport.
     """
     try:
         # Get MCP tools if functions are enabled
@@ -145,130 +218,17 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
         # Format conversation for Ollama with system guidance
         messages = []
         
-        # Add simple system message 
+        # Add system message for function calling guidance
         if use_functions:
             current_date = datetime.now().strftime("%Y-%m-%d")
-            base_prompt = get_system_prompt(current_date)
-            
             system_message = {
-                "role": "system", 
-                "content": base_prompt
+                "role": "system",
+                "content": get_system_prompt(current_date)
             }
             messages.append(system_message)
         
         for msg in conversation_history:
             messages.append({"role": msg["role"], "content": msg["content"]})
-        
-        # Simple Semantic RAG: Inject facts and documents based on pure similarity
-        if use_functions:
-            try:
-                # Detect memory queries to inject ALL stored information
-                memory_keywords = [
-                    'what do you remember', 'what do you know about me', 'what do you recall',
-                    'tell me about myself', 'about me', 'remember about me'
-                ]
-                
-                # Skip memory injection for tool-focused queries (keep minimal list)
-                tool_keywords = [
-                    'stock', 'price', 'crypto', 'weather', 'youtube', 'arxiv', 
-                    'crime', 'tide', 'search', 'url', 'analyze'
-                ]
-                
-                query_lower = message.lower()
-                is_tool_query = any(keyword in query_lower for keyword in tool_keywords)
-                is_memory_query = any(keyword in query_lower for keyword in memory_keywords)
-                
-                if is_memory_query:
-                    # For "what do you remember about me" queries, inject ALL stored information
-                    all_facts = memory_manager.get_all_facts()
-                    all_documents = memory_manager.get_all_documents()
-                    
-                    if all_facts or all_documents:
-                        content_parts = []
-                        if all_facts:
-                            facts_content = "; ".join([fact.content for fact in all_facts])
-                            content_parts.append(f"Facts: {facts_content}")
-                        if all_documents:
-                            docs_content = "; ".join([f"{doc['title']}: {doc['content'][:100]}..." for doc in all_documents[:3]])
-                            content_parts.append(f"Notes: {docs_content}")
-                        
-                        messages.append({
-                            "role": "user",
-                            "content": f"Here's what I remember about you: {' | '.join(content_parts)}"
-                        })
-                        messages.append({
-                            "role": "assistant",
-                            "content": "Got it, I have that information."
-                        })
-                        print(f"DEBUG - Injected all stored information for memory query ({len(all_facts)} facts, {len(all_documents)} documents)")
-                        
-                elif not is_tool_query:
-                    # Pure Semantic RAG: Simple threshold-based injection
-                    injected_items = []
-                    
-                    # 1. Inject high-relevance facts (80%+ similarity) - unchanged
-                    relevant_facts = memory_manager.retrieve_facts_semantic(message, limit=5)
-                    high_relevance_facts = [fact for fact in relevant_facts if fact.relevance_score > 0.8]
-                    
-                    for fact in high_relevance_facts[:2]:
-                        messages.append({
-                            "role": "user",
-                            "content": f"Just so you know, {fact.content.lower()}"
-                        })
-                        messages.append({
-                            "role": "assistant", 
-                            "content": "Got it, I'll keep that in mind!"
-                        })
-                        injected_items.append(f"fact: {fact.content} ({fact.relevance_score:.0%})")
-                    
-                    # 2. Pure semantic document injection - no keyword logic
-                    relevant_documents = memory_manager.search_documents(message, limit=3, min_similarity=0.3)
-                    
-                    for doc in relevant_documents:
-                        relevance = doc['relevance_score']
-                        
-                        # Simple threshold-based injection
-                        if relevance > 0.85:
-                            # High confidence - inject full context
-                            doc_content = doc['content'][:200] + "..." if len(doc['content']) > 200 else doc['content']
-                            
-                            messages.append({
-                                "role": "user",
-                                "content": f"For context, from my notes '{doc['title']}': {doc_content}"
-                            })
-                            messages.append({
-                                "role": "assistant",
-                                "content": "I see that from your notes."
-                            })
-                            injected_items.append(f"document: {doc['title']} ({relevance:.0%}, high-conf)")
-                            
-                        elif relevance > 0.70:
-                            # Medium confidence - inject shorter snippet
-                            doc_snippet = doc['content'][:100] + "..." if len(doc['content']) > 100 else doc['content']
-                            
-                            messages.append({
-                                "role": "user",
-                                "content": f"From my notes '{doc['title']}': {doc_snippet}"
-                            })
-                            messages.append({
-                                "role": "assistant",
-                                "content": "Got it."
-                            })
-                            injected_items.append(f"document: {doc['title']} ({relevance:.0%}, med-conf)")
-                        
-                        # Below 70% - no injection to avoid noise
-                        
-                        # Limit total injections to prevent context overload
-                        if len(injected_items) >= 3:
-                            break
-                    
-                    # Debug output
-                    if injected_items:
-                        print(f"DEBUG - Semantic injection: {'; '.join(injected_items)}")
-                
-            except Exception as e:
-                print(f"Enhanced memory injection failed: {e}")
-        
         messages.append({"role": "user", "content": message})
         
         # Prepare request data
@@ -313,13 +273,13 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
                     )
                     if fallback_response.status_code == 200:
                         data = fallback_response.json()
-                        return data.get("message", {}).get("content", "No response"), []
+                        return data.get("message", {}).get("content", "No response")
                 
-                return f"Error {response.status_code}: {error_detail}", []
+                return f"Error {response.status_code}: {error_detail}"
         except requests.exceptions.Timeout:
-            return "Error: Request timed out. Ollama may be overloaded.", []
+            return "Error: Request timed out. Ollama may be overloaded."
         except requests.exceptions.ConnectionError:
-            return "Error: Could not connect to Ollama. Is it running on localhost:11434?", []
+            return "Error: Could not connect to Ollama. Is it running on localhost:11434?"
         
         data = response.json()
         assistant_message = data.get("message", {})
@@ -348,8 +308,6 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
                 result = await call_mcp_tool(function_name, arguments)
                 function_results.append(result)
                 function_names.append(function_name)
-                
-                # Track tool usage for memory - this will be handled by the sync wrapper
                 
                 # Add tool call and result to conversation
                 messages.append({
@@ -396,10 +354,10 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
                         for result in show_function_results:
                             combined_response += f"{result}\n\n"
                         
-                        return combined_response, function_names
+                        return combined_response
                     else:
                         # No function results to show (likely YouTube functions), just return LLM response
-                        return final_content, function_names
+                        return final_content
                 else:
                     error_detail = ""
                     try:
@@ -407,28 +365,22 @@ async def chat_with_ollama_and_mcp(model: str, message: str, conversation_histor
                         error_detail = error_data.get("error", "Unknown error")
                     except:
                         error_detail = final_response.text or "No error details available"
-                    return f"Error in final response {final_response.status_code}: {error_detail}", []
+                    return f"Error in final response {final_response.status_code}: {error_detail}"
             except requests.exceptions.RequestException as e:
-                return f"Error in final response: {str(e)}", []
+                return f"Error in final response: {str(e)}"
         else:
             # No tool calls, return regular response
-            return assistant_message.get("content", "No response"), []
+            return assistant_message.get("content", "No response")
             
     except Exception as e:
-        return f"Error connecting to Ollama or MCP: {str(e)}", []
+        return f"Error connecting to Ollama or MCP: {str(e)}"
 
 def chat_with_ollama_sync(*args, **kwargs):
     """Synchronous wrapper for the async chat function"""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
-        response, tool_names = loop.run_until_complete(chat_with_ollama_and_mcp(*args, **kwargs))
-        
-        # Track tool usage in session state
-        for tool_name in tool_names:
-            update_tool_usage(tool_name)
-        
-        return response
+        return loop.run_until_complete(chat_with_ollama_and_mcp(*args, **kwargs))
     finally:
         loop.close()
 
@@ -440,37 +392,6 @@ def get_mcp_tools_sync():
         return loop.run_until_complete(get_mcp_tools())
     finally:
         loop.close()
-
-def save_conversation_summary():
-    """Save conversation summary to memory when session ends"""
-    if st.session_state.messages and len(st.session_state.messages) > 2:
-        try:
-            memory_manager.save_conversation_summary(
-                st.session_state.session_id,
-                st.session_state.messages,
-                st.session_state.tool_usage
-            )
-        except Exception as e:
-            st.error(f"Failed to save conversation summary: {e}")
-
-def update_tool_usage(tool_name: str):
-    """Update tool usage tracking"""
-    if tool_name in st.session_state.tool_usage:
-        st.session_state.tool_usage[tool_name] += 1
-    else:
-        st.session_state.tool_usage[tool_name] = 1
-
-def get_memory_context(user_message: str) -> str:
-    """Get relevant memory context for the current conversation"""
-    try:
-        context = memory_manager.build_conversation_context(
-            user_message,
-            st.session_state.messages
-        )
-        return context
-    except Exception as e:
-        st.error(f"Failed to get memory context: {e}")
-        return ""
 
 # Apply CSS styles
 st.markdown(STREAMLIT_STYLE, unsafe_allow_html=True)
@@ -485,22 +406,12 @@ if "selected_model" not in st.session_state:
 if "use_functions" not in st.session_state:
     st.session_state.use_functions = True
 
-# Initialize memory-related session state
-if "session_id" not in st.session_state:
-    st.session_state.session_id = str(uuid.uuid4())
-
-if "tool_usage" not in st.session_state:
-    st.session_state.tool_usage = {}
-
-if "memory_context" not in st.session_state:
-    st.session_state.memory_context = ""
-
 # Centered layout with breathing room
 col1, col2, col3 = st.columns([1, 3, 1])
 
 with col2:
     # Clean header
-    st.markdown("# **MCP Playground**")
+    st.markdown("# **MCP Playground (Subprocess)**")
     
     # Status section with expandable hierarchy
     models = get_ollama_models()
@@ -537,48 +448,24 @@ with col2:
                         purpose = "web search"
                     elif 'analyze_url' in tool_name:
                         purpose = "webpage summary"
-                    elif 'analyze_url' in tool_name:  # Legacy fallback
-                        purpose = "URL analysis"
+                    elif 'save_link' in tool_name:
+                        purpose = "save webpage content"
                     elif 'arxiv_search' in tool_name:
                         purpose = "academic papers"
-                    elif 'stock_price' in tool_name:
-                        purpose = "stock prices"
-                    elif 'stock_history' in tool_name:
-                        purpose = "stock history"
-                    elif 'crypto_price' in tool_name:
-                        purpose = "crypto prices"
-                    elif 'market_summary' in tool_name:
-                        purpose = "market overview"
                     elif 'get_stock_overview' in tool_name:
                         purpose = "stock market data"
-                    elif 'summarize_youtube' in tool_name:
-                        purpose = "YouTube summaries"
-                    elif 'query_youtube' in tool_name:
-                        purpose = "YouTube Q&A"
                     elif 'analyze_youtube_url' in tool_name:
                         purpose = "video analysis"
                     elif 'get_weather' in tool_name:
                         purpose = "weather forecast"
-                    elif 'remember' in tool_name:
-                        purpose = "store user info"
-                    elif 'recall' in tool_name:
-                        purpose = "retrieve memories"
-                    elif 'forget' in tool_name:
-                        purpose = "remove memories"
-                    elif 'store_note' in tool_name:
-                        purpose = "save notes"
-                    elif 'search_documents' in tool_name:
-                        purpose = "search documents by keyword"
-                    elif 'show_all_documents' in tool_name:
-                        purpose = "show ALL saved documents"
+                    elif 'list_toronto_neighbourhoods' in tool_name:
+                        purpose = "list all Toronto neighbourhoods for crime data"
                     elif 'get_tide_info' in tool_name:
                         purpose = "tide information"
                     elif 'get_toronto_crime' in tool_name:
                         purpose = "crime statistics"
                     elif 'analyze_canadian_economy' in tool_name:
                         purpose = "economic analysis"
-                    elif 'save_link' in tool_name:
-                        purpose = "save webpage content"
                     else:
                         purpose = "specialized tool"
                     
@@ -603,7 +490,7 @@ with col2:
             if not st.session_state.selected_model:
                 # Look for llama3.2 variants
                 for i, model in enumerate(models):
-                    if 'llama3.2:latest' in model.lower():
+                    if 'llama3.2' in model.lower():
                         default_index = i
                         break
             else:
@@ -633,7 +520,7 @@ with col2:
             st.session_state.use_functions = st.checkbox(
                 "Tools", 
                 value=st.session_state.use_functions,
-                help="Enable tools for web search, URL analysis, arXiv papers, finance, YouTube, and weather"
+                help="Enable tools for web search, URL analysis, arXiv papers, finance, and YouTube"
             )
         
     else:
@@ -648,23 +535,13 @@ with col2:
         # Clear button - positioned above chat
         if st.session_state.messages:
             if st.button("Clear conversation", type="secondary", help="Clear all messages"):
-                # Save conversation summary before clearing
-                save_conversation_summary()
-                
-                # Clear session state
                 st.session_state.messages = []
-                st.session_state.tool_usage = {}
-                st.session_state.session_id = str(uuid.uuid4())
                 st.rerun()
         
         # Display chat messages
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 content = message["content"]
-                
-                # Debug: Log message content to see where "Stored information about you" comes from
-                if "stored information" in content.lower():
-                    print(f"DEBUG - Found stored information in message: {content}")
                 
                 # Check if this is a response with function call results
                 if "---\n\n" in content:

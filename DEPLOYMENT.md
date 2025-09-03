@@ -1,24 +1,24 @@
-# MCP Arena Cloud Deployment Guide
+# MCP Arena Deployment Guide
 
 ## Overview
 
-This guide walks you through deploying MCP Arena to the cloud using FastMCP Cloud while keeping your local development setup intact. You'll learn exactly what happens behind the scenes and have both local and cloud options available.
+MCP Arena provides a comprehensive set of research, financial, and analysis tools through both local and cloud deployment options using FastMCP.
 
-## Architecture Comparison
+## Architecture
 
-### Local Development (Current Setup)
+### Local Development
 ```
-[Claude Desktop] ←--stdio-→ [MCP Server] ←--local-→ [Ollama + ChromaDB]
+[Claude Desktop] ←--stdio-→ [MCP Server] ←--local-→ [Tools & APIs]
      │                           │
-     └── Local config file       └── All tools + embeddings locally
+     └── Local config file       └── All tools available locally
 ```
 
-### Cloud Deployment (New Option)
+### Cloud Deployment
 ```
 [Claude Desktop/Web] ←--HTTPS-→ [FastMCP Cloud] ←--HTTP-→ [Your MCP Server]
      │                              │                        │
      └── Bearer token auth          └── Auto-scaling         └── All tools available
-                                        Load balancing          (no local Ollama needed)
+                                        Load balancing          
 ```
 
 ## Prerequisites
@@ -41,15 +41,15 @@ This guide walks you through deploying MCP Arena to the cloud using FastMCP Clou
 1. **Commit and push your current changes:**
    ```bash
    git add .
-   git commit -m "Add cloud deployment support"
+   git commit -m "Deploy MCP Arena to cloud"
    git push origin main
    ```
 
-2. **Verify cloud-ready files exist:**
-   - ✅ `pyproject.toml` - Optimized dependencies (FastMCP Cloud auto-detects)
-   - ✅ `cloud_server.py` - Cloud entrypoint
-   - ✅ `DEPLOYMENT.md` - This documentation
-   - ✅ Enhanced `src/server.py` - HTTP transport support
+2. **Verify deployment files exist:**
+   - ✅ `pyproject.toml` - Streamlined dependencies
+   - ✅ `cloud_server.py` - Simplified cloud entrypoint
+   - ✅ `src/server.py` - Unified server with HTTP/stdio support
+   - ✅ `mcp_server.py` - Local development wrapper
 
 ### Phase 2: Deploy to FastMCP Cloud
 
@@ -236,42 +236,36 @@ def health_check() -> str:
 | **Document Tools** | Full search & storage | **Disabled** (no vector DB) |
 | **Security** | Development mode | **Production security** |
 
-### ⚠️ Cloud Limitations
+## Available Tools
 
-**Vector Memory Features Disabled in Cloud:**
-- `remember()` - Returns helpful message directing to alternatives
-- `recall()` - Returns helpful message directing to alternatives  
-- `forget()` - Returns helpful message directing to alternatives
-- `store_note()` - Returns helpful message about local deployment
-- `search_documents()` - Returns helpful message about local deployment
-- `show_all_documents()` - Returns helpful message about local deployment
+### 📊 Research & Analysis
+- **`web_search()`** - Web search via DuckDuckGo  
+- **`analyze_url()`** - Webpage content extraction and analysis
+- **`arxiv_search()`** - Academic paper search with full text extraction
 
-**Why These Limitations Exist:**
-- Vector memory requires local Ollama for embeddings
-- ChromaDB requires persistent storage not available in serverless
-- Cloud deployment optimized for stateless operation
-- Security: No persistent user data storage in cloud
+### 💰 Financial & Economic Data  
+- **`get_stock_overview()`** - Real-time stock, crypto, and market data
+- **`analyze_canadian_economy()`** - Canadian economic indicators and analysis
 
-### ✅ Fully Available in Cloud
+### 🎬 Media Analysis
+- **`analyze_youtube_url()`** - YouTube video transcription and analysis
 
-**All these tools work perfectly in cloud mode:**
-- `web_search()` - Web search via DuckDuckGo
-- `analyze_url()` - Webpage analysis and content extraction  
-- `save_link()` - Save webpage content (stateless)
-- `arxiv_search()` - Academic paper search with full text extraction
-- `get_stock_overview()` - Real-time stock/crypto/market data
-- `analyze_youtube_url()` - YouTube video analysis
-- `get_weather()` - Weather forecasts
-- `get_tide_info()` - Canadian tide information
-- `get_toronto_crime()` - Toronto crime statistics
-- `analyze_canadian_economy()` - Canadian economic analysis
-- `health_check()` - Server health monitoring
+### 🌍 Location & Weather
+- **`get_weather()`** - Weather forecasts by location
+- **`get_tide_info()`** - Canadian coastal tide information
 
-**Cloud Advantages for These Tools:**
-- No local dependencies required
-- Better uptime and reliability
-- Global CDN access
-- Automatic scaling under load
+### 🏙️ Toronto Data
+- **`get_toronto_crime()`** - Toronto neighborhood crime statistics  
+- **`list_toronto_neighbourhoods()`** - Complete list of Toronto neighborhoods
+
+### 🔧 System
+- **`health_check()`** - Server health monitoring (cloud only)
+
+### Deployment Benefits
+- ✅ **No local dependencies** - All tools work in both local and cloud modes
+- ✅ **Stateless operation** - Optimized for serverless deployment  
+- ✅ **Real-time data** - All tools fetch current information
+- ✅ **Automatic scaling** - Cloud deployment handles load automatically
 
 ## Dependency Management Strategy
 
@@ -311,17 +305,17 @@ uv sync --extra cloud
 ### Local Development Commands
 
 ```bash
-# Install all dependencies for full local development
-uv sync --all-extras
-
-# Install only core dependencies (cloud simulation)
+# Install core dependencies (matches cloud deployment)
 uv sync
 
-# Install for local development
+# Install with local development extras (Streamlit UI)
 uv sync --extra local
 
-# Install for testing
+# Install with development tools (testing, etc.)
 uv sync --extra dev
+
+# Install everything
+uv sync --all-extras
 ```
 
 ## Configuration Options
@@ -524,20 +518,30 @@ git push  # Auto-deploys to cloud
 ## Quick Reference Commands
 
 ```bash
-# Local development (unchanged)
+# Local Streamlit UI
 uv run streamlit run app.py
-uv run python test_mcp.py
 
-# Test HTTP mode locally
-python -m src.server http 8000
+# Local MCP server (for Claude Desktop)
+uv run python mcp_server.py
 
-# Deploy to cloud (automatic on git push)
+# Test HTTP mode locally  
+uv run python -m src.server http 8000
+
+# Test cloud server locally
+uv run python cloud_server.py
+
+# Deploy to cloud (automatic on git push)  
 git add .
 git commit -m "Deploy updates"
 git push origin main
-
-# Check deployment status
-# Visit https://fastmcp.cloud/dashboard
 ```
 
-**🎉 You now have both local development and global cloud deployment for your MCP Arena!**
+## Summary
+
+**MCP Arena now provides:**
+- ✅ **Unified architecture** - One codebase for local and cloud
+- ✅ **Simplified deployment** - Streamlined dependencies and configuration  
+- ✅ **Real-time tools** - No local dependencies, works everywhere
+- ✅ **Easy development** - Streamlit UI for testing and development
+
+**🎉 Ready for both local development and global cloud deployment!**
