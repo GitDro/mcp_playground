@@ -1,115 +1,91 @@
 """
-Caching utilities for MCP tools
+DEPRECATED: Legacy caching utilities - use unified_cache.py instead
+
+This file is maintained for backward compatibility only.
+All new caching should use the unified SQLite-based system.
 """
 
-import os
-import json
-import tempfile
 import logging
 from typing import Dict, Optional
-from datetime import datetime, timedelta
+from .unified_cache import get_cached_data, save_cached_data as save_unified_data, cleanup_cache
 
 logger = logging.getLogger(__name__)
 
-
-def _get_cache_directory() -> str:
-    """Get writable cache directory, falling back to temp if needed"""
-    cache_dir = os.getenv('CACHE_DIRECTORY')
-    if not cache_dir:
-        # Try user cache directory first
-        cache_dir = os.path.expanduser('~/.cache/mcp_playground')
-    
-    try:
-        os.makedirs(cache_dir, exist_ok=True)
-        # Test if directory is writable
-        test_file = os.path.join(cache_dir, '.write_test')
-        with open(test_file, 'w') as f:
-            f.write('test')
-        os.remove(test_file)
-        return cache_dir
-    except (OSError, PermissionError):
-        # Fallback to temp directory
-        return tempfile.gettempdir()
+# Backward compatibility functions - redirect to unified cache
+def load_cached_data(cache_key: str) -> Optional[Dict]:
+    """DEPRECATED: Use unified_cache.get_cached_data instead"""
+    logger.warning("load_cached_data is deprecated, use unified_cache.get_cached_data")
+    return get_cached_data(cache_key, "default")
 
 
-CACHE_DIR = _get_cache_directory()
-MAX_CACHE_DAYS = int(os.getenv('MAX_CACHE_DAYS', '7'))
-
-
-def _get_cache_file_path(ticker: str, date_str: str = None) -> str:
-    """Get the cache file path for a ticker on a specific date"""
-    if date_str is None:
-        date_str = datetime.now().strftime('%Y-%m-%d')
-    
-    cache_date_dir = os.path.join(CACHE_DIR, date_str)
-    os.makedirs(cache_date_dir, exist_ok=True)
-    return os.path.join(cache_date_dir, f"{ticker.upper()}.json")
-
-
-def load_cached_data(ticker: str) -> Optional[Dict]:
-    """Load cached stock data for today if it exists"""
-    try:
-        cache_file = _get_cache_file_path(ticker)
-        if os.path.exists(cache_file):
-            with open(cache_file, 'r') as f:
-                data = json.load(f)
-                # Check if data is from today
-                if data.get('date') == datetime.now().strftime('%Y-%m-%d'):
-                    return data
-        return None
-    except Exception:
-        return None
-
-
-def save_cached_data(ticker: str, data: Dict) -> None:
-    """Save stock data to cache"""
-    try:
-        data['date'] = datetime.now().strftime('%Y-%m-%d')
-        data['cached_at'] = datetime.now().isoformat()
-        
-        cache_file = _get_cache_file_path(ticker)
-        with open(cache_file, 'w') as f:
-            json.dump(data, f, indent=2)
-    except Exception as e:
-        logger.warning(f"Failed to cache data for {ticker}: {e}")
+def save_cached_data(cache_key: str, data: Dict) -> None:
+    """DEPRECATED: Use unified_cache.save_cached_data instead"""
+    logger.warning("save_cached_data is deprecated, use unified_cache.save_cached_data")
+    save_unified_data(cache_key, data, "default")
 
 
 def cleanup_old_cache() -> None:
-    """Remove cache directories older than MAX_CACHE_DAYS"""
-    try:
-        if not os.path.exists(CACHE_DIR):
-            return
-            
-        cutoff_date = datetime.now() - timedelta(days=MAX_CACHE_DAYS)
-        
-        for item in os.listdir(CACHE_DIR):
-            item_path = os.path.join(CACHE_DIR, item)
-            if os.path.isdir(item_path):
-                try:
-                    # Check if directory name is a date
-                    dir_date = datetime.strptime(item, '%Y-%m-%d')
-                    if dir_date < cutoff_date:
-                        import shutil
-                        shutil.rmtree(item_path)
-                        logger.info(f"Cleaned up old cache directory: {item}")
-                except ValueError:
-                    # Not a date directory, skip
-                    continue
-    except Exception as e:
-        logger.warning(f"Cache cleanup failed: {e}")
+    """DEPRECATED: Use unified_cache.cleanup_cache instead"""
+    logger.warning("cleanup_old_cache is deprecated, use unified_cache.cleanup_cache")
+    cleanup_cache()
 
 
 def get_transcript_db():
-    """Get or create TinyDB database for transcripts"""
-    from tinydb import TinyDB
+    """Get or create SQLite database for transcripts"""
+    import sqlite3
     
     # Use user's cache directory or temp directory if read-only
     cache_dir = os.path.expanduser('~/.cache/mcp_playground')
     try:
         os.makedirs(cache_dir, exist_ok=True)
-        db_path = os.path.join(cache_dir, 'transcripts.json')
+        db_path = os.path.join(cache_dir, 'transcripts.db')
     except (OSError, PermissionError):
         # Fallback to temp directory if cache dir is not writable
-        db_path = os.path.join(tempfile.gettempdir(), 'mcp_playground_transcripts.json')
+        db_path = os.path.join(tempfile.gettempdir(), 'mcp_playground_transcripts.db')
     
-    return TinyDB(db_path)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row  # Enable dict-like access
+    
+    # Create table if it doesn't exist
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS transcripts (
+            video_id TEXT PRIMARY KEY,
+            url TEXT NOT NULL,
+            title TEXT NOT NULL,
+            transcript TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            language TEXT NOT NULL DEFAULT 'en'
+        )
+    ''')
+    conn.commit()
+    
+    return conn
+
+
+def get_cached_transcript(video_id: str) -> Optional[Dict]:
+    """Get cached transcript by video ID"""
+    try:
+        with get_transcript_db() as conn:
+            cursor = conn.execute(
+                'SELECT * FROM transcripts WHERE video_id = ?',
+                (video_id,)
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+    except Exception as e:
+        logger.warning(f"Failed to get cached transcript for {video_id}: {e}")
+        return None
+
+
+def save_transcript_cache(video_id: str, url: str, title: str, transcript: str, language: str = 'en') -> None:
+    """Save transcript to cache"""
+    try:
+        with get_transcript_db() as conn:
+            conn.execute('''
+                INSERT OR REPLACE INTO transcripts 
+                (video_id, url, title, transcript, created_at, language)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (video_id, url, title, transcript, datetime.now().isoformat(), language))
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"Failed to cache transcript for {video_id}: {e}")

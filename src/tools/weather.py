@@ -8,6 +8,7 @@ from datetime import datetime
 
 from fastmcp import FastMCP
 from ..core.utils import get_weather_emoji
+from ..core.unified_cache import get_cached_data, save_cached_data
 
 logger = logging.getLogger(__name__)
 

@@ -248,11 +248,11 @@ def health_check() -> str:
 | **Authentication** | None required | **MANDATORY Bearer token** |
 | **Scaling** | Single process | Auto-scaling |
 | **Debugging** | Full access | Log viewing |
-| **Dependencies** | Local Ollama required | All handled in cloud |
+| **Dependencies** | All handled locally | All handled in cloud |
 | **Cost** | Free | Free (beta) |
 | **Updates** | Manual restart | Auto-deploy on git push |
-| **Memory Tools** | Full vector memory | **Disabled** (no local Ollama) |
-| **Document Tools** | Full search & storage | **Disabled** (no vector DB) |
+| **Real-time Tools** | All tools available | All tools available |
+| **Data Storage** | TinyDB caching | TinyDB caching |
 | **Security** | Development mode | **Production security** |
 
 ## Available Tools
@@ -297,7 +297,7 @@ def health_check() -> str:
 
 **Optional Dependencies:**
 ```bash
-# For local development with full UI and vector memory
+# For local development with Streamlit UI
 uv sync --extra local
 
 # For development and testing
@@ -317,7 +317,7 @@ uv sync --extra cloud
 
 **Benefits:**
 - **Faster deployments** - Only essential dependencies installed
-- **Smaller containers** - No Streamlit, ChromaDB, or testing deps in cloud
+- **Smaller containers** - No Streamlit or testing deps in cloud
 - **Better security** - Fewer packages = smaller attack surface
 - **Cost optimization** - Reduced memory usage and startup time
 
@@ -327,7 +327,7 @@ uv sync --extra cloud
 # Install core dependencies (matches cloud deployment)
 uv sync
 
-# Install with local development extras (Streamlit UI)
+# Install with Streamlit UI for local testing
 uv sync --extra local
 
 # Install with development tools (testing, etc.)
@@ -341,23 +341,17 @@ uv sync --all-extras
 
 ### Environment Variables
 
-Create `.env.cloud` for cloud-specific settings:
+FastMCP Cloud automatically handles most configuration. For custom settings, use a simple `.env` file:
+
 ```bash
-# Server Configuration
-HOST=0.0.0.0
-PORT=8000
-
-# Security
-ENABLE_AUTH=true
-ENABLE_CORS=true
-CORS_ORIGINS=*
-
-# Logging
+# Basic Configuration (optional - FastMCP Cloud provides defaults)
 LOG_LEVEL=INFO
-
-# Tool-specific settings
 YOUTUBE_MAX_TOKENS=24000
+
+# Retry System
 MCP_RETRY_MAX_ATTEMPTS=3
+MCP_RETRY_BASE_DELAY=0.5
+MCP_RETRY_TYPE_COERCION=true
 ```
 
 ### FastMCP Cloud Settings
@@ -409,10 +403,10 @@ MCP_RETRY_MAX_ATTEMPTS=3
 
 **Enable verbose logging:**
 ```bash
-# Set in .env.cloud
+# Set in .env file
 LOG_LEVEL=DEBUG
 
-# Or via environment variable
+# Or test locally
 export LOG_LEVEL=DEBUG
 ```
 

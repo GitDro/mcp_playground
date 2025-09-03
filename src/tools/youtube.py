@@ -8,7 +8,7 @@ from typing import Optional
 from datetime import datetime
 
 from fastmcp import FastMCP
-from ..core.cache import get_transcript_db
+from ..core.unified_cache import get_cached_data, save_cached_data
 from ..core.utils import extract_video_id, filter_sponsor_content
 
 
@@ -61,7 +61,6 @@ def _get_youtube_transcript(url: str) -> str:
     """Internal function to extract transcript from YouTube video with caching"""
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
-        from tinydb import Query
         
         # Extract video ID
         video_id = extract_video_id(url)
@@ -69,12 +68,9 @@ def _get_youtube_transcript(url: str) -> str:
             return f"Invalid YouTube URL. Please provide a valid YouTube video URL."
         
         # Check cache first
-        db = get_transcript_db()
-        Video = Query()
-        cached = db.search(Video.video_id == video_id)
-        
-        if cached:
-            cached_data = cached[0]
+        cache_key = f"youtube_transcript_{video_id}"
+        cached_data = get_cached_data(cache_key, "youtube_transcript")
+        if cached_data:
             return f"**{cached_data.get('title', 'YouTube Video')}**\n\n{cached_data['transcript']}"
         
         # Get transcript from YouTube
@@ -109,14 +105,14 @@ def _get_youtube_transcript(url: str) -> str:
         title = f"YouTube Video ({video_id})"
         
         # Cache the transcript
-        db.insert({
+        cache_data = {
             'video_id': video_id,
             'url': url,
             'title': title,
             'transcript': transcript_text,
-            'created_at': datetime.now().isoformat(),
             'language': 'en'
-        })
+        }
+        save_cached_data(cache_key, cache_data, "youtube_transcript", {'video_id': video_id})
         
         return f"**{title}**\n\n{transcript_text}"
         

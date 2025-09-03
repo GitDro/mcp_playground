@@ -12,6 +12,7 @@ import json
 import re
 from bs4 import BeautifulSoup
 import html2text
+from ..core.unified_cache import get_cached_data, save_cached_data
 
 def _validate_url(url: str) -> Tuple[bool, str, Optional[str]]:
     """
@@ -265,6 +266,12 @@ def register_web_tools(mcp: FastMCP):
             
             query = query.strip()
             
+            # Check cache first
+            cache_key = f"web_search_{query.lower().replace(' ', '_')[:50]}_{max_results}"
+            cached_data = get_cached_data(cache_key, "web_search")
+            if cached_data:
+                return cached_data['results']
+            
             # Initialize DDGS with timeout (headers no longer supported in ddgs package)
             ddgs = DDGS(timeout=20)
             results = list(ddgs.text(query, max_results=max_results))
@@ -279,6 +286,9 @@ def register_web_tools(mcp: FastMCP):
                 formatted_results += f"**URL**: {result.get('href', 'No URL')}\n"
                 formatted_results += f"**Summary**: {result.get('body', 'No description available')}\n\n"
                 formatted_results += "---\n\n"
+            
+            # Cache the results
+            save_cached_data(cache_key, {'results': formatted_results}, "web_search", {'query': query, 'max_results': max_results})
             
             return formatted_results
             
@@ -302,6 +312,12 @@ def register_web_tools(mcp: FastMCP):
         is_valid, validated_url, error_msg = _validate_url(url)
         if not is_valid:
             return error_msg
+        
+        # Check cache first
+        cache_key = f"web_content_{validated_url}"
+        cached_data = get_cached_data(cache_key, "web_content")
+        if cached_data:
+            return cached_data['analysis']
         
         # Fetch content
         success, response_or_error = _fetch_url_content(validated_url)
@@ -407,6 +423,9 @@ def register_web_tools(mcp: FastMCP):
             
         else:
             analysis += f"## Non-HTML Content\n\n**Content Type**: {content_type}\n**Size**: {content_length:,} bytes\n\n*This content type is not directly analyzable as text. Consider downloading for manual review.*\n"
+        
+        # Cache the analysis
+        save_cached_data(cache_key, {'analysis': analysis}, "web_content", {'url': validated_url})
         
         return analysis
     
