@@ -1,19 +1,12 @@
 """
-FastMCP Server for MCP Playground
+MCP Arena - Local Development Entry Point
 
-Main entry point for the MCP server. This file maintains compatibility with 
-external MCP clients while using the new modularized structure.
-
-The actual server implementation is now in src/server.py with tools organized
-in separate modules for better maintainability.
+Simple wrapper for local MCP clients and development.
+Uses the unified server architecture from src/server.py.
 """
 
-# Import the server from the new modularized structure
-from src import mcp
-from src.server import main
-
-# Export the mcp server for compatibility with external clients
-__all__ = ['mcp', 'main']
+# Export the server for MCP clients
+from src.server import mcp, main
 
 if __name__ == "__main__":
     main()

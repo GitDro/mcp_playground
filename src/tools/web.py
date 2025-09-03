@@ -244,101 +244,6 @@ def _extract_clean_content(soup) -> Tuple[str, Dict[str, Any]]:
     
     return clean_content, content_stats
 
-def _save_web_content(url: str, html_content: str) -> str:
-    """Save web content as a markdown document"""
-    try:
-        from ..core.vector_memory import vector_memory_manager
-        
-        # Parse HTML
-        soup = BeautifulSoup(html_content, 'html.parser')
-        
-        # Extract metadata and clean content using shared functions
-        metadata = _extract_page_metadata(soup)
-        clean_content, content_stats = _extract_clean_content(soup)
-        
-        # Use extracted title or generate one
-        page_title = metadata['title']
-        if not page_title:
-            # Try to extract from first heading in content
-            if content_stats['headings']:
-                page_title = content_stats['headings'][0]
-            else:
-                page_title = f"Web Capture - {url}"
-        
-        # Create formatted content
-        formatted_content = f"# {page_title}\n\n"
-        formatted_content += f"**Source:** {url}\n"
-        formatted_content += f"**Captured:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-        formatted_content += "---\n\n"
-        formatted_content += clean_content
-        
-        # Determine file path
-        cache_dir = os.path.expanduser('~/.cache/mcp_playground/documents/captures')
-        safe_title = "".join(c for c in page_title if c.isalnum() or c in (' ', '-', '_')).rstrip()
-        safe_title = safe_title.replace(' ', '_')[:50]
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{timestamp}_{safe_title}.md"
-        file_path = os.path.join(cache_dir, filename)
-        
-        # Store the document (deduplication handled automatically by vector_memory_manager)
-        doc_id = vector_memory_manager.store_document(
-            title=page_title,
-            content=formatted_content,
-            doc_type="capture",
-            tags=["web-capture"],
-            file_path=file_path,
-            source_url=url
-        )
-        
-        # Extract key metadata for user-friendly response
-        from urllib.parse import urlparse
-        try:
-            domain = urlparse(url).netloc.replace('www.', '')
-        except:
-            domain = "Unknown domain"
-        
-        author = metadata.get('author', '')
-        publish_date = metadata.get('publish_date', '')
-        
-        # Format date nicely if available
-        date_str = ""
-        if publish_date:
-            try:
-                from datetime import datetime
-                # Try to parse and format date
-                if 'T' in publish_date:
-                    dt = datetime.fromisoformat(publish_date.replace('Z', '+00:00'))
-                    date_str = dt.strftime('%b %d, %Y')
-                else:
-                    date_str = publish_date[:10]  # Take first 10 chars if it looks like a date
-            except:
-                date_str = publish_date
-        
-        # Build metadata line
-        metadata_parts = [domain]
-        if author:
-            metadata_parts.append(author)
-        if date_str:
-            metadata_parts.append(date_str)
-        metadata_line = " • ".join(metadata_parts)
-        
-        # Check if this was a duplicate (existing ID returned)
-        existing_docs = vector_memory_manager.get_all_documents()
-        existing_doc = next((doc for doc in existing_docs if doc['id'] == doc_id), None)
-        
-        if existing_doc and existing_doc.get('source_url') == url:
-            # This was a duplicate URL
-            return f"""**Already saved: {existing_doc['title']}**
-{metadata_line}
-**Find it:** `search_documents("{page_title[:30]}")` or `search_documents("{domain}")`"""
-        else:
-            # This is a new document
-            return f"""**Saved: {page_title}**
-{metadata_line}
-**Find it:** `search_documents("{page_title[:30]}")` or `search_documents("{domain}")`"""
-        
-    except Exception as e:
-        return f"❌ Error saving web content: {str(e)}"
 
 
 def register_web_tools(mcp: FastMCP):
@@ -479,11 +384,9 @@ def register_web_tools(mcp: FastMCP):
                 # Full content section
                 analysis += f"\n## FULL CONTENT\n\n"
                 if content_stats['word_count'] > 2000:
-                    analysis += f"*Note: Large content ({content_stats['word_count']:,} words). Consider using save_link for offline access.*\n\n"
+                    analysis += f"*Note: Large content ({content_stats['word_count']:,} words).*\n\n"
                 
                 analysis += clean_content
-                
-                analysis += f"\n\n---\n\n**To save this content for offline access and knowledge building, use the `save_link` tool.**"
                 
             except Exception as e:
                 analysis += f"Error processing HTML content: {str(e)}\n"
@@ -507,32 +410,3 @@ def register_web_tools(mcp: FastMCP):
         
         return analysis
     
-    @mcp.tool(description="Save webpage content for offline access and knowledge building")
-    def save_link(url: str, title: str = None) -> str:
-        """
-        Save webpage content for offline access and knowledge building.
-        
-        Args:
-            url: URL to save (must include http:// or https://)
-            title: Optional custom title (auto-generated if not provided)
-        """
-        # Validate URL
-        is_valid, validated_url, error_msg = _validate_url(url)
-        if not is_valid:
-            return error_msg
-        
-        # Fetch content
-        success, response_or_error = _fetch_url_content(validated_url)
-        if not success:
-            return response_or_error
-        
-        response = response_or_error
-        final_url = str(response.url)
-        content_type = response.headers.get('content-type', 'unknown').split(';')[0]
-        
-        if 'text/html' in content_type:
-            # Save the content using existing function
-            saved_result = _save_web_content(final_url, response.text)
-            return f"**LINK SAVED**\n{saved_result}"
-        else:
-            return f"Error: Cannot save {content_type} content as markdown. Only HTML pages can be saved."

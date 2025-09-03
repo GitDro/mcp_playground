@@ -41,7 +41,8 @@ DEFAULT_CONFIG = ToolWrapperConfig()
 # Global retry manager instance  
 _retry_manager = RetryManager(
     max_attempts=DEFAULT_CONFIG.max_attempts,
-    base_delay=DEFAULT_CONFIG.base_delay
+    base_delay=DEFAULT_CONFIG.base_delay,
+    enable_state_management=False  # Disabled - no vector memory dependency
 )
 
 
@@ -51,7 +52,8 @@ def configure_retry_behavior(config: ToolWrapperConfig) -> None:
     DEFAULT_CONFIG = config
     _retry_manager = RetryManager(
         max_attempts=config.max_attempts,
-        base_delay=config.base_delay
+        base_delay=config.base_delay,
+        enable_state_management=False  # Disabled - no vector memory dependency
     )
     logger.info(f"Retry behavior configured: max_attempts={config.max_attempts}, base_delay={config.base_delay}")
 

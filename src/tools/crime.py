@@ -8,7 +8,6 @@ from datetime import datetime
 from typing import Optional, Dict, List
 from fastmcp import FastMCP
 from ..core.cache import load_cached_data, save_cached_data, cleanup_old_cache
-from ..core.vector_memory import OllamaEmbeddingFunction
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +114,7 @@ def register_crime_tools(mcp: FastMCP):
                 logger.info(f"Using cached neighbourhood data for {neighbourhood}")
             else:
                 # Find the neighbourhood using semantic search
-                neighbourhood_match = _find_neighbourhood_semantic(crime_data, neighbourhood)
+                neighbourhood_match = _find_neighbourhood_string(crime_data, neighbourhood)
                 if not neighbourhood_match:
                     # Show available neighbourhoods that partially match using string search
                     partial_matches = _get_partial_matches(crime_data, neighbourhood)
@@ -123,7 +122,7 @@ def register_crime_tools(mcp: FastMCP):
                         matches_str = ", ".join(partial_matches[:5])  # Show first 5 matches
                         return f"❌ Neighbourhood '{neighbourhood}' not found. Did you mean: {matches_str}?"
                     else:
-                        return f"❌ Neighbourhood '{neighbourhood}' not found. Try names like 'Waterfront', 'Downtown', 'Harbourfront', or check the full neighbourhood names in Toronto's 158 neighbourhood structure."
+                        return f"❌ Neighbourhood '{neighbourhood}' not found. Use the 'list_toronto_neighbourhoods' tool to see all available neighbourhood names, or try names like 'Waterfront', 'Downtown', 'Harbourfront'."
                 
                 # Cache the neighbourhood data for future requests
                 save_cached_data(neighbourhood_cache_key, {'neighbourhood_data': neighbourhood_match})
@@ -148,53 +147,103 @@ def register_crime_tools(mcp: FastMCP):
             logger.error(f"Error getting Toronto crime data: {e}")
             return f"❌ Error retrieving crime data: {str(e)}"
 
-
-def _find_neighbourhood_semantic(crime_data: List[Dict], query: str) -> Optional[Dict]:
-    """Find a neighbourhood using semantic similarity with embeddings"""
-    try:
-        # Initialize embedding function
-        embed_func = OllamaEmbeddingFunction()
+    @mcp.tool(description="List all available Toronto neighbourhoods for crime data")
+    def list_toronto_neighbourhoods() -> str:
+        """Get a complete list of all Toronto neighbourhoods that have crime data available. Use this when you're unsure of the exact neighbourhood name to use with the crime statistics tool.
         
-        # Extract all neighbourhood names
-        neighbourhoods = []
-        for record in crime_data:
-            area_name = record.get('AREA_NAME', '')
-            if area_name:
-                neighbourhoods.append({
-                    'name': area_name,
-                    'record': record
-                })
-        
-        if not neighbourhoods:
-            return None
-        
-        # Generate embeddings for query and all neighbourhood names
-        query_embedding = embed_func([query])[0]
-        neighbourhood_names = [n['name'] for n in neighbourhoods]
-        neighbourhood_embeddings = embed_func(neighbourhood_names)
-        
-        # Calculate cosine similarity
-        best_match = None
-        best_similarity = -1
-        
-        for i, embedding in enumerate(neighbourhood_embeddings):
-            similarity = _cosine_similarity(query_embedding, embedding)
+        Returns a formatted list of all 158 Toronto neighbourhoods organized alphabetically."""
+        try:
+            import requests
             
-            if similarity > best_similarity:
-                best_similarity = similarity
-                best_match = neighbourhoods[i]
-        
-        # Only return if similarity is above threshold (0.3 is fairly permissive)
-        if best_match and best_similarity > 0.3:
-            logger.info(f"Found neighbourhood '{best_match['name']}' with similarity {best_similarity:.3f} for query '{query}'")
-            return best_match['record']
-        
-        # Fallback to string matching if semantic search doesn't find good match
-        return _find_neighbourhood_string(crime_data, query)
-        
-    except Exception as e:
-        logger.warning(f"Semantic neighbourhood search failed: {e}, falling back to string matching")
-        return _find_neighbourhood_string(crime_data, query)
+            # Clean up old cache periodically
+            cleanup_old_cache()
+            
+            # Base URL for Toronto Open Data API
+            base_url = "https://ckan0.cf.opendata.inter.prod-toronto.ca"
+            
+            # Get the neighbourhood profiles dataset package info
+            package_url = f"{base_url}/api/3/action/package_show?id=neighbourhood-crime-rates"
+            package_response = requests.get(package_url, timeout=10)
+            
+            if package_response.status_code != 200:
+                return f"❌ Could not access Toronto neighbourhood data API. Status: {package_response.status_code}"
+            
+            package_data = package_response.json()
+            resources = package_data.get('result', {}).get('resources', [])
+            
+            if not resources:
+                return "❌ No neighbourhood data resources found in the API"
+            
+            # Find the most recent CSV resource
+            csv_resource = None
+            for resource in resources:
+                if resource.get('format', '').upper() == 'CSV':
+                    csv_resource = resource
+                    break
+            
+            if not csv_resource:
+                return "❌ No active neighbourhood data resource found"
+            
+            # Get the data
+            data_url = csv_resource['url']
+            data_response = requests.get(data_url, timeout=30)
+            
+            if data_response.status_code != 200:
+                return f"❌ Could not fetch neighbourhood data. Status: {data_response.status_code}"
+            
+            # Parse CSV data manually (lightweight approach)
+            lines = data_response.text.strip().split('\n')
+            if len(lines) <= 1:
+                return "❌ No neighbourhood records found in the dataset"
+            
+            # Extract neighbourhood names from the data
+            neighbourhoods = set()
+            header = lines[0].split(',')
+            area_name_idx = None
+            
+            for i, col in enumerate(header):
+                if 'AREA_NAME' in col.upper():
+                    area_name_idx = i
+                    break
+            
+            if area_name_idx is None:
+                return "❌ Could not find neighbourhood name column in the data"
+            
+            # Extract unique neighbourhood names
+            for line in lines[1:]:
+                parts = line.split(',')
+                if len(parts) > area_name_idx:
+                    area_name = parts[area_name_idx].strip().strip('"')
+                    if area_name:
+                        neighbourhoods.add(area_name)
+            
+            if not neighbourhoods:
+                return "❌ No neighbourhood names found in the dataset"
+            
+            # Sort neighbourhoods alphabetically
+            sorted_neighbourhoods = sorted(list(neighbourhoods))
+            
+            # Format the response
+            result = f"📍 **Toronto Neighbourhoods ({len(sorted_neighbourhoods)} total)**\n\n"
+            result += "Use any of these exact neighbourhood names with the crime statistics tool:\n\n"
+            
+            # Group by first letter for easier reading
+            current_letter = ""
+            for neighbourhood in sorted_neighbourhoods:
+                first_letter = neighbourhood[0].upper()
+                if first_letter != current_letter:
+                    current_letter = first_letter
+                    result += f"\n**{current_letter}**\n"
+                result += f"• {neighbourhood}\n"
+            
+            result += f"\n💡 **Tip**: Use exact neighbourhood names for best results with the crime statistics tool."
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error getting Toronto neighbourhoods: {e}")
+            return f"❌ Error retrieving neighbourhood list: {str(e)}"
+
 
 
 def _find_neighbourhood_string(crime_data: List[Dict], query: str) -> Optional[Dict]:

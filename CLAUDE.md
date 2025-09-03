@@ -2,37 +2,38 @@
 
 ## Recent Changes (Sept 2025)
 
-### 🚀 Cloud Deployment Ready
-- **FastMCP Cloud workspace**: `https://fastmcp.cloud/dro-serve`
-- **Security-first**: Mandatory authentication for cloud deployment
-- **Optimized dependencies**: pyproject.toml restructured for faster cloud deployments
-- **Graceful degradation**: Vector memory tools provide helpful fallbacks in cloud mode
+### 🚀 Unified Architecture & Simplified Deployment
+- **Consolidated servers**: Single `src/server.py` handles both local (stdio) and cloud (HTTP) modes
+- **Streamlined dependencies**: Removed vector memory and ChromaDB dependencies for cloud compatibility  
+- **Simplified UI**: Single `app.py` using proper FastMCP subprocess transport
+- **Updated documentation**: DEPLOYMENT.md reflects current tool capabilities
 
-### 🔧 Code Optimizations  
-- **Removed local LLM analysis** from arXiv tool - now returns raw content for host LLM analysis
-- **Cloud-aware tools**: Memory and document tools detect cloud mode and provide appropriate messages
-- **Dependency cleanup**: Removed redundant requirements.txt, optimized pyproject.toml structure
+### 🔧 Code Simplifications
+- **Removed vector memory system**: No more ChromaDB/Ollama dependencies for cloud deployment
+- **Unified configuration**: Single .env approach for both local and cloud
+- **Clean tool set**: Focus on real-time API-based tools that work everywhere
+- **Better error handling**: Improved tool descriptions and neighborhood listing for crime data
 
 ## Dependency Management
 - **Always use `uv` for dependency management** instead of `pip` or `python -m`
 - Run commands with `uv run python` instead of just `python`
 - Install packages with `uv add package-name`
 - **Cloud deployment**: Uses core dependencies only (auto-detected from pyproject.toml)
-- **Local development**: `uv sync --extra local` for full features including Streamlit and vector memory
+- **Local development**: `uv sync --extra local` for Streamlit UI and development tools
 
 ## Testing Commands
 ```bash
-# Test MCP server (local)
-uv run python test_mcp.py
-
-# Run main app (local UI)
+# Run Streamlit UI (local development)
 uv run streamlit run app.py
 
-# Test cloud server locally
-DISABLE_VECTOR_MEMORY=true uv run python cloud_server.py
+# Test MCP server for Claude Desktop (local)
+uv run python mcp_server.py
 
-# Test HTTP mode locally  
-python -m src.server http 8001
+# Test HTTP mode locally
+uv run python -m src.server http 8000
+
+# Test cloud server locally
+uv run python cloud_server.py
 ```
 
 ## Cloud Deployment Workflow
@@ -48,18 +49,13 @@ python -m src.server http 8001
 ```
 src/
 ├── core/
-│   ├── vector_memory.py  # Vector-based memory with ChromaDB + Ollama
-│   ├── memory.py         # TinyDB memory manager (fallback)
 │   ├── cache.py          # Financial data caching
 │   ├── retry_manager.py  # Tool retry logic and error recovery
 │   ├── tool_wrapper.py   # @retry_tool decorator for enhanced reliability
-│   ├── retry_state_manager.py  # Learning system for retry patterns
 │   ├── models.py         # Pydantic models
 │   └── utils.py          # General utilities
 ├── tools/
-│   ├── memory.py         # remember, recall, forget (conversation context)
-│   ├── documents.py      # store_note, search_documents, show_all_documents (automatic deduplication)
-│   ├── web.py            # web_search, analyze_url, save_link
+│   ├── web.py            # web_search, analyze_url
 │   ├── arxiv.py          # arxiv_search + paper analysis
 │   ├── financial.py      # stock/crypto/market tools
 │   ├── youtube.py        # YouTube analysis tools
