@@ -10,6 +10,7 @@
 
 ### 🔧 Code Simplifications
 - **Removed vector memory system**: No more ChromaDB/Ollama dependencies for cloud deployment
+- **Moved TinyDB to core dependencies**: Fixes YouTube transcript caching in cloud deployment
 - **Unified configuration**: Single .env approach for both local and cloud
 - **Clean tool set**: Focus on real-time API-based tools that work everywhere
 - **Better error handling**: Improved tool descriptions and neighborhood listing for crime data
@@ -19,7 +20,7 @@
 - Run commands with `uv run python` instead of just `python`
 - Install packages with `uv add package-name`
 - **Cloud deployment**: Uses core dependencies only (auto-detected from pyproject.toml)
-- **Local development**: `uv sync --extra local` for Streamlit UI and development tools
+- **Local development**: `uv sync --extra local` for Streamlit UI
 
 ## Testing Commands
 ```bash
