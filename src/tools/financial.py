@@ -7,7 +7,7 @@ from typing import Dict, Optional, Tuple
 from datetime import datetime
 
 from fastmcp import FastMCP
-from ..core.cache import load_cached_data, save_cached_data, cleanup_old_cache
+from ..core.unified_cache import get_cached_data, save_cached_data, cleanup_cache
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ def register_financial_tools(mcp: FastMCP):
             symbol: Stock symbol, crypto symbol, or market index (e.g., "AAPL", "BTC", "SPY")
         """
         try:
-            cleanup_old_cache()
+            cleanup_cache()
             
             # Format symbol and detect asset type
             formatted_symbol, asset_type = _format_symbol(symbol)
@@ -63,8 +63,8 @@ def _format_symbol(symbol: str) -> Tuple[str, str]:
 
 def _get_current_data(formatted_symbol: str) -> Optional[Dict]:
     """Get current market data with caching"""
-    cache_key = f"{formatted_symbol}_current"
-    cached_data = load_cached_data(cache_key)
+    cache_key = f"stock_current_{formatted_symbol}"
+    cached_data = get_cached_data(cache_key, "stock_current")
     
     if cached_data and 'quote' in cached_data:
         return cached_data['quote']
@@ -90,15 +90,15 @@ def _get_current_data(formatted_symbol: str) -> Optional[Dict]:
         'volume': meta.get('regularMarketVolume', 0)
     }
     
-    save_cached_data(cache_key, {'quote': quote_data})
+    save_cached_data(cache_key, {'quote': quote_data}, "stock_current", {'symbol': formatted_symbol})
     return quote_data
 
 
 def _get_historical_data(formatted_symbol: str, range_param: str, year_only: bool = False) -> Optional[Dict]:
     """Get historical data with caching"""
-    cache_key = f"{formatted_symbol}_history_{range_param}"
+    cache_key = f"stock_history_{formatted_symbol}_{range_param}"
     cache_type = 'year_data' if year_only else 'history'
-    cached_data = load_cached_data(cache_key)
+    cached_data = get_cached_data(cache_key, "stock_history")
     
     if cached_data and cache_type in cached_data:
         return cached_data[cache_type]
@@ -143,7 +143,7 @@ def _get_historical_data(formatted_symbol: str, range_param: str, year_only: boo
             'price_data': valid_data
         }
     
-    save_cached_data(cache_key, {cache_type: hist_data})
+    save_cached_data(cache_key, {cache_type: hist_data}, "stock_history", {'symbol': formatted_symbol, 'range': range_param})
     return hist_data
 
 

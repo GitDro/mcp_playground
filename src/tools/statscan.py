@@ -12,7 +12,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 from fastmcp import FastMCP
-from ..core.cache import load_cached_data, save_cached_data, cleanup_old_cache
+from ..core.unified_cache import get_cached_data, save_cached_data, cleanup_cache
 
 logger = logging.getLogger(__name__)
 
@@ -172,8 +172,8 @@ def register_statscan_tools(mcp: FastMCP):
 
 def _get_all_economic_data() -> Optional[CanadianEconomicData]:
     """Get all Canadian economic indicators concurrently with caching"""
-    cache_key = "canadian_economy_overview"
-    cached_data = _load_statscan_cache(cache_key, cache_hours=12)  # Cache for 12 hours
+    cache_key = "statscan_overview_canadian_economy"
+    cached_data = get_cached_data(cache_key, "statscan_overview")
     
     if cached_data and 'economic_data' in cached_data:
         return CanadianEconomicData.from_dict(cached_data['economic_data'])
@@ -200,7 +200,7 @@ def _get_all_economic_data() -> Optional[CanadianEconomicData]:
         )
         
         # Cache the consolidated data
-        _save_statscan_cache(cache_key, {'economic_data': economic_data.to_dict()})
+        save_cached_data(cache_key, {'economic_data': economic_data.to_dict()}, "statscan_overview")
         
         return economic_data
         
@@ -270,8 +270,8 @@ def _format_economic_analysis(data: CanadianEconomicData, focus: str) -> str:
 
 def _get_cpi_data(category: str, geography: str) -> Optional[EconomicIndicator]:
     """Get CPI data from Statistics Canada API"""
-    cache_key = f"cpi_{category}_{geography}"
-    cached_data = _load_statscan_cache(cache_key, cache_hours=24)  # Cache CPI for 24 hours
+    cache_key = f"statscan_cpi_{category}_{geography}"
+    cached_data = get_cached_data(cache_key, "statscan_cpi")
     
     if cached_data and 'indicator' in cached_data:
         return EconomicIndicator.from_dict(cached_data['indicator'])

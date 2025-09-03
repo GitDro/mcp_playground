@@ -8,6 +8,7 @@ from datetime import datetime
 
 from fastmcp import FastMCP
 from ..core.utils import get_weather_emoji
+from ..core.unified_cache import get_cached_data, save_cached_data
 
 logger = logging.getLogger(__name__)
 
@@ -109,9 +110,18 @@ def register_weather_tools(mcp: FastMCP):
             return None
     
     def _get_weather_data(latitude: float, longitude: float) -> Optional[Dict]:
-        """Get weather data from Open-Meteo API"""
+        """Get weather data from Open-Meteo API with caching"""
         try:
             import requests
+            
+            # Check cache first (cache for 30 minutes)
+            cache_key = f"weather_{latitude:.2f}_{longitude:.2f}"
+            cached_data = get_cached_data(cache_key, "weather_data")
+            if cached_data:
+                # Check if data is less than 30 minutes old
+                from datetime import timedelta
+                if datetime.now() - datetime.fromisoformat(cached_data['timestamp']) < timedelta(minutes=30):
+                    return cached_data['weather_data']
             
             # Open-Meteo API - free, no auth, 10k requests/day
             url = "https://api.open-meteo.com/v1/forecast"
@@ -126,7 +136,18 @@ def register_weather_tools(mcp: FastMCP):
             
             response = requests.get(url, params=params, timeout=15)
             if response.status_code == 200:
-                return response.json()
+                weather_data = response.json()
+                
+                # Cache the weather data
+                cache_data = {
+                    'weather_data': weather_data,
+                    'timestamp': datetime.now().isoformat(),
+                    'latitude': latitude,
+                    'longitude': longitude
+                }
+                save_cached_data(cache_key, cache_data, "weather_data", {'lat': latitude, 'lng': longitude})
+                
+                return weather_data
             return None
         except Exception as e:
             logger.warning(f"Failed to get weather data: {e}")
@@ -208,15 +229,15 @@ def register_weather_tools(mcp: FastMCP):
             logger.error(f"Error formatting weather response: {e}")
             return f"Error formatting weather data: {str(e)}"
     
-    @mcp.tool(description="Get weather forecast with automatic IP location detection")
+    @mcp.tool(description="Get current weather and 7-day forecast for any location or your current location")
     def get_weather(location: Optional[str] = None) -> str:
         """Get current weather conditions and 7-day forecast.
         
         Args:
-            location (str, optional): Location can be a city name (e.g., 'Toronto') or 
-                coordinates as 'latitude,longitude' (e.g., '43.6532,-79.3832'). 
-                If not provided, the function will automatically detect your location using your IP address.
-                Canadian cities are given preference in search results.
+            location (str, optional): Three ways to specify location:
+                • Leave empty for automatic detection using your IP address
+                • City name (e.g., 'Toronto', 'Vancouver') - Canadian cities prioritized
+                • Coordinates as 'latitude,longitude' (e.g., '43.6532,-79.3832')
         
         Returns:
             str: Formatted weather report with current conditions and 7-day forecast.
@@ -238,17 +259,17 @@ def register_weather_tools(mcp: FastMCP):
                             'country_code': 'XX'
                         }
                     except ValueError:
-                        return "Invalid coordinates. Please provide valid numbers for latitude and longitude (e.g., '52.52,13.41')."
+                        return "Invalid coordinates. Use format 'latitude,longitude' (e.g., '43.65,-79.38')."
                 else:
                     # Treat as city name
                     location_data = _geocode_city(location)
                     if not location_data:
-                        return f"Could not find location for '{location}'. Please try a different city name or provide coordinates as 'latitude,longitude'."
+                        return f"Location '{location}' not found. Try a different city name or coordinates (e.g., '43.65,-79.38')."
             else:
                 # Get location from IP
                 location_data = _get_ip_location()
                 if not location_data:
-                    return "Could not determine your location from IP. Please provide a city name or coordinates as 'latitude,longitude' (e.g., '52.52,13.41')."
+                    return "Could not detect your location automatically. Please provide a city name or coordinates (e.g., '43.65,-79.38')."
             
             # Get weather data
             weather_data = _get_weather_data(location_data['latitude'], location_data['longitude'])

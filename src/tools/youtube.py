@@ -8,14 +8,14 @@ from typing import Optional
 from datetime import datetime
 
 from fastmcp import FastMCP
-from ..core.cache import get_transcript_db
+from ..core.unified_cache import get_cached_data, save_cached_data
 from ..core.utils import extract_video_id, filter_sponsor_content
 
 
 def register_youtube_tools(mcp: FastMCP):
     """Register YouTube-related tools with the MCP server"""
     
-    @mcp.tool(description="Analyze YouTube video content from YouTube URLs")
+    @mcp.tool(description="Get YouTube video transcript and analyze content with optional specific questions")
     def analyze_youtube_url(url: str, question: str = "") -> str:
         """Analyze YouTube video content from YouTube URLs. Provide just a YouTube URL for a comprehensive summary, or include a specific question to get targeted answers about the video content. Handles videos up to 2-3 hours with adaptive context management.
         
@@ -24,10 +24,20 @@ def register_youtube_tools(mcp: FastMCP):
             question: Optional specific question about the video content (e.g., "What are the key points about AI?")
         """
         try:
+            # Validate URL first
+            if not url or not isinstance(url, str):
+                return "Error: Please provide a valid YouTube URL."
+            
+            # Basic YouTube URL validation
+            url = url.strip()
+            if not any(domain in url for domain in ['youtube.com', 'youtu.be', 'm.youtube.com']):
+                return "Error: Please provide a valid YouTube URL (youtube.com or youtu.be)."
+            
             # Get the transcript
             transcript_result = _get_youtube_transcript(url)
             
-            if transcript_result.startswith("Error") or transcript_result.startswith("Invalid") or transcript_result.startswith("No transcript"):
+            # Check for error conditions
+            if any(transcript_result.startswith(prefix) for prefix in ["Error", "Invalid", "No transcript"]):
                 return transcript_result
             
             # Extract title and transcript text  
@@ -54,14 +64,13 @@ def register_youtube_tools(mcp: FastMCP):
                 return _format_summary_response(title, duration_estimate, word_count, content, note)
                 
         except Exception as e:
-            return f"Error analyzing video: {str(e)}"
+            return f"Error analyzing YouTube video: {str(e)}. Please check that the URL is valid and the video has available transcripts."
 
 
 def _get_youtube_transcript(url: str) -> str:
     """Internal function to extract transcript from YouTube video with caching"""
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
-        from tinydb import Query
         
         # Extract video ID
         video_id = extract_video_id(url)
@@ -69,20 +78,17 @@ def _get_youtube_transcript(url: str) -> str:
             return f"Invalid YouTube URL. Please provide a valid YouTube video URL."
         
         # Check cache first
-        db = get_transcript_db()
-        Video = Query()
-        cached = db.search(Video.video_id == video_id)
-        
-        if cached:
-            cached_data = cached[0]
+        cache_key = f"youtube_transcript_{video_id}"
+        cached_data = get_cached_data(cache_key, "youtube_transcript")
+        if cached_data:
             return f"**{cached_data.get('title', 'YouTube Video')}**\n\n{cached_data['transcript']}"
         
         # Get transcript from YouTube
         try:
-            # First try to get the default transcript using newer API
+            # First try to get the default transcript 
             api = YouTubeTranscriptApi()
-            transcript_list = api.fetch(video_id)
-            transcript_text = ' '.join([entry.text for entry in transcript_list])
+            transcript = api.fetch(video_id)
+            transcript_text = ' '.join([entry.text for entry in transcript])
         except Exception as e:
             # Try to get any available transcript (auto-generated, different languages, etc.)
             try:
@@ -96,32 +102,33 @@ def _get_youtube_transcript(url: str) -> str:
                     transcript_text = ' '.join([entry.text for entry in transcript_data])
                 except:
                     # If no English, try any available transcript
-                    available_transcripts = list(transcript_list_obj)
-                    if available_transcripts:
-                        transcript_data = available_transcripts[0].fetch()
-                        transcript_text = ' '.join([entry.text for entry in transcript_data])
-                    else:
+                    try:
+                        for transcript in transcript_list_obj:
+                            transcript_data = transcript.fetch()
+                            transcript_text = ' '.join([entry.text for entry in transcript_data])
+                            break
+                    except:
                         return f"No transcript available for this video. The video may not have captions or subtitles."
             except Exception as e2:
-                return f"No transcript available for this video. The video may not have captions or subtitles."
+                return f"Error accessing video transcripts: {str(e2)}. The video may be private, age-restricted, or have no captions available."
         
         # Try to get video title (basic approach)
         title = f"YouTube Video ({video_id})"
         
         # Cache the transcript
-        db.insert({
+        cache_data = {
             'video_id': video_id,
             'url': url,
             'title': title,
             'transcript': transcript_text,
-            'created_at': datetime.now().isoformat(),
             'language': 'en'
-        })
+        }
+        save_cached_data(cache_key, cache_data, "youtube_transcript", {'video_id': video_id})
         
         return f"**{title}**\n\n{transcript_text}"
         
     except Exception as e:
-        return f"Error extracting transcript: {str(e)}"
+        return f"Error processing YouTube URL: {str(e)}. Please verify the URL is correct and accessible."
 
 
 def _process_transcript_content(transcript_text: str) -> tuple[str, str]:

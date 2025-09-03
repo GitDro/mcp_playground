@@ -7,7 +7,7 @@ import tempfile
 from datetime import datetime
 from typing import Optional, Dict, List
 from fastmcp import FastMCP
-from ..core.cache import load_cached_data, save_cached_data, cleanup_old_cache
+from ..core.unified_cache import get_cached_data, save_cached_data, cleanup_cache
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +59,8 @@ def register_crime_tools(mcp: FastMCP):
             crime_prefix = crime_map[crime_type.lower()]
             
             # Check cache first for full dataset
-            cache_key = f"toronto_crime_data"
-            cached_data = load_cached_data(cache_key)
+            cache_key = f"crime_data_toronto"
+            cached_data = get_cached_data(cache_key, "crime_data")
             
             if cached_data and 'crime_data' in cached_data:
                 crime_data = cached_data['crime_data']
@@ -102,11 +102,11 @@ def register_crime_tools(mcp: FastMCP):
                 crime_data = data_result['result']['records']
                 
                 # Cache the result
-                save_cached_data(cache_key, {'crime_data': crime_data})
+                save_cached_data(cache_key, {'crime_data': crime_data}, "crime_data", {'city': 'toronto'})
             
             # Check neighbourhood-specific cache first
-            neighbourhood_cache_key = f"toronto_neighbourhood_{neighbourhood.lower().replace(' ', '_')}"
-            neighbourhood_cached = load_cached_data(neighbourhood_cache_key)
+            neighbourhood_cache_key = f"crime_neighbourhood_{neighbourhood.lower().replace(' ', '_')}"
+            neighbourhood_cached = get_cached_data(neighbourhood_cache_key, "crime_neighbourhood")
             
             neighbourhood_match = None
             if neighbourhood_cached and 'neighbourhood_data' in neighbourhood_cached:
@@ -125,7 +125,7 @@ def register_crime_tools(mcp: FastMCP):
                         return f"❌ Neighbourhood '{neighbourhood}' not found. Use the 'list_toronto_neighbourhoods' tool to see all available neighbourhood names, or try names like 'Waterfront', 'Downtown', 'Harbourfront'."
                 
                 # Cache the neighbourhood data for future requests
-                save_cached_data(neighbourhood_cache_key, {'neighbourhood_data': neighbourhood_match})
+                save_cached_data(neighbourhood_cache_key, {'neighbourhood_data': neighbourhood_match}, "crime_neighbourhood", {'neighbourhood': neighbourhood})
                 logger.info(f"Cached neighbourhood data for {neighbourhood_match['AREA_NAME']}")
             
             # Extract crime data for the specific neighbourhood and crime type
