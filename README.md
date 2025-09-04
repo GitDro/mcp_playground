@@ -35,6 +35,22 @@ Add to `claude_desktop_config.json`:
 3. URL: `https://mcp-playground.fastmcp.app/mcp`
 4. Token: Get from FastMCP Cloud dashboard
 
+### LMStudio (v0.3.17+)
+1. Program tab → "Edit mcp.json"
+2. Add configuration:
+```json
+{
+  "mcp-arena": {
+    "url": "https://mcp-playground.fastmcp.app/mcp",
+    "headers": {
+      "Authorization": "Bearer your-fastmcp-cloud-token"
+    }
+  }
+}
+```
+
+*Other compatible clients: Tome, ollama-mcp-bridge, Cherry Studio*
+
 ## Available Tools
 
 ### Research & Analysis
