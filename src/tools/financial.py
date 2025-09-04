@@ -7,7 +7,9 @@ from typing import Dict, Optional, Tuple
 from datetime import datetime
 
 from fastmcp import FastMCP
+from fastmcp.tools.tool import ToolResult
 from ..core.unified_cache import get_cached_data, save_cached_data, cleanup_cache
+from ..core.mcp_output import create_summary_and_chart_result, extract_chart_from_matplotlib
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +23,7 @@ def register_financial_tools(mcp: FastMCP):
     """Register financial-related tools with the MCP server"""
     
     @mcp.tool(description="Get comprehensive stock, crypto, and market data")
-    def get_stock_overview(symbol: str) -> str:
+    def get_stock_overview(symbol: str) -> ToolResult:
         """Get comprehensive stock market data for any asset - stocks (AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA), crypto (BTC, ETH), or market indices (SPY, QQQ). Shows current price, daily change, volume, 1-month performance, and trend visualization.
         
         Args:
@@ -36,19 +38,22 @@ def register_financial_tools(mcp: FastMCP):
             # Get current market data
             quote_data = _get_current_data(formatted_symbol)
             if not quote_data:
-                return f"❌ Could not find data for symbol: {symbol}"
+                from ..core.mcp_output import create_text_content
+                from mcp.types import TextContent
+                return ToolResult(content=[create_text_content(f"❌ Could not find data for symbol: {symbol}")])
             
             # Get historical data (1-month and 1-year)
             hist_data = _get_historical_data(formatted_symbol, "1mo")
             year_data = _get_historical_data(formatted_symbol, "1y", year_only=True)
             
-            # Format and return the output
+            # Format and return the output with proper content blocks
             asset_name = _get_asset_name(symbol, asset_type, quote_data)
-            return _format_financial_output(quote_data, hist_data, year_data, asset_name, asset_type)
+            return _format_financial_output_with_content_blocks(quote_data, hist_data, year_data, asset_name, asset_type)
             
         except Exception as e:
             logger.error(f"Error getting stock overview for {symbol}: {e}")
-            return f"❌ Error retrieving stock data for {symbol}: {str(e)}"
+            from ..core.mcp_output import create_text_content
+            return ToolResult(content=[create_text_content(f"❌ Error retrieving stock data for {symbol}: {str(e)}")])
 
 
 def _format_symbol(symbol: str) -> Tuple[str, str]:
@@ -178,15 +183,15 @@ def _get_asset_name(symbol: str, asset_type: str, quote_data: Dict) -> str:
         return quote_data.get('symbol', symbol.upper())
 
 
-def _format_financial_output(quote_data: Dict, hist_data: Optional[Dict], year_data: Optional[Dict], 
-                           asset_name: str, asset_type: str) -> str:
-    """Format the comprehensive financial output"""
+def _format_financial_output_with_content_blocks(quote_data: Dict, hist_data: Optional[Dict], year_data: Optional[Dict], 
+                                               asset_name: str, asset_type: str) -> ToolResult:
+    """Format the comprehensive financial output using proper MCP content blocks"""
     current_price = float(quote_data.get('current_price', 0))
     change = float(quote_data.get('change', 0))
     change_pct = float(quote_data.get('change_pct', 0))
     trend_emoji = "📈" if change >= 0 else "📉"
     
-    # Start building output
+    # Build summary text without chart
     result = f"### **{asset_name} - Financial Overview**\n\n"
     
     # Current price
@@ -196,6 +201,7 @@ def _format_financial_output(quote_data: Dict, hist_data: Optional[Dict], year_d
         result += f"- **Current Price:** ${current_price:,.2f} {trend_emoji} ${change:.2f} ({change_pct:.2f}%)\n"
     
     # 1-month performance
+    month_return = None
     if hist_data:
         month_return = ((hist_data['current_price'] - hist_data['start_price']) / hist_data['start_price']) * 100
         month_emoji = "📈" if month_return >= 0 else "📉"
@@ -231,23 +237,41 @@ def _format_financial_output(quote_data: Dict, hist_data: Optional[Dict], year_d
     if year_data:
         result += f"| **Year** | ${year_data['year_low']:,.2f} | ${year_data['year_high']:,.2f} |\n"
     
-    # Add trend chart
+    # Generate chart separately
+    chart_base64 = None
     if hist_data:
-        plot_data = _generate_financial_plot(asset_name, hist_data)
-        if plot_data:
-            result += f"\n\n![{asset_name} 1-Month Trend]({plot_data})"
+        chart_base64 = _generate_financial_plot_base64(asset_name, hist_data)
     
-    return result
+    # Create structured data for LLM processing
+    structured_data = {
+        "symbol": quote_data.get('symbol', asset_name),
+        "current_price": current_price,
+        "change": change,
+        "change_pct": change_pct,
+        "asset_type": asset_type,
+        "volume": quote_data.get('volume'),
+        "month_return": month_return,
+        "ranges": {
+            "day": {"high": quote_data.get('high'), "low": quote_data.get('low')},
+            "month": {"high": hist_data['high_price'], "low": hist_data['low_price']} if hist_data else None,
+            "year": {"high": year_data['year_high'], "low": year_data['year_low']} if year_data else None
+        }
+    }
+    
+    return create_summary_and_chart_result(
+        summary_text=result,
+        chart_base64=chart_base64,
+        structured_data=structured_data,
+        chart_title=f"{asset_name} 1-Month Trend"
+    )
 
 
-def _generate_financial_plot(asset_name: str, hist_data: Dict) -> Optional[str]:
-    """Generate a financial trend plot"""
+def _generate_financial_plot_base64(asset_name: str, hist_data: Dict) -> Optional[str]:
+    """Generate a financial trend plot and return base64 data"""
     try:
         import matplotlib.pyplot as plt
         import seaborn as sns
         import pandas as pd
-        import base64
-        import io
         
         sns.set_style("whitegrid")
         sns.set_palette("husl")
@@ -282,18 +306,11 @@ def _generate_financial_plot(asset_name: str, hist_data: Dict) -> Optional[str]:
         sns.despine()
         plt.tight_layout(pad=2.0)
         
-        # Convert to base64
-        buffer = io.BytesIO()
-        plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight', 
-                   facecolor='white', edgecolor='none')
-        buffer.seek(0)
-        
-        plot_data = base64.b64encode(buffer.getvalue()).decode('utf-8')
-        plt.close()
-        buffer.close()
+        # Extract base64 data without data URI prefix
+        chart_base64 = extract_chart_from_matplotlib()
         sns.reset_defaults()
         
-        return f"data:image/png;base64,{plot_data}"
+        return chart_base64
         
     except Exception as e:
         logger.error(f"Error generating financial plot: {e}")

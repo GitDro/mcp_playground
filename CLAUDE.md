@@ -6,7 +6,7 @@
 - **Consolidated servers**: Single `src/server.py` handles both local (stdio) and cloud (HTTP) modes
 - **Streamlined dependencies**: Removed vector memory and ChromaDB dependencies for cloud compatibility  
 - **Simplified UI**: Single `app.py` using proper FastMCP subprocess transport
-- **Updated documentation**: DEPLOYMENT.md reflects current tool capabilities
+- **Updated documentation**: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) reflects current tool capabilities
 
 ### 🔧 Code Simplifications
 - **Removed vector memory system**: No more ChromaDB/Ollama dependencies for cloud deployment
@@ -14,6 +14,13 @@
 - **Unified configuration**: Single .env approach for both local and cloud
 - **Clean tool set**: Focus on real-time API-based tools that work everywhere
 - **Better error handling**: Improved tool descriptions and neighborhood listing for crime data
+
+### 📊 **MCP Client Rendering Optimization**
+- **Proper content blocks**: Tools now return `ToolResult` with separate `TextContent` and `ImageContent` blocks
+- **IDE compatibility**: Charts display directly in VS Code/Cursor instead of being summarized by LLM
+- **Streamlit backward compatibility**: No changes to existing UI experience
+- **Content prioritization**: Audience annotations (`["user"]` vs `["assistant"]`) control what clients display
+- **See**: [MCP Client Rendering Guide](docs/MCP_CLIENT_RENDERING.md) for technical details
 
 ## Dependency Management
 - **Always use `uv` for dependency management** instead of `pip` or `python -m`
@@ -197,9 +204,10 @@ export MCP_RETRY_TYPE_COERCION=true
 ## Helpful Links
 
 ### Documentation
-- [Memory System](docs/MEMORY_SYSTEM.md) - Vector memory architecture
-- [RAG Architecture](docs/RAG_ARCHITECTURE.md) - Technical semantic search details  
+- [Deployment Guide](docs/DEPLOYMENT.md) - Cloud and local deployment instructions
+- [MCP Client Rendering](docs/MCP_CLIENT_RENDERING.md) - Content block optimization for IDE clients
 - [FastMCP Usage](docs/FASTMCP_USAGE.md) - MCP framework documentation
+- [FastMCP Overview](docs/FASTMCP_OVERVIEW.md) - Framework architecture overview
 
 ### External References
 - [Statistics Canada Open Data](https://www.statcan.gc.ca/en/developers) - Economic indicators API
