@@ -7,7 +7,9 @@ import tempfile
 from datetime import datetime
 from typing import Optional, Dict, List
 from fastmcp import FastMCP
+from fastmcp.tools.tool import ToolResult
 from ..core.unified_cache import get_cached_data, save_cached_data, cleanup_cache
+from ..core.mcp_output import create_summary_and_chart_result, extract_chart_from_matplotlib, create_text_content
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +18,7 @@ def register_crime_tools(mcp: FastMCP):
     """Register crime-related tools with the MCP server"""
     
     @mcp.tool(description="Get Toronto neighbourhood crime statistics and trends")
-    def get_toronto_crime(neighbourhood: str, crime_type: str = "assault") -> str:
+    def get_toronto_crime(neighbourhood: str, crime_type: str = "assault") -> ToolResult:
         """Analyze public safety statistics for Toronto neighbourhoods using official Toronto Police Service data. This tool provides historical crime trends with visualization for community safety awareness and urban planning purposes.
         
         Args:
@@ -54,7 +56,7 @@ def register_crime_tools(mcp: FastMCP):
                 
             if crime_type.lower() not in crime_map:
                 available_types = ', '.join(crime_map.keys())
-                return f"❌ Invalid crime type '{crime_type}'. Available types: {available_types}"
+                return ToolResult(content=[create_text_content(f"❌ Invalid crime type '{crime_type}'. Available types: {available_types}")])
             
             crime_prefix = crime_map[crime_type.lower()]
             
@@ -71,11 +73,11 @@ def register_crime_tools(mcp: FastMCP):
                 
                 package_response = requests.get(package_url, params=package_params, timeout=10)
                 if package_response.status_code != 200:
-                    return f"❌ Could not access Toronto crime data API. Status: {package_response.status_code}"
+                    return ToolResult(content=[create_text_content(f"❌ Could not access Toronto crime data API. Status: {package_response.status_code}")])
                 
                 package_data = package_response.json()
                 if not package_data.get('result', {}).get('resources'):
-                    return "❌ No crime data resources found in the API"
+                    return ToolResult(content=[create_text_content("❌ No crime data resources found in the API")])
                 
                 # Get the first datastore-active resource
                 resource_id = None
@@ -85,7 +87,7 @@ def register_crime_tools(mcp: FastMCP):
                         break
                 
                 if not resource_id:
-                    return "❌ No active crime data resource found"
+                    return ToolResult(content=[create_text_content("❌ No active crime data resource found")])
                 
                 # Fetch the actual crime data
                 data_url = base_url + "/api/3/action/datastore_search"
@@ -93,11 +95,11 @@ def register_crime_tools(mcp: FastMCP):
                 
                 data_response = requests.get(data_url, params=data_params, timeout=10)
                 if data_response.status_code != 200:
-                    return f"❌ Could not fetch crime data. Status: {data_response.status_code}"
+                    return ToolResult(content=[create_text_content(f"❌ Could not fetch crime data. Status: {data_response.status_code}")])
                 
                 data_result = data_response.json()
                 if not data_result.get('result', {}).get('records'):
-                    return "❌ No crime records found in the dataset"
+                    return ToolResult(content=[create_text_content("❌ No crime records found in the dataset")])
                 
                 crime_data = data_result['result']['records']
                 
@@ -120,9 +122,9 @@ def register_crime_tools(mcp: FastMCP):
                     partial_matches = _get_partial_matches(crime_data, neighbourhood)
                     if partial_matches:
                         matches_str = ", ".join(partial_matches[:5])  # Show first 5 matches
-                        return f"❌ Neighbourhood '{neighbourhood}' not found. Did you mean: {matches_str}?"
+                        return ToolResult(content=[create_text_content(f"❌ Neighbourhood '{neighbourhood}' not found. Did you mean: {matches_str}?")])
                     else:
-                        return f"❌ Neighbourhood '{neighbourhood}' not found. Use the 'list_toronto_neighbourhoods' tool to see all available neighbourhood names, or try names like 'Waterfront', 'Downtown', 'Harbourfront'."
+                        return ToolResult(content=[create_text_content(f"❌ Neighbourhood '{neighbourhood}' not found. Use the 'list_toronto_neighbourhoods' tool to see all available neighbourhood names, or try names like 'Waterfront', 'Downtown', 'Harbourfront'.")])
                 
                 # Cache the neighbourhood data for future requests
                 save_cached_data(neighbourhood_cache_key, {'neighbourhood_data': neighbourhood_match}, "crime_neighbourhood", {'neighbourhood': neighbourhood})
@@ -131,21 +133,14 @@ def register_crime_tools(mcp: FastMCP):
             # Extract crime data for the specific neighbourhood and crime type
             stats = _extract_crime_stats(neighbourhood_match, crime_prefix)
             if not stats:
-                return f"❌ No {crime_type} data found for {neighbourhood_match['AREA_NAME']}"
+                return ToolResult(content=[create_text_content(f"❌ No {crime_type} data found for {neighbourhood_match['AREA_NAME']}")])
             
-            # Format the response
-            result = _format_crime_report(neighbourhood_match['AREA_NAME'], crime_type, stats)
-            
-            # Always include trend chart (separate from table)
-            plot_data = _generate_crime_plot(neighbourhood_match['AREA_NAME'], crime_type, stats)
-            if plot_data:
-                result += f"\n\n![{crime_type.title()} trend for {neighbourhood_match['AREA_NAME']}]({plot_data})"
-            
-            return result
+            # Format the response using proper content blocks
+            return _format_crime_report_with_content_blocks(neighbourhood_match['AREA_NAME'], crime_type, stats)
             
         except Exception as e:
             logger.error(f"Error getting Toronto crime data: {e}")
-            return f"❌ Error retrieving crime data: {str(e)}"
+            return ToolResult(content=[create_text_content(f"❌ Error retrieving crime data: {str(e)}")])
 
     @mcp.tool(description="List all available Toronto neighbourhoods for crime data")
     def list_toronto_neighbourhoods() -> str:
@@ -431,4 +426,127 @@ def _generate_crime_plot(area_name: str, crime_type: str, stats: Dict) -> Option
         
     except Exception as e:
         logger.error(f"Error generating plot: {e}")
+        return None
+
+
+def _format_crime_report_with_content_blocks(area_name: str, crime_type: str, stats: Dict) -> ToolResult:
+    """Format crime statistics using proper MCP content blocks"""
+    years = sorted(stats.keys())
+    latest_year = max(years)
+    earliest_year = min(years)
+    
+    # Generate summary text
+    latest_count = stats[latest_year]
+    if len(years) > 1:
+        earliest_count = stats[earliest_year] 
+        trend = latest_count - earliest_count
+        trend_text = "increasing" if trend > 0 else "decreasing" if trend < 0 else "stable"
+        trend_emoji = "📈" if trend > 0 else "📉" if trend < 0 else "📊"
+    else:
+        trend_text = "data available"
+        trend_emoji = "📊"
+    
+    # Build summary text
+    summary = f"### **{area_name} - {crime_type.replace('_', ' ').title()} Statistics** {trend_emoji}\n\n"
+    summary += f"- **Latest ({latest_year}):** {latest_count} incidents\n"
+    
+    if len(years) > 1:
+        summary += f"- **{len(years)}-year trend:** {trend_text}\n"
+        summary += f"- **Period:** {earliest_year}-{latest_year}\n\n"
+        
+        # Add yearly breakdown table
+        summary += "| **Year** | **Incidents** | **Change** |\n"
+        summary += "|----------|---------------|------------|\n"
+        
+        prev_count = None
+        for year in years:
+            count = stats[year]
+            if prev_count is not None:
+                change = count - prev_count
+                change_str = f"+{change}" if change > 0 else str(change) if change < 0 else "0"
+                change_emoji = "↗️" if change > 0 else "↘️" if change < 0 else "➡️"
+                summary += f"| **{year}** | {count} | {change_str} {change_emoji} |\n"
+            else:
+                summary += f"| **{year}** | {count} | - |\n"
+            prev_count = count
+    
+    # Generate chart
+    chart_base64 = _generate_crime_plot_base64(area_name, crime_type, stats)
+    
+    # Create structured data for LLM processing
+    structured_data = {
+        "area_name": area_name,
+        "crime_type": crime_type,
+        "latest_year": latest_year,
+        "latest_count": latest_count,
+        "trend": trend_text if len(years) > 1 else "single_year",
+        "year_range": f"{earliest_year}-{latest_year}",
+        "yearly_data": stats
+    }
+    
+    return create_summary_and_chart_result(
+        summary_text=summary,
+        chart_base64=chart_base64,
+        structured_data=structured_data,
+        chart_title=f"{crime_type.title()} Trends in {area_name}"
+    )
+
+
+def _generate_crime_plot_base64(area_name: str, crime_type: str, stats: Dict) -> Optional[str]:
+    """Generate a crime plot and return base64 data"""
+    try:
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        import pandas as pd
+        
+        # Set seaborn style for clean, professional look
+        sns.set_style("whitegrid")
+        sns.set_palette("Set2")
+        
+        # Prepare data
+        years = sorted(stats.keys())
+        counts = [stats[year] for year in years]
+        
+        # Create DataFrame
+        df = pd.DataFrame({'Year': years, 'Incidents': counts})
+        
+        # Create plot with optimal sizing
+        plt.figure(figsize=(10, 6))
+        
+        # Main plot - line with markers
+        ax = sns.lineplot(data=df, x='Year', y='Incidents', marker='o', 
+                         linewidth=3, markersize=10)
+        
+        # Styling
+        plt.title(f'{crime_type.replace("_", " ").title()} Incidents in {area_name}', 
+                 fontsize=16, fontweight='bold', pad=20)
+        plt.xlabel('Year', fontsize=14, fontweight='600')
+        plt.ylabel('Number of Incidents', fontsize=14, fontweight='600')
+        plt.xticks(fontsize=12)
+        plt.yticks(fontsize=12)
+        
+        # Add value labels on points
+        for i, (year, count) in enumerate(zip(years, counts)):
+            plt.annotate(f'{count}', (year, count), 
+                        textcoords="offset points", xytext=(0, 15), ha='center',
+                        fontsize=11, fontweight='bold',
+                        bbox=dict(boxstyle="round,pad=0.3", facecolor='white', alpha=0.8))
+        
+        # Grid styling for better readability
+        plt.grid(True, alpha=0.3, linewidth=1)
+        
+        # Remove top and right spines for cleaner look
+        sns.despine()
+        
+        # Tight layout with padding
+        plt.tight_layout(pad=2.0)
+        
+        # Extract base64 data
+        chart_base64 = extract_chart_from_matplotlib()
+        sns.reset_defaults()
+        
+        return chart_base64
+        
+    except Exception as e:
+        logger.error(f"Error generating crime plot: {e}")
         return None
