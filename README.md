@@ -95,6 +95,7 @@ uv run python -m src.server http 8000
 
 ### Environment Variables
 - `YOUTUBE_MAX_TOKENS=24000` - Transcript processing limit
+- `WEBSHARE_PROXIES="ip:port:user:pass,..."` - Proxies for YouTube cloud deployment
 - `MCP_RETRY_MAX_ATTEMPTS=3` - Auto-retry failed tool calls
 - `MCP_RETRY_TYPE_COERCION=true` - Auto-fix type mismatches
 

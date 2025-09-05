@@ -202,6 +202,9 @@ src/
 export MCP_RETRY_MAX_ATTEMPTS=3
 export MCP_RETRY_BASE_DELAY=0.5
 export MCP_RETRY_TYPE_COERCION=true
+
+# YouTube cloud deployment (bypasses IP blocking)
+export WEBSHARE_PROXIES="ip:port:user:pass,ip2:port2:user2:pass2,..."
 ```
 
 ## Helpful Links
