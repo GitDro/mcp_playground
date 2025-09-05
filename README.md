@@ -16,6 +16,8 @@ uv run streamlit run app.py
 ## MCP Client Setup
 
 ### Claude Desktop
+
+**Option 1: Remote Server (Recommended)**
 Add to `claude_desktop_config.json`:
 ```json
 {
@@ -27,6 +29,20 @@ Add to `claude_desktop_config.json`:
   }
 }
 ```
+
+**Option 2: Local Development**
+Add to `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "mcp-playground-local": {
+      "command": "uv",
+      "args": ["run", "python", "mcp_server.py"]
+    }
+  }
+}
+```
+*Note: Run this command from your mcp_arena directory*
 
 ### Claude Code
 1. `Cmd/Ctrl + Shift + P` → "MCP: Add Server"
