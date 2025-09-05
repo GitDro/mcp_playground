@@ -135,36 +135,64 @@ def _get_youtube_transcript(url: str) -> str:
         if cached_data:
             return f"**{cached_data.get('title', 'YouTube Video')}**\n\n{cached_data['transcript']}"
         
-        # Get transcript from YouTube
+        # Configure proxies for youtube-transcript-api if available
+        proxy_dict = None
+        session = create_proxy_session()
+        if session.proxies:
+            proxy_dict = session.proxies
+        
+        # Get transcript from YouTube with multiple retry strategies
+        transcript_text = None
+        error_messages = []
+        
+        # Try different approaches based on the library structure
+        import time
+        
+        # Add delay to avoid rate limiting
+        time.sleep(1.0)
+        
+        # Strategy 1: Try the simple direct approach first
         try:
-            # First try to get the default transcript 
-            session = create_proxy_session()
-            api = YouTubeTranscriptApi(http_client=session)
-            transcript = api.fetch(video_id)
-            transcript_text = ' '.join([entry.text for entry in transcript])
+            from youtube_transcript_api import YouTubeTranscriptApi
+            transcript_data = YouTubeTranscriptApi.get_transcript(video_id)
+            transcript_text = ' '.join([entry['text'] for entry in transcript_data])
         except Exception as e:
-            # Try to get any available transcript (auto-generated, different languages, etc.)
+            error_messages.append(f"Simple get_transcript failed: {str(e)}")
+            
+            # Strategy 2: Try with language specification
             try:
-                session = create_proxy_session()
-                api = YouTubeTranscriptApi(http_client=session)
-                transcript_list_obj = api.list(video_id)
-                
-                # First try to find English transcript (manual or auto-generated)
-                try:
-                    transcript = transcript_list_obj.find_transcript(['en', 'en-US', 'en-GB'])
-                    transcript_data = transcript.fetch()
-                    transcript_text = ' '.join([entry.text for entry in transcript_data])
-                except:
-                    # If no English, try any available transcript
-                    try:
-                        for transcript in transcript_list_obj:
-                            transcript_data = transcript.fetch()
-                            transcript_text = ' '.join([entry.text for entry in transcript_data])
-                            break
-                    except:
-                        return f"No transcript available for this video. The video may not have captions or subtitles."
+                transcript_data = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
+                transcript_text = ' '.join([entry['text'] for entry in transcript_data])
             except Exception as e2:
-                return f"Error accessing video transcripts: {str(e2)}. The video may be private, age-restricted, or have no captions available."
+                error_messages.append(f"English transcript failed: {str(e2)}")
+                
+                # Strategy 3: List and select transcripts
+                try:
+                    transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                    
+                    # Try to find English manual transcript first
+                    try:
+                        transcript = transcript_list.find_manually_created_transcript(['en'])
+                        transcript_data = transcript.fetch()
+                        transcript_text = ' '.join([entry['text'] for entry in transcript_data])
+                    except:
+                        # Try English auto-generated
+                        try:
+                            transcript = transcript_list.find_generated_transcript(['en'])
+                            transcript_data = transcript.fetch()
+                            transcript_text = ' '.join([entry['text'] for entry in transcript_data])
+                        except:
+                            # Try any available transcript
+                            available_transcripts = list(transcript_list)
+                            if available_transcripts:
+                                first_transcript = available_transcripts[0]
+                                transcript_data = first_transcript.fetch()
+                                transcript_text = ' '.join([entry['text'] for entry in transcript_data])
+                except Exception as e3:
+                    error_messages.append(f"List transcripts failed: {str(e3)}")
+        
+        if not transcript_text:
+            return f"Error accessing video transcripts: \n{'. '.join(error_messages)}. The video may be private, age-restricted, or have no captions available."
         
         # Try to get video title (basic approach)
         title = f"YouTube Video ({video_id})"
