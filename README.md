@@ -1,4 +1,4 @@
-# MCP Arena
+# MCP Playground
 
 Research and analysis toolkit with real-time data access via Model Context Protocol (MCP).
 
