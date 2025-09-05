@@ -9,6 +9,8 @@ from datetime import datetime
 from fastmcp import FastMCP
 from ..core.utils import get_weather_emoji
 from ..core.unified_cache import get_cached_data, save_cached_data
+from ..core.mcp_output import create_text_result
+from fastmcp.tools.tool import ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +123,7 @@ def register_weather_tools(mcp: FastMCP):
                 # Check if data is less than 30 minutes old
                 from datetime import timedelta
                 if datetime.now() - datetime.fromisoformat(cached_data['timestamp']) < timedelta(minutes=30):
-                    return cached_data['weather_data']
+                    return create_text_result(cached_data['weather_data'])
             
             # Open-Meteo API - free, no auth, 10k requests/day
             url = "https://api.open-meteo.com/v1/forecast"
@@ -230,7 +232,7 @@ def register_weather_tools(mcp: FastMCP):
             return f"Error formatting weather data: {str(e)}"
     
     @mcp.tool(description="Get current weather and 7-day forecast for any location or your current location")
-    def get_weather(location: Optional[str] = None) -> str:
+    def get_weather(location: Optional[str] = None) -> ToolResult:
         """Get current weather conditions and 7-day forecast.
         
         Args:
@@ -259,25 +261,25 @@ def register_weather_tools(mcp: FastMCP):
                             'country_code': 'XX'
                         }
                     except ValueError:
-                        return "Invalid coordinates. Use format 'latitude,longitude' (e.g., '43.65,-79.38')."
+                        return create_text_result("Invalid coordinates. Use format 'latitude,longitude' (e.g., '43.65,-79.38').")
                 else:
                     # Treat as city name
                     location_data = _geocode_city(location)
                     if not location_data:
-                        return f"Location '{location}' not found. Try a different city name or coordinates (e.g., '43.65,-79.38')."
+                        return create_text_result(f"Location '{location}' not found. Try a different city name or coordinates (e.g., '43.65,-79.38').")
             else:
                 # Get location from IP
                 location_data = _get_ip_location()
                 if not location_data:
-                    return "Could not detect your location automatically. Please provide a city name or coordinates (e.g., '43.65,-79.38')."
+                    return create_text_result("Could not detect your location automatically. Please provide a city name or coordinates (e.g., '43.65,-79.38').")
             
             # Get weather data
             weather_data = _get_weather_data(location_data['latitude'], location_data['longitude'])
             if not weather_data:
-                return "Could not fetch weather data. Please try again later."
+                return create_text_result("Could not fetch weather data. Please try again later.")
             
             # Format and return response
-            return _format_weather_response(weather_data, location_data)
+            return create_text_result(_format_weather_response(weather_data, location_data))
             
         except Exception as e:
-            return f"Error getting weather: {str(e)}"
+            return create_text_result(f"Error getting weather: {str(e)}")

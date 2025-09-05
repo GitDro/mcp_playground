@@ -14,13 +14,16 @@
 - **Unified configuration**: Single .env approach for both local and cloud
 - **Clean tool set**: Focus on real-time API-based tools that work everywhere
 - **Better error handling**: Improved tool descriptions and neighborhood listing for crime data
+- **YouTube Cloud Fix**: Added WebShare proxy support to bypass YouTube's IP blocking for cloud deployments
 
-### 📊 **MCP Client Rendering Optimization**
-- **Proper content blocks**: Tools now return `ToolResult` with separate `TextContent` and `ImageContent` blocks
-- **IDE compatibility**: Charts display directly in VS Code/Cursor instead of being summarized by LLM
+### 📊 **Complete MCP ToolResult Migration (2025)**
+- **All tools migrated**: Every tool now returns `ToolResult` following 2024-2025 FastMCP best practices
+- **Chart tools optimized**: financial.py, crime.py use `TextContent` + `ImageContent` for direct IDE display
+- **Text tools standardized**: web.py, weather.py, youtube.py, tides.py, statscan.py, arxiv.py use consistent `ToolResult`
+- **Token savings achieved**: Eliminated redundant structured_content duplication
+- **IDE compatibility maintained**: Charts still display directly in VS Code/Cursor
 - **Streamlit backward compatibility**: No changes to existing UI experience
-- **Content prioritization**: Audience annotations (`["user"]` vs `["assistant"]`) control what clients display
-- **See**: [MCP Client Rendering Guide](docs/MCP_CLIENT_RENDERING.md) for technical details
+- **See**: [MCP Client Rendering Guide](docs/MCP_CLIENT_RENDERING.md) for complete technical details
 
 ## Dependency Management
 - **Always use `uv` for dependency management** instead of `pip` or `python -m`
@@ -199,6 +202,9 @@ src/
 export MCP_RETRY_MAX_ATTEMPTS=3
 export MCP_RETRY_BASE_DELAY=0.5
 export MCP_RETRY_TYPE_COERCION=true
+
+# YouTube cloud deployment (bypasses IP blocking)
+export WEBSHARE_PROXIES="ip:port:user:pass,ip2:port2:user2:pass2,..."
 ```
 
 ## Helpful Links

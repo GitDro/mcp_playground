@@ -4,19 +4,71 @@ YouTube video analysis and transcript handling tools
 Supports large context windows (24K+ tokens) for comprehensive video analysis.
 """
 
+import os
+import random
+import requests
 from typing import Optional
 from datetime import datetime
 
 from fastmcp import FastMCP
-from ..core.unified_cache import get_cached_data, save_cached_data
-from ..core.utils import extract_video_id, filter_sponsor_content
+from fastmcp.tools.tool import ToolResult
+from src.core.unified_cache import get_cached_data, save_cached_data
+from src.core.utils import extract_video_id, filter_sponsor_content
+from src.core.mcp_output import create_text_result
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def get_webshare_proxy():
+    """Get a random WebShare proxy from environment variables"""
+    proxy_list = os.getenv('WEBSHARE_PROXIES', '').split(',')
+    if not proxy_list or proxy_list == ['']:
+        return None
+    
+    try:
+        proxy = random.choice(proxy_list).strip()
+        if not proxy:
+            return None
+            
+        ip, port, username, password = proxy.split(':')
+        return {
+            'http': f'http://{username}:{password}@{ip}:{port}',
+            'https': f'http://{username}:{password}@{ip}:{port}'
+        }
+    except Exception as e:
+        logger.warning(f"Error parsing WebShare proxy: {e}")
+        return None
+
+
+def create_proxy_session():
+    """Create a requests session with proxy and browser headers"""
+    session = requests.Session()
+    
+    # Try to get WebShare proxy
+    proxy = get_webshare_proxy()
+    if proxy:
+        session.proxies.update(proxy)
+        logger.info("Using WebShare proxy for YouTube requests")
+    
+    # Add realistic browser headers to avoid bot detection
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1'
+    })
+    
+    return session
 
 
 def register_youtube_tools(mcp: FastMCP):
     """Register YouTube-related tools with the MCP server"""
     
     @mcp.tool(description="Get YouTube video transcript and analyze content with optional specific questions")
-    def analyze_youtube_url(url: str, question: str = "") -> str:
+    def analyze_youtube_url(url: str, question: str = "") -> ToolResult:
         """Analyze YouTube video content from YouTube URLs. Provide just a YouTube URL for a comprehensive summary, or include a specific question to get targeted answers about the video content. Handles videos up to 2-3 hours with adaptive context management.
         
         Args:
@@ -26,19 +78,19 @@ def register_youtube_tools(mcp: FastMCP):
         try:
             # Validate URL first
             if not url or not isinstance(url, str):
-                return "Error: Please provide a valid YouTube URL."
+                return create_text_result("Error: Please provide a valid YouTube URL.")
             
             # Basic YouTube URL validation
             url = url.strip()
             if not any(domain in url for domain in ['youtube.com', 'youtu.be', 'm.youtube.com']):
-                return "Error: Please provide a valid YouTube URL (youtube.com or youtu.be)."
+                return create_text_result("Error: Please provide a valid YouTube URL (youtube.com or youtu.be).")
             
             # Get the transcript
             transcript_result = _get_youtube_transcript(url)
             
             # Check for error conditions
             if any(transcript_result.startswith(prefix) for prefix in ["Error", "Invalid", "No transcript"]):
-                return transcript_result
+                return create_text_result(transcript_result)
             
             # Extract title and transcript text  
             lines = transcript_result.split('\n', 2)
@@ -58,13 +110,13 @@ def register_youtube_tools(mcp: FastMCP):
             # Determine analysis mode and format output
             if question.strip():
                 # Targeted question mode
-                return _format_question_response(title, duration_estimate, word_count, content, note, question)
+                return create_text_result(_format_question_response(title, duration_estimate, word_count, content, note, question))
             else:
                 # Summary mode
-                return _format_summary_response(title, duration_estimate, word_count, content, note)
+                return create_text_result(_format_summary_response(title, duration_estimate, word_count, content, note))
                 
         except Exception as e:
-            return f"Error analyzing YouTube video: {str(e)}. Please check that the URL is valid and the video has available transcripts."
+            return create_text_result(f"Error analyzing YouTube video: {str(e)}. Please check that the URL is valid and the video has available transcripts.")
 
 
 def _get_youtube_transcript(url: str) -> str:
@@ -86,13 +138,15 @@ def _get_youtube_transcript(url: str) -> str:
         # Get transcript from YouTube
         try:
             # First try to get the default transcript 
-            api = YouTubeTranscriptApi()
+            session = create_proxy_session()
+            api = YouTubeTranscriptApi(http_client=session)
             transcript = api.fetch(video_id)
             transcript_text = ' '.join([entry.text for entry in transcript])
         except Exception as e:
             # Try to get any available transcript (auto-generated, different languages, etc.)
             try:
-                api = YouTubeTranscriptApi()
+                session = create_proxy_session()
+                api = YouTubeTranscriptApi(http_client=session)
                 transcript_list_obj = api.list(video_id)
                 
                 # First try to find English transcript (manual or auto-generated)

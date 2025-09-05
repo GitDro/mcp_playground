@@ -242,26 +242,9 @@ def _format_financial_output_with_content_blocks(quote_data: Dict, hist_data: Op
     if hist_data:
         chart_base64 = _generate_financial_plot_base64(asset_name, hist_data)
     
-    # Create structured data for LLM processing
-    structured_data = {
-        "symbol": quote_data.get('symbol', asset_name),
-        "current_price": current_price,
-        "change": change,
-        "change_pct": change_pct,
-        "asset_type": asset_type,
-        "volume": quote_data.get('volume'),
-        "month_return": month_return,
-        "ranges": {
-            "day": {"high": quote_data.get('high'), "low": quote_data.get('low')},
-            "month": {"high": hist_data['high_price'], "low": hist_data['low_price']} if hist_data else None,
-            "year": {"high": year_data['year_high'], "low": year_data['year_low']} if year_data else None
-        }
-    }
-    
     return create_summary_and_chart_result(
         summary_text=result,
         chart_base64=chart_base64,
-        structured_data=structured_data,
         chart_title=f"{asset_name} 1-Month Trend"
     )
 

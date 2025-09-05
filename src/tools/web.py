@@ -13,6 +13,8 @@ import re
 from bs4 import BeautifulSoup
 import html2text
 from ..core.unified_cache import get_cached_data, save_cached_data
+from ..core.mcp_output import create_text_result
+from fastmcp.tools.tool import ToolResult
 
 def _validate_url(url: str) -> Tuple[bool, str, Optional[str]]:
     """
@@ -251,7 +253,7 @@ def register_web_tools(mcp: FastMCP):
     """Register web-related tools with the MCP server"""
     
     @mcp.tool(description="Search web for current information using DuckDuckGo")
-    def web_search(query: str, max_results: int = 5) -> str:
+    def web_search(query: str, max_results: int = 5) -> ToolResult:
         """Search the web using DuckDuckGo and return current information with titles, URLs, and summaries. Returns up to 10 results (default: 5). Uses timeout configuration for reliability."""
         try:
             from ddgs import DDGS
@@ -270,14 +272,14 @@ def register_web_tools(mcp: FastMCP):
             cache_key = f"web_search_{query.lower().replace(' ', '_')[:50]}_{max_results}"
             cached_data = get_cached_data(cache_key, "web_search")
             if cached_data:
-                return cached_data['results']
+                return create_text_result(cached_data['results'])
             
             # Initialize DDGS with timeout (headers no longer supported in ddgs package)
             ddgs = DDGS(timeout=20)
             results = list(ddgs.text(query, max_results=max_results))
             
             if not results:
-                return f"No search results found for: {query}"
+                return create_text_result(f"No search results found for: {query}")
             
             # Format results as markdown
             formatted_results = f"#### Search Results for: {query}\n\n"
@@ -290,17 +292,17 @@ def register_web_tools(mcp: FastMCP):
             # Cache the results
             save_cached_data(cache_key, {'results': formatted_results}, "web_search", {'query': query, 'max_results': max_results})
             
-            return formatted_results
+            return create_text_result(formatted_results)
             
         except RatelimitException:
-            return "Error: DuckDuckGo rate limit exceeded. Please try again in a few moments."
+            return create_text_result("Error: DuckDuckGo rate limit exceeded. Please try again in a few moments.")
         except TimeoutException:
-            return "Error: Search request timed out. Please try again."
+            return create_text_result("Error: Search request timed out. Please try again.")
         except Exception as e:
-            return f"Error performing search: {str(e)}"
+            return create_text_result(f"Error performing search: {str(e)}")
     
     @mcp.tool(description="Comprehensive analysis of webpage content optimized for LLM understanding")
-    def analyze_url(url: str) -> str:
+    def analyze_url(url: str) -> ToolResult:
         """
         Perform comprehensive analysis of webpage content without saving. 
         Extracts full content, metadata, and structure optimized for LLM analysis.
@@ -311,18 +313,18 @@ def register_web_tools(mcp: FastMCP):
         # Validate URL
         is_valid, validated_url, error_msg = _validate_url(url)
         if not is_valid:
-            return error_msg
+            return create_text_result(error_msg)
         
         # Check cache first
         cache_key = f"web_content_{validated_url}"
         cached_data = get_cached_data(cache_key, "web_content")
         if cached_data:
-            return cached_data['analysis']
+            return create_text_result(cached_data['analysis'])
         
         # Fetch content
         success, response_or_error = _fetch_url_content(validated_url)
         if not success:
-            return response_or_error
+            return create_text_result(response_or_error)
         
         response = response_or_error
         content_type = response.headers.get('content-type', 'unknown').split(';')[0]
@@ -427,5 +429,5 @@ def register_web_tools(mcp: FastMCP):
         # Cache the analysis
         save_cached_data(cache_key, {'analysis': analysis}, "web_content", {'url': validated_url})
         
-        return analysis
+        return create_text_result(analysis)
     

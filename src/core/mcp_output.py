@@ -3,6 +3,12 @@ MCP content block utilities for proper client rendering
 
 This module provides utilities to generate proper MCP content blocks that render
 correctly in different clients (IDEs, Streamlit, etc.) by following the MCP specification.
+
+Key principles:
+- Use TextContent for human-readable markdown
+- Use ImageContent for charts (enables direct display in IDEs)
+- Avoid redundant structured_content to save tokens
+- Only use structured_content when it provides unique machine-readable value
 """
 
 from typing import List, Dict, Any, Optional, Union
@@ -85,7 +91,6 @@ def create_image_content(
 def create_summary_and_chart_result(
     summary_text: str,
     chart_base64: Optional[str] = None,
-    structured_data: Optional[Dict[str, Any]] = None,
     chart_title: str = "Chart"
 ) -> ToolResult:
     """
@@ -94,12 +99,11 @@ def create_summary_and_chart_result(
     This pattern provides:
     - Short summary marked for user display (high priority)
     - Chart as separate ImageContent block (if provided)
-    - Structured data for LLM processing (if provided)
+    - No redundant structured data (avoids token waste)
     
     Args:
         summary_text: Markdown-formatted summary for user display
         chart_base64: Base64 chart data (with or without data: prefix)
-        structured_data: Machine-readable data for LLM processing
         chart_title: Title for the chart (used in alt text)
     """
     content_blocks: List[ContentBlock] = []
@@ -126,14 +130,12 @@ def create_summary_and_chart_result(
         )
     
     return ToolResult(
-        content=content_blocks,
-        structured_content=structured_data
+        content=content_blocks
     )
 
 def create_table_result(
     title: str,
-    table_markdown: str,
-    structured_data: Optional[Dict[str, Any]] = None
+    table_markdown: str
 ) -> ToolResult:
     """
     Create a ToolResult for table data with proper content blocks.
@@ -141,7 +143,6 @@ def create_table_result(
     Args:
         title: Title/summary for the table
         table_markdown: Markdown-formatted table
-        structured_data: Machine-readable data for LLM processing
     """
     # Combine title and table
     full_text = f"## {title}\n\n{table_markdown}"
@@ -156,8 +157,27 @@ def create_table_result(
     ]
     
     return ToolResult(
-        content=content_blocks,
-        structured_content=structured_data
+        content=content_blocks
+    )
+
+def create_text_result(text: str) -> ToolResult:
+    """
+    Create a simple ToolResult with just markdown text content.
+    
+    Use this for simple tools that only return text without charts.
+    
+    Args:
+        text: Markdown-formatted text
+    """
+    return ToolResult(
+        content=[
+            create_text_content(
+                text=text,
+                mime_type="text/markdown",
+                audience=["user"],
+                priority=1.0
+            )
+        ]
     )
 
 def extract_chart_from_matplotlib() -> Optional[str]:
@@ -188,8 +208,7 @@ def extract_chart_from_matplotlib() -> Optional[str]:
 
 # Backward compatibility helpers
 def convert_markdown_with_base64_to_content_blocks(
-    markdown_text: str,
-    structured_data: Optional[Dict[str, Any]] = None
+    markdown_text: str
 ) -> ToolResult:
     """
     Convert existing markdown with embedded base64 images to proper content blocks.
@@ -198,7 +217,6 @@ def convert_markdown_with_base64_to_content_blocks(
     
     Args:
         markdown_text: Markdown text that may contain ![](data:image/png;base64,...)
-        structured_data: Optional structured data
     """
     import re
     
@@ -233,6 +251,5 @@ def convert_markdown_with_base64_to_content_blocks(
         )
     
     return ToolResult(
-        content=content_blocks,
-        structured_content=structured_data
+        content=content_blocks
     )
