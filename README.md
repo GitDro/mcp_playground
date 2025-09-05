@@ -20,10 +20,9 @@ Add to `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "mcp-arena": {
+    "mcp-playground": {
       "type": "http",
-      "url": "https://mcp-playground.fastmcp.app/mcp",
-      "authorization_token": "your-fastmcp-cloud-token"
+      "url": "https://mcp-playground.fastmcp.app/mcp"
     }
   }
 }
@@ -33,7 +32,7 @@ Add to `claude_desktop_config.json`:
 1. `Cmd/Ctrl + Shift + P` → "MCP: Add Server"
 2. Choose "Add remote HTTP server"
 3. URL: `https://mcp-playground.fastmcp.app/mcp`
-4. Token: Get from FastMCP Cloud dashboard
+
 
 ### LMStudio (v0.3.17+)
 1. Program tab → "Edit mcp.json"
@@ -42,14 +41,9 @@ Add to `claude_desktop_config.json`:
 {
   "mcp-arena": {
     "url": "https://mcp-playground.fastmcp.app/mcp",
-    "headers": {
-      "Authorization": "Bearer your-fastmcp-cloud-token"
-    }
   }
 }
 ```
-
-*Other compatible clients: Tome, ollama-mcp-bridge, Cherry Studio*
 
 ## Available Tools
 
