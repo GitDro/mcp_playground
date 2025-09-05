@@ -10,13 +10,15 @@ from datetime import datetime
 from fastmcp import FastMCP
 from ..core.unified_cache import get_cached_data, save_cached_data
 from ..core.utils import extract_video_id, filter_sponsor_content
+from ..core.mcp_output import create_text_result
+from fastmcp.tools.tool import ToolResult
 
 
 def register_youtube_tools(mcp: FastMCP):
     """Register YouTube-related tools with the MCP server"""
     
     @mcp.tool(description="Get YouTube video transcript and analyze content with optional specific questions")
-    def analyze_youtube_url(url: str, question: str = "") -> str:
+    def analyze_youtube_url(url: str, question: str = "") -> ToolResult:
         """Analyze YouTube video content from YouTube URLs. Provide just a YouTube URL for a comprehensive summary, or include a specific question to get targeted answers about the video content. Handles videos up to 2-3 hours with adaptive context management.
         
         Args:
@@ -26,19 +28,19 @@ def register_youtube_tools(mcp: FastMCP):
         try:
             # Validate URL first
             if not url or not isinstance(url, str):
-                return "Error: Please provide a valid YouTube URL."
+                return create_text_result("Error: Please provide a valid YouTube URL.")
             
             # Basic YouTube URL validation
             url = url.strip()
             if not any(domain in url for domain in ['youtube.com', 'youtu.be', 'm.youtube.com']):
-                return "Error: Please provide a valid YouTube URL (youtube.com or youtu.be)."
+                return create_text_result("Error: Please provide a valid YouTube URL (youtube.com or youtu.be).")
             
             # Get the transcript
             transcript_result = _get_youtube_transcript(url)
             
             # Check for error conditions
             if any(transcript_result.startswith(prefix) for prefix in ["Error", "Invalid", "No transcript"]):
-                return transcript_result
+                return create_text_result(transcript_result)
             
             # Extract title and transcript text  
             lines = transcript_result.split('\n', 2)
@@ -58,13 +60,13 @@ def register_youtube_tools(mcp: FastMCP):
             # Determine analysis mode and format output
             if question.strip():
                 # Targeted question mode
-                return _format_question_response(title, duration_estimate, word_count, content, note, question)
+                return create_text_result(_format_question_response(title, duration_estimate, word_count, content, note, question))
             else:
                 # Summary mode
-                return _format_summary_response(title, duration_estimate, word_count, content, note)
+                return create_text_result(_format_summary_response(title, duration_estimate, word_count, content, note))
                 
         except Exception as e:
-            return f"Error analyzing YouTube video: {str(e)}. Please check that the URL is valid and the video has available transcripts."
+            return create_text_result(f"Error analyzing YouTube video: {str(e)}. Please check that the URL is valid and the video has available transcripts.")
 
 
 def _get_youtube_transcript(url: str) -> str:

@@ -10,6 +10,8 @@ from datetime import datetime
 
 from fastmcp import FastMCP
 from ..core.utils import clean_markdown_text
+from ..core.mcp_output import create_text_result
+from fastmcp.tools.tool import ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +119,7 @@ def register_arxiv_tools(mcp: FastMCP):
     
     
     @mcp.tool(description="Search academic papers on arXiv with full text extraction")
-    def arxiv_search(query: str, max_results: Optional[int] = 3) -> str:
+    def arxiv_search(query: str, max_results: Optional[int] = 3) -> ToolResult:
         """Search arXiv database for academic papers and provide full text content for analysis. Returns paper metadata, abstracts, and full PDF text for up to 10 papers (default: 3). The host LLM can then analyze methodology, findings, and contributions.
         
         Args:
@@ -133,7 +135,7 @@ def register_arxiv_tools(mcp: FastMCP):
             max_results = max(1, min(max_results, 10))
             
             if not query or not query.strip():
-                return "Error: Search query cannot be empty"
+                return create_text_result("Error: Search query cannot be empty")
             
             query = query.strip()
             
@@ -154,7 +156,7 @@ def register_arxiv_tools(mcp: FastMCP):
             filtered_results = _filter_relevant_papers(results, query, max_results)
             
             if not filtered_results:
-                return f"No relevant papers found for: {query}. Try different keywords or be more specific."
+                return create_text_result(f"No relevant papers found for: {query}. Try different keywords or be more specific.")
             
             # Format results as markdown with enhanced analysis for top papers
             formatted_results = f"### arXiv Papers for: {query}\n\n"
@@ -193,7 +195,7 @@ def register_arxiv_tools(mcp: FastMCP):
                 # Add separator with proper spacing to prevent markdown bleeding
                 formatted_results += "\n---\n\n"
             
-            return formatted_results
+            return create_text_result(formatted_results)
             
         except Exception as e:
-            return f"Error searching arXiv: {str(e)}"
+            return create_text_result(f"Error searching arXiv: {str(e)}")

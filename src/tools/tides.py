@@ -7,6 +7,8 @@ import re
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Tuple
 from fastmcp import FastMCP
+from ..core.mcp_output import create_text_result
+from fastmcp.tools.tool import ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +17,7 @@ def register_tide_tools(mcp: FastMCP):
     """Register tide-related tools with the MCP server"""
     
     @mcp.tool(description="Get Canadian coastal tide times and heights")
-    def get_tide_info(location: str, date: Optional[str] = None) -> str:
+    def get_tide_info(location: str, date: Optional[str] = None) -> ToolResult:
         """Get tide information (high/low times and heights) for Canadian coastal locations. Supports major ports like Halifax, Vancouver, St. Johns. Specify date as 'July 20 2024', 'tomorrow', or leave blank for today. Returns formatted table with times and heights.
         
         Args:
@@ -33,7 +35,7 @@ def register_tide_tools(mcp: FastMCP):
             # Find the station ID for the location
             station_info = _find_station(location_normalized)
             if not station_info:
-                return f"No tide station found for '{location}'. Try locations like Halifax, Vancouver, St. Johns, or other major Canadian coastal cities."
+                return create_text_result(f"No tide station found for '{location}'. Try locations like Halifax, Vancouver, St. Johns, or other major Canadian coastal cities.")
             
             station_id = station_info['id']
             station_name = station_info['name']
@@ -41,7 +43,7 @@ def register_tide_tools(mcp: FastMCP):
             # Parse the date
             target_date = _parse_date(date)
             if not target_date:
-                return f"Could not parse date '{date}'. Try formats like 'July 20 2024', '2024-07-20', 'tomorrow', or leave blank for today."
+                return create_text_result(f"Could not parse date '{date}'. Try formats like 'July 20 2024', '2024-07-20', 'tomorrow', or leave blank for today.")
             
             # Format date range for API (get the full day)
             start_date = target_date.strftime('%Y-%m-%dT00:00:00Z')
@@ -57,19 +59,19 @@ def register_tide_tools(mcp: FastMCP):
             
             response = requests.get(api_url, params=params, timeout=10)
             if response.status_code != 200:
-                return f"Could not retrieve tide data for {station_name}. API returned status {response.status_code}."
+                return create_text_result(f"Could not retrieve tide data for {station_name}. API returned status {response.status_code}.")
             
             tide_data = response.json()
             if not tide_data:
-                return f"No tide data available for {station_name} on {target_date.strftime('%B %d, %Y')}."
+                return create_text_result(f"No tide data available for {station_name} on {target_date.strftime('%B %d, %Y')}.")
             
             # Format the response
             formatted_result = _format_tide_data(station_name, target_date, tide_data)
-            return formatted_result
+            return create_text_result(formatted_result)
             
         except Exception as e:
             logger.error(f"Error getting tide info: {e}")
-            return f"Error retrieving tide information: {str(e)}"
+            return create_text_result(f"Error retrieving tide information: {str(e)}")
 
 
 def _find_station(location: str) -> Optional[Dict]:

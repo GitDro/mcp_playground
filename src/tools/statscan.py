@@ -13,6 +13,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastmcp import FastMCP
 from ..core.unified_cache import get_cached_data, save_cached_data, cleanup_cache
+from ..core.mcp_output import create_text_result
+from fastmcp.tools.tool import ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +151,7 @@ def register_statscan_tools(mcp: FastMCP):
     """Register Statistics Canada tools with the MCP server"""
     
     @mcp.tool(description="Canadian economic analysis and overview")
-    def analyze_canadian_economy(focus: str = "overview") -> str:
+    def analyze_canadian_economy(focus: str = "overview") -> ToolResult:
         """Analyze Canada's economic performance with comprehensive data from Statistics Canada. Provides integrated analysis of inflation, growth, and employment.
         
         Args:
@@ -161,13 +163,13 @@ def register_statscan_tools(mcp: FastMCP):
             # Get all economic indicators concurrently
             economic_data = _get_all_economic_data()
             if not economic_data:
-                return "❌ Could not retrieve Canadian economic data"
+                return create_text_result("❌ Could not retrieve Canadian economic data")
             
-            return _format_economic_analysis(economic_data, focus)
+            return create_text_result(_format_economic_analysis(economic_data, focus))
             
         except Exception as e:
             logger.error(f"Error analyzing Canadian economy: {e}")
-            return f"❌ Error retrieving Canadian economic data: {str(e)}"
+            return create_text_result(f"❌ Error retrieving Canadian economic data: {str(e)}")
 
 
 def _get_all_economic_data() -> Optional[CanadianEconomicData]:

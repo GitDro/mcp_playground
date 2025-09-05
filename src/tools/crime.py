@@ -473,21 +473,9 @@ def _format_crime_report_with_content_blocks(area_name: str, crime_type: str, st
     # Generate chart
     chart_base64 = _generate_crime_plot_base64(area_name, crime_type, stats)
     
-    # Create structured data for LLM processing
-    structured_data = {
-        "area_name": area_name,
-        "crime_type": crime_type,
-        "latest_year": latest_year,
-        "latest_count": latest_count,
-        "trend": trend_text if len(years) > 1 else "single_year",
-        "year_range": f"{earliest_year}-{latest_year}",
-        "yearly_data": stats
-    }
-    
     return create_summary_and_chart_result(
         summary_text=summary,
         chart_base64=chart_base64,
-        structured_data=structured_data,
         chart_title=f"{crime_type.title()} Trends in {area_name}"
     )
 
