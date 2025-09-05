@@ -110,6 +110,11 @@ src/
 - **Document tools** (`search_documents`, `show_all_documents`, `store_note`) - Permanent knowledge base
 - **Web tools** - `save_link` (saves content), `analyze_url` (analysis only)
 
+**MCP Content Block Audience Control:**
+- **Text content**: `audience=None` - Both user (VS Code display) and LLM can access content
+- **Chart images**: `audience=["user"]` - Only user sees charts in VS Code, LLM gets text summary
+- **Critical Fix (Sept 2025)**: Changed from `audience=["user"]` to `audience=None` for text content to fix LLM access issue where VS Code showed results but LLM couldn't process them
+
 ## Planned Refinements (Future Deep Dives)
 
 ### App Architecture
