@@ -14,6 +14,7 @@
 - **Unified configuration**: Single .env approach for both local and cloud
 - **Clean tool set**: Focus on real-time API-based tools that work everywhere
 - **Better error handling**: Improved tool descriptions and neighborhood listing for crime data
+- **YouTube Cloud Fix**: Added WebShare proxy support to bypass YouTube's IP blocking for cloud deployments
 
 ### 📊 **Complete MCP ToolResult Migration (2025)**
 - **All tools migrated**: Every tool now returns `ToolResult` following 2024-2025 FastMCP best practices
