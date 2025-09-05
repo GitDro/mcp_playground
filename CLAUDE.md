@@ -16,6 +16,12 @@
 - **Better error handling**: Improved tool descriptions and neighborhood listing for crime data
 - **YouTube Cloud Fix**: Added WebShare proxy support to bypass YouTube's IP blocking for cloud deployments
 
+### 🎥 **YouTube Transcript API Stability (Sept 2025)**
+- **CRITICAL**: Use only 2025 API instance methods: `api = YouTubeTranscriptApi()` then `api.fetch(video_id)` and `api.list(video_id)`
+- **Never use**: Static methods like `YouTubeTranscriptApi.get_transcript()` - they don't exist and will break
+- **Session handling**: Only pass custom `http_client=session` when proxies are configured, otherwise use default session
+- **Proxy configuration**: `WEBSHARE_PROXIES` in .env for cloud deployment, empty for local development
+
 ### 📊 **Complete MCP ToolResult Migration (2025)**
 - **All tools migrated**: Every tool now returns `ToolResult` following 2024-2025 FastMCP best practices
 - **Chart tools optimized**: financial.py, crime.py use `TextContent` + `ImageContent` for direct IDE display
