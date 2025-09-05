@@ -113,7 +113,7 @@ def create_summary_and_chart_result(
         create_text_content(
             text=summary_text,
             mime_type="text/markdown", 
-            audience=["user"],
+            audience=None,  # Both user and assistant can see
             priority=1.0
         )
     )
@@ -124,7 +124,7 @@ def create_summary_and_chart_result(
             create_image_content(
                 image_data=chart_base64,
                 mime_type="image/png",
-                audience=["user"],
+                audience=["user"],  # Charts only for user display
                 priority=0.8
             )
         )
@@ -151,7 +151,7 @@ def create_table_result(
         create_text_content(
             text=full_text,
             mime_type="text/markdown",
-            audience=["user"],
+            audience=None,  # Both user and assistant can see
             priority=1.0
         )
     ]
@@ -174,7 +174,7 @@ def create_text_result(text: str) -> ToolResult:
             create_text_content(
                 text=text,
                 mime_type="text/markdown",
-                audience=["user"],
+                audience=None,  # Both user and assistant can see
                 priority=1.0
             )
         ]
@@ -234,7 +234,7 @@ def convert_markdown_with_base64_to_content_blocks(
         create_text_content(
             text=text_only.strip(),
             mime_type="text/markdown",
-            audience=["user"],
+            audience=None,  # Both user and assistant can see
             priority=1.0
         )
     )
@@ -245,7 +245,7 @@ def convert_markdown_with_base64_to_content_blocks(
             create_image_content(
                 image_data=base64_data,
                 mime_type=f"image/{img_format}",
-                audience=["user"],
+                audience=["user"],  # Charts only for user display
                 priority=0.8
             )
         )
